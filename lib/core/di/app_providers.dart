@@ -1,0 +1,133 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
+
+import '../../features/chat/application/gemini_schedule_parser.dart';
+import '../../features/chat/application/hybrid_schedule_parser.dart';
+import '../../features/chat/application/rule_based_schedule_parser.dart';
+import '../../features/chat/domain/schedule_parser.dart';
+import '../../features/events/application/event_command_service.dart';
+import '../../features/events/data/app_database.dart';
+import '../../features/events/data/drift_event_repository.dart';
+import '../../features/events/domain/calendar_event.dart';
+import '../../features/events/domain/event_repository.dart';
+import '../backup/backup_service.dart';
+import '../backup/file_backup_service.dart';
+import '../firebase/firebase_app_service.dart';
+import '../firebase/firebase_auth_service.dart';
+import '../notifications/local_notification_service.dart';
+import '../notifications/notification_service.dart';
+import '../settings/app_settings.dart';
+import '../settings/settings_repository.dart';
+import '../sync/firestore_sync_service.dart';
+import '../sync/sync_service.dart';
+
+class CalendarRange {
+  const CalendarRange(this.start, this.end);
+
+  final DateTime start;
+  final DateTime end;
+
+  @override
+  bool operator ==(Object other) {
+    return other is CalendarRange && start == other.start && end == other.end;
+  }
+
+  @override
+  int get hashCode => Object.hash(start, end);
+}
+
+final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
+  throw UnimplementedError('settingsRepositoryProvider must be overridden');
+});
+
+final appSettingsProvider = StateProvider<AppSettings>((ref) {
+  return ref.watch(settingsRepositoryProvider).load();
+});
+
+final databaseProvider = Provider<AppDatabase>((ref) {
+  final database = AppDatabase();
+  ref.onDispose(database.close);
+  return database;
+});
+
+final eventRepositoryProvider = Provider<EventRepository>((ref) {
+  return DriftEventRepository(ref.watch(databaseProvider));
+});
+
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return LocalNotificationService();
+});
+
+final firebaseAppServiceProvider = Provider<FirebaseAppService>((ref) {
+  return FirebaseAppService();
+});
+
+final firebaseAuthServiceProvider = Provider<FirebaseAuthService>((ref) {
+  return FirebaseAuthService(ref.watch(firebaseAppServiceProvider));
+});
+
+final authStateProvider = StreamProvider((ref) {
+  return ref.watch(firebaseAuthServiceProvider).authStateChanges();
+});
+
+final syncServiceProvider = Provider<SyncService>((ref) {
+  return FirestoreSyncService(
+    firebaseAppService: ref.watch(firebaseAppServiceProvider),
+    authService: ref.watch(firebaseAuthServiceProvider),
+    eventRepository: ref.watch(eventRepositoryProvider),
+    notificationService: ref.watch(notificationServiceProvider),
+  );
+});
+
+final backupServiceProvider = Provider<BackupService>((ref) {
+  return FileBackupService(ref.watch(databaseProvider));
+});
+
+final eventCommandServiceProvider = Provider<EventCommandService>((ref) {
+  return EventCommandService(
+    repository: ref.watch(eventRepositoryProvider),
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+    notificationService: ref.watch(notificationServiceProvider),
+    syncService: ref.watch(syncServiceProvider),
+  );
+});
+
+final scheduleParserProvider = Provider<ScheduleParser>((ref) {
+  final settingsRepository = ref.watch(settingsRepositoryProvider);
+  return HybridScheduleParser(
+    ruleBasedParser: RuleBasedScheduleParser(),
+    aiParser: GeminiScheduleParser(settingsRepository),
+    settingsRepository: settingsRepository,
+  );
+});
+
+final visibleMonthProvider = StateProvider<DateTime>((ref) {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month);
+});
+
+final selectedDateProvider = StateProvider<DateTime>((ref) {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day);
+});
+
+final eventsInRangeProvider =
+    StreamProvider.family<List<CalendarEvent>, CalendarRange>((ref, range) {
+      return ref
+          .watch(eventRepositoryProvider)
+          .watchEventsInRange(range.start, range.end);
+    });
+
+final eventsForSelectedDateProvider = Provider<AsyncValue<List<CalendarEvent>>>(
+  (ref) {
+    final selected = ref.watch(selectedDateProvider);
+    final start = DateTime(selected.year, selected.month, selected.day);
+    final end = start.add(const Duration(days: 1));
+    return ref.watch(eventsInRangeProvider(CalendarRange(start, end)));
+  },
+);
+
+extension DateTimeRangeX on DateTimeRange {
+  CalendarRange toCalendarRange() => CalendarRange(start, end);
+}
