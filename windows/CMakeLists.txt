@@ -32,6 +32,20 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+if(WIN32)
+  file(GLOB _daily_atlmfc_headers
+    "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include/atlbase.h"
+  )
+  if(_daily_atlmfc_headers)
+    list(SORT _daily_atlmfc_headers COMPARE NATURAL ORDER DESCENDING)
+    list(GET _daily_atlmfc_headers 0 _daily_atlmfc_header)
+    get_filename_component(_daily_atlmfc_include "${_daily_atlmfc_header}" DIRECTORY)
+    get_filename_component(_daily_atlmfc_root "${_daily_atlmfc_include}/.." ABSOLUTE)
+    include_directories("${_daily_atlmfc_include}")
+    link_directories("${_daily_atlmfc_root}/lib/x64")
+  endif()
+endif()
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

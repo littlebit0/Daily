@@ -2,7 +2,7 @@
 
 ## 요약
 
-Daily는 현재 Flutter 기반 앱 구조와 핵심 기능의 1차 구현이 완료된 상태다. 로컬 실행, 정적 분석, 단위/위젯 테스트는 통과했다. 실제 배포를 위해서는 Firebase 설정 파일과 플랫폼별 개발 환경 구성이 남아 있다.
+Daily는 현재 Flutter 기반 앱 구조와 핵심 기능의 1차 구현이 완료된 상태다. 정적 분석, 단위/위젯 테스트, Android debug APK 빌드, Windows debug 빌드는 통과했다. 실제 동기화와 배포를 위해서는 Firebase 프로젝트 설정, 앱 서명, iOS/macOS 개발 환경 검증이 남아 있다.
 
 ## 구현 완료
 
@@ -37,12 +37,16 @@ Daily는 현재 Flutter 기반 앱 구조와 핵심 기능의 1차 구현이 완
 ```powershell
 .\tool\flutter.ps1 analyze
 .\tool\flutter.ps1 test
+.\tool\flutter.ps1 build apk --debug
+.\tool\flutter.ps1 build windows --debug
 ```
 
 결과:
 
 - 정적 분석 통과
 - 테스트 5개 통과
+- Android debug APK 빌드 통과
+- Windows debug 빌드 통과
 
 ## 현재 보류/차단
 
@@ -60,22 +64,21 @@ Daily는 현재 Flutter 기반 앱 구조와 핵심 기능의 1차 구현이 완
 
 ### Android
 
-현재 PC에 Android SDK가 없어 Android 빌드를 검증하지 못했다.
+Android SDK와 JDK 17은 설치했고 debug APK 빌드는 통과했다. `flutter doctor`에는 일부 Android SDK license 경고가 남지만 현재 빌드는 차단하지 않는다.
 
 필요 작업:
 
-- Android Studio 또는 Android SDK 설치
-- `flutter doctor`에서 Android toolchain 통과 확인
-- debug/release APK 또는 App Bundle 빌드 검증
+- Android release 서명 설정
+- release APK 또는 App Bundle 빌드 검증
 
 ### Windows
 
-Windows 빌드 도중 Visual Studio Build Tools의 ATL/MFC 헤더가 없어 실패했다.
+Windows debug 빌드는 통과했다. VS 2026 Build Tools의 ATL/MFC 추가가 Windows 10에서 차단되어, VS 2022 Build Tools의 ATL/MFC 경로를 CMake에서 조건부로 보강했다.
 
-필요 구성요소:
+필요 작업:
 
-- `Microsoft.VisualStudio.Component.VC.14.50.18.0.ATL`
-- `Microsoft.VisualStudio.Component.VC.14.50.18.0.MFC`
+- release 빌드 검증
+- 배포 패키징 방식 결정
 
 ### iOS/macOS
 
@@ -94,14 +97,19 @@ Windows 환경에서는 최종 iOS/macOS 빌드를 검증할 수 없다.
 - Flutter SDK 위치: `D:\flutter-sdk`
 - Pub 캐시 위치: `D:\PubCache`
 - Gradle 캐시 위치: `D:\GradleCache`
+- Android SDK 위치: `D:\AndroidSdk`
+- JDK 위치: `C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot`
+- Firebase CLI: `15.17.0`
+- FlutterFire CLI: `1.3.2`
 
 ## 다음 권장 순서
 
-1. GitHub 저장소 생성 및 push
+1. Firebase 로그인
 2. Firebase 프로젝트 생성
 3. `flutterfire configure`
-4. Android SDK 설치
-5. Windows ATL/MFC 구성요소 설치
-6. Android/Windows 빌드 재검증
-7. 실제 기기 알림 검증
-8. Firestore 보안 규칙 작성
+4. Firebase Auth 이메일/비밀번호 로그인 활성화
+5. Firestore Database 생성
+6. Firestore 보안 규칙 작성
+7. Android release 서명 설정
+8. Android/Windows release 빌드 검증
+9. 실제 기기 알림 검증

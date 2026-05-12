@@ -72,15 +72,18 @@ iOS, iPadOS, macOS, Android, Windows를 하나의 코드베이스로 관리하�
 
 - `flutter analyze` 통과
 - `flutter test` 통과
+- Android debug APK 빌드 통과
+- Windows debug 빌드 통과
 
 ## 6. 남은 작업
 
 - Firebase 실제 설정
 - Firestore 보안 규칙 작성
-- Android SDK 설치
-- Windows ATL/MFC 구성요소 설치
-- Android 빌드 검증
-- Windows 빌드 검증
+- Firebase CLI 로그인
+- `flutterfire configure`
+- Android release 서명 준비
+- Android release 빌드 검증
+- Windows release 빌드 검증
 - iOS/macOS 실제 환경 빌드 검증
 - 실제 기기 알림 검증
 

@@ -55,8 +55,16 @@ Firebase 설정이 완료되기 전에는 앱이 로컬 SQLite 기반으로 동�
 
 - `.\tool\flutter.ps1 analyze`: 통과
 - `.\tool\flutter.ps1 test`: 통과
-- Windows 빌드: Visual Studio Build Tools의 ATL/MFC 구성요소가 없어 로컬 환경에서 보류
-- Android 빌드: Android SDK가 없어 현재 PC에서 보류
+- `.\tool\flutter.ps1 build apk --debug`: 통과
+- `.\tool\flutter.ps1 build windows --debug`: 통과
+
+현재 로컬 개발 환경에는 다음 도구가 구성되어 있다.
+
+- Android SDK: `D:\AndroidSdk`
+- JDK 17: `C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot`
+- Firebase CLI: `15.17.0`
+- FlutterFire CLI: `1.3.2`
+- Visual Studio Build Tools 2022: Windows ATL/MFC 빌드 보강용
 
 ## 남은 작업
 
@@ -64,7 +72,6 @@ Firebase 설정이 완료되기 전에는 앱이 로컬 SQLite 기반으로 동�
 - `flutterfire configure` 실행 및 `lib/firebase_options.dart` 교체
 - Firebase Auth 이메일/비밀번호 로그인 활성화
 - Firestore Database 생성과 보안 규칙 작성
-- Android SDK 설치와 앱 서명 준비
+- Android 앱 서명 준비
 - Apple Developer 계정과 iOS/macOS 설정 파일 준비
-- Windows ATL/MFC 구성요소 설치 후 Windows 빌드 재검증
 - 실제 기기 알림 권한과 예약 알림 동작 검증
