@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "424765276744",
+    "project_id": "daily-littlebit0",
+    "storage_bucket": "daily-littlebit0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:424765276744:android:a5d064eb7f2800694dce7d",
+        "android_client_info": {
+          "package_name": "com.littlebit0.daily"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDuqMc_4B1qWz5ZdqHF-ocGg35eIz5FwCQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

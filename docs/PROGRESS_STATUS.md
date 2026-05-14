@@ -2,7 +2,9 @@
 
 ## 요약
 
-Daily는 현재 Flutter 기반 앱 구조와 핵심 기능의 1차 구현이 완료된 상태다. 정적 분석, 단위/위젯 테스트, Android debug APK 빌드, Windows debug 빌드는 통과했다. 실제 동기화와 배포를 위해서는 Firebase 프로젝트 설정, 앱 서명, iOS/macOS 개발 환경 검증이 남아 있다.
+Daily는 Flutter 기반 앱 구조와 핵심 기능의 1차 구현이 완료된 상태다. 정적 분석, 테스트, Android debug APK, Windows debug 빌드, Android release App Bundle, Windows release 빌드가 통과했다.
+
+Firebase 프로젝트와 Firestore 설정은 완료됐고, 이메일/비밀번호 로그인 제공자만 Firebase Console에서 수동 활성화가 필요하다. iOS/macOS 최종 빌드는 Windows 환경에서는 검증할 수 없어 macOS 개발 환경에서 별도 확인해야 한다.
 
 ## 구현 완료
 
@@ -29,6 +31,26 @@ Daily는 현재 Flutter 기반 앱 구조와 핵심 기능의 1차 구현이 완
 - 검색 화면
 - 설정 화면
 - D 드라이브 기반 Flutter 실행 스크립트
+- 배포용 앱 식별자 적용
+
+## Firebase 상태
+
+- Firebase 프로젝트: `daily-littlebit0`
+- Firestore Database: `(default)`
+- Firestore 위치: `asia-northeast3`
+- Firestore 보안 규칙: 배포 완료
+- Android Firebase 앱: 등록 완료
+- iOS Firebase 앱: 등록 완료
+- macOS Firebase 앱: 등록 완료
+- Windows Firebase 웹 앱: 등록 완료
+- Android 설정 파일: `android/app/google-services.json`
+- iOS 설정 파일: `ios/Runner/GoogleService-Info.plist`
+- macOS 설정 파일: `macos/Runner/GoogleService-Info.plist`
+- Flutter Firebase options: `lib/firebase_options.dart`
+
+보류 항목:
+
+- Firebase Console에서 Authentication 이메일/비밀번호 제공자 활성화
 
 ## 검증 완료
 
@@ -39,48 +61,40 @@ Daily는 현재 Flutter 기반 앱 구조와 핵심 기능의 1차 구현이 완
 .\tool\flutter.ps1 test
 .\tool\flutter.ps1 build apk --debug
 .\tool\flutter.ps1 build windows --debug
+.\tool\flutter.ps1 build appbundle --release
+.\tool\flutter.ps1 build windows --release
 ```
 
 결과:
 
 - 정적 분석 통과
-- 테스트 5개 통과
+- 테스트 통과
 - Android debug APK 빌드 통과
 - Windows debug 빌드 통과
+- Android release App Bundle 빌드 통과
+- Windows release 빌드 통과
 
-## 현재 보류/차단
+배포 산출물:
 
-### Firebase
+- Android App Bundle: `D:\Daily\build\app\outputs\bundle\release\app-release.aab`
+- Windows 실행 파일: `D:\Daily\build\windows\x64\runner\Release\daily.exe`
 
-`lib/firebase_options.dart`는 placeholder 상태다. 실제 동기화를 사용하려면 `flutterfire configure`로 생성된 파일로 교체해야 한다.
+## Android
 
-필요 작업:
+Android SDK와 JDK 17은 설치 완료했다. release 서명도 로컬 keystore 기반으로 구성했고 App Bundle 빌드가 통과했다.
 
-- Firebase 프로젝트 생성
-- Firebase Auth 이메일/비밀번호 로그인 활성화
-- Firestore Database 생성
-- 플랫폼별 Firebase 앱 등록
-- `flutterfire configure` 실행
+서명 파일:
 
-### Android
+- `D:\Daily\android\app\upload-keystore.jks`
+- `D:\Daily\android\key.properties`
 
-Android SDK와 JDK 17은 설치했고 debug APK 빌드는 통과했다. `flutter doctor`에는 일부 Android SDK license 경고가 남지만 현재 빌드는 차단하지 않는다.
+두 파일은 `.gitignore`에 포함되어 GitHub에 올라가지 않는다. keystore는 Play Store 업데이트에 필요하므로 별도 백업이 필요하다.
 
-필요 작업:
+## Windows
 
-- Android release 서명 설정
-- release APK 또는 App Bundle 빌드 검증
+Windows release 빌드는 통과했다. 현재 산출물은 실행 파일과 관련 DLL 묶음이며, 사용자 배포용으로는 MSIX, Inno Setup, ZIP 배포 중 하나를 선택해야 한다.
 
-### Windows
-
-Windows debug 빌드는 통과했다. VS 2026 Build Tools의 ATL/MFC 추가가 Windows 10에서 차단되어, VS 2022 Build Tools의 ATL/MFC 경로를 CMake에서 조건부로 보강했다.
-
-필요 작업:
-
-- release 빌드 검증
-- 배포 패키징 방식 결정
-
-### iOS/macOS
+## iOS/macOS
 
 Windows 환경에서는 최종 iOS/macOS 빌드를 검증할 수 없다.
 
@@ -88,7 +102,8 @@ Windows 환경에서는 최종 iOS/macOS 빌드를 검증할 수 없다.
 
 - macOS 개발 환경
 - Apple Developer 계정
-- Bundle ID 설정
+- iOS Bundle ID: `com.littlebit0.daily`
+- macOS Bundle ID: `com.littlebit0.daily.macos`
 - 실제 기기 알림 검증
 
 ## 저장소 상태
@@ -98,6 +113,7 @@ Windows 환경에서는 최종 iOS/macOS 빌드를 검증할 수 없다.
 - Pub 캐시 위치: `D:\PubCache`
 - Gradle 캐시 위치: `D:\GradleCache`
 - Android SDK 위치: `D:\AndroidSdk`
+- 임시 파일 위치: `D:\Temp`
 - JDK 위치: `C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot`
 - Firebase CLI: `15.17.0`
 - FlutterFire CLI: `1.3.2`
@@ -105,12 +121,10 @@ Windows 환경에서는 최종 iOS/macOS 빌드를 검증할 수 없다.
 
 ## 다음 권장 순서
 
-1. Firebase 로그인
-2. Firebase 프로젝트 생성
-3. `flutterfire configure`
-4. Firebase Auth 이메일/비밀번호 로그인 활성화
-5. Firestore Database 생성
-6. Firestore 보안 규칙 작성
-7. Android release 서명 설정
-8. Android/Windows release 빌드 검증
-9. 실제 기기 알림 검증
+1. Firebase Console에서 이메일/비밀번호 로그인 제공자 활성화
+2. 실제 기기에서 회원가입/로그인 검증
+3. Firestore 동기화 왕복 검증
+4. 실제 기기 알림 권한과 예약 알림 검증
+5. Android Play Console에 AAB 업로드
+6. Windows 배포 패키징 방식 결정
+7. macOS 환경에서 iOS/macOS 빌드 검증

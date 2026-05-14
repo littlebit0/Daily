@@ -20,6 +20,16 @@ $env:GRADLE_USER_HOME = 'D:\GradleCache'
 $env:JAVA_HOME = 'C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot'
 $env:ANDROID_HOME = 'D:\AndroidSdk'
 $env:ANDROID_SDK_ROOT = 'D:\AndroidSdk'
+
+$tempRoot = 'D:\Temp'
+New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+$env:TEMP = $tempRoot
+$env:TMP = $tempRoot
+if ([string]::IsNullOrWhiteSpace($env:JAVA_TOOL_OPTIONS)) {
+  $env:JAVA_TOOL_OPTIONS = "-Djava.io.tmpdir=$tempRoot"
+} elseif ($env:JAVA_TOOL_OPTIONS -notmatch 'java\.io\.tmpdir') {
+  $env:JAVA_TOOL_OPTIONS = "-Djava.io.tmpdir=$tempRoot $env:JAVA_TOOL_OPTIONS"
+}
 $env:Path = @(
   (Join-Path $flutterRoot 'bin')
   (Join-Path $env:ANDROID_HOME 'platform-tools')

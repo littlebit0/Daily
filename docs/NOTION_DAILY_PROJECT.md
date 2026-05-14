@@ -68,6 +68,9 @@ iOS, iPadOS, macOS, Android, Windows를 하나의 코드베이스로 관리하�
 - 백업/복원
 - 검색
 - 설정
+- 배포용 앱 식별자 적용
+- Android release 서명 구성
+- Firebase 프로젝트 및 Firestore 구성
 
 검증 완료:
 
@@ -75,20 +78,41 @@ iOS, iPadOS, macOS, Android, Windows를 하나의 코드베이스로 관리하�
 - `flutter test` 통과
 - Android debug APK 빌드 통과
 - Windows debug 빌드 통과
+- Android release App Bundle 빌드 통과
+- Windows release 빌드 통과
 
-## 6. 남은 작업
+## 6. Firebase 진행상태
 
-- Firebase 실제 설정
-- Firestore 보안 규칙 작성
-- Firebase CLI 로그인
-- `flutterfire configure`
-- Android release 서명 준비
-- Android release 빌드 검증
-- Windows release 빌드 검증
-- iOS/macOS 실제 환경 빌드 검증
-- 실제 기기 알림 검증
+- Firebase 프로젝트: `daily-littlebit0`
+- Firestore Database: `(default)`, `asia-northeast3`
+- Firestore 보안 규칙 배포 완료
+- Android/iOS/macOS/Windows Firebase 앱 등록 완료
+- 플랫폼별 설정 파일 반영 완료
 
-## 7. 보류 항목
+남은 Firebase 작업:
+
+- Firebase Console에서 이메일/비밀번호 로그인 제공자 활성화
+- 실제 기기에서 회원가입, 로그인, Firestore 동기화 검증
+
+## 7. 배포 진행상태
+
+Android:
+
+- App Bundle 생성 완료: `D:\Daily\build\app\outputs\bundle\release\app-release.aab`
+- 로컬 upload keystore 생성 완료
+- Play Store 업로드 전 keystore 별도 백업 필요
+
+Windows:
+
+- release 실행 파일 생성 완료: `D:\Daily\build\windows\x64\runner\Release\daily.exe`
+- 배포 패키징 방식은 아직 결정 전
+
+iOS/macOS:
+
+- Windows 환경에서는 최종 빌드 검증 불가
+- macOS 개발 환경과 Apple Developer 계정에서 별도 검증 필요
+
+## 8. 보류 항목
 
 - 주간 뷰
 - 일간 뷰
@@ -98,7 +122,16 @@ iOS, iPadOS, macOS, Android, Windows를 하나의 코드베이스로 관리하�
 - 단축키
 - 앱 잠금
 
-## 8. 참고 문서
+## 9. 다음 작업
+
+1. Firebase Console에서 이메일/비밀번호 로그인 제공자 활성화
+2. 실제 기기에서 로그인과 동기화 검증
+3. 실제 기기에서 알림 권한과 예약 알림 검증
+4. Android Play Console에 AAB 업로드
+5. Windows 배포 패키징 방식 결정
+6. macOS 환경에서 iOS/macOS 빌드 검증
+
+## 10. 참고 문서
 
 - `README.md`
 - `DAILY_REQUIREMENTS.md`

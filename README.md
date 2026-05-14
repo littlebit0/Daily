@@ -31,6 +31,16 @@ Daily는 개인용 독립 캘린더 앱입니다. 앱을 열면 바로 월간 �
 - 검색 화면
 - 설정 화면
 
+## Firebase 상태
+
+- Firebase 프로젝트: `daily-littlebit0`
+- Firestore Database: `(default)`, `asia-northeast3`
+- Firestore 보안 규칙: 배포 완료
+- Android/iOS/macOS/Windows Firebase 앱 등록 완료
+- 플랫폼 설정 파일 반영 완료
+
+Firebase Authentication의 이메일/비밀번호 로그인 제공자는 Firebase Console에서 수동 활성화가 필요하다.
+
 ## 문서
 
 - [초기 기획안](docs/INITIAL_PLAN.md)
@@ -48,9 +58,7 @@ cd D:\Daily
 .\tool\flutter.ps1 test
 ```
 
-`tool/flutter.ps1`은 기본 Flutter SDK로 `D:\flutter-sdk`를 사용하고, `PUB_CACHE=D:\PubCache`, `GRADLE_USER_HOME=D:\GradleCache`를 자동으로 설정한다. C 드라이브 용량 문제와 깨진 Pub 캐시를 피하기 위해 이 스크립트를 기본으로 사용한다.
-
-Firebase 설정이 완료되기 전에는 앱이 로컬 SQLite 기반으로 동작하며, 동기화 로그인은 비활성 상태로 남는다.
+`tool/flutter.ps1`은 기본 Flutter SDK로 `D:\flutter-sdk`를 사용하고, `PUB_CACHE=D:\PubCache`, `GRADLE_USER_HOME=D:\GradleCache`, `TEMP=D:\Temp`, `TMP=D:\Temp`, Java 임시 경로를 자동으로 설정한다. C 드라이브 용량 문제와 깨진 Pub 캐시를 피하기 위해 이 스크립트를 기본으로 사용한다.
 
 ## 검증 상태
 
@@ -58,6 +66,13 @@ Firebase 설정이 완료되기 전에는 앱이 로컬 SQLite 기반으로 동�
 - `.\tool\flutter.ps1 test`: 통과
 - `.\tool\flutter.ps1 build apk --debug`: 통과
 - `.\tool\flutter.ps1 build windows --debug`: 통과
+- `.\tool\flutter.ps1 build appbundle --release`: 통과
+- `.\tool\flutter.ps1 build windows --release`: 통과
+
+배포 산출물:
+
+- Android App Bundle: `D:\Daily\build\app\outputs\bundle\release\app-release.aab`
+- Windows 실행 파일: `D:\Daily\build\windows\x64\runner\Release\daily.exe`
 
 현재 로컬 개발 환경에는 다음 도구가 구성되어 있다.
 
@@ -67,12 +82,19 @@ Firebase 설정이 완료되기 전에는 앱이 로컬 SQLite 기반으로 동�
 - FlutterFire CLI: `1.3.2`
 - Visual Studio Build Tools 2022: Windows ATL/MFC 빌드 보강용
 
+## 서명 파일
+
+Android release 서명 파일은 로컬에만 보관하고 Git에는 올리지 않는다.
+
+- Keystore: `D:\Daily\android\app\upload-keystore.jks`
+- 설정 파일: `D:\Daily\android\key.properties`
+
+이 keystore는 향후 Play Store 업데이트에 필요하므로 별도 안전한 위치에 백업해야 한다.
+
 ## 남은 작업
 
-- Firebase 프로젝트 생성
-- `flutterfire configure` 실행 및 `lib/firebase_options.dart` 교체
-- Firebase Auth 이메일/비밀번호 로그인 활성화
-- Firestore Database 생성과 보안 규칙 작성
-- Android 앱 서명 준비
-- Apple Developer 계정과 iOS/macOS 설정 파일 준비
-- 실제 기기 알림 권한과 예약 알림 동작 검증
+- Firebase Console에서 이메일/비밀번호 로그인 제공자 활성화
+- 실제 기기에서 로그인, 동기화, 알림 동작 검증
+- Android Play Console에 AAB 업로드
+- Windows 배포 패키징 방식 결정
+- macOS 환경에서 iOS/macOS 빌드와 Apple Developer 설정 검증

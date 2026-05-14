@@ -101,7 +101,8 @@ v1에서 반복 일정을 지원한다.
 - 로컬 저장을 먼저 완료한 뒤 백그라운드에서 Firestore에 반영한다.
 - 다른 기기에서 변경된 일정은 Firestore listener를 통해 로컬 DB에 반영한다.
 - 충돌이 발생하면 기본적으로 최신 수정 시간을 우선한다.
-- Firebase 프로젝트, 앱 등록, 플랫폼별 설정 파일은 프로젝트 진행 중 사용자가 준비한다.
+- Firebase 프로젝트, Firestore Database, 플랫폼별 앱 등록과 설정 파일은 구성 완료 상태다.
+- Firebase Auth 이메일/비밀번호 제공자는 Firebase Console에서 수동 활성화가 필요하다.
 
 ## 9. 백업/복원
 
@@ -149,15 +150,9 @@ v1에서 반복 일정을 지원한다.
 ## 13. 사용자가 나중에 제공할 항목
 
 - Apple Developer 계정 관련 설정
-- Android 앱 서명 설정
+- Android upload keystore의 별도 안전 백업
 - Windows 배포 인증서 또는 설치 패키징 방식
-- Firebase 프로젝트
 - Firebase Auth 이메일/비밀번호 로그인 활성화
-- Firestore Database 생성
-- Android `google-services.json`
-- iOS `GoogleService-Info.plist`
-- macOS `GoogleService-Info.plist`
-- Windows Firebase options
 - Gemini API 키
 
 ## 14. MVP 성공 기준
