@@ -76,8 +76,8 @@ Firebase 프로젝트와 Firestore 설정은 완료됐고, 이메일/비밀번�
 
 배포 산출물:
 
-- Android App Bundle: `D:\Daily\build\app\outputs\bundle\release\app-release.aab`
-- Windows 실행 파일: `D:\Daily\build\windows\x64\runner\Release\daily.exe`
+- Android App Bundle: `build\app\outputs\bundle\release\app-release.aab`
+- Windows 실행 파일: `build\windows\x64\runner\Release\daily.exe`
 
 ## Android
 
@@ -85,8 +85,8 @@ Android SDK와 JDK 17은 설치 완료했다. release 서명도 로컬 keystore 
 
 서명 파일:
 
-- `D:\Daily\android\app\upload-keystore.jks`
-- `D:\Daily\android\key.properties`
+- `android\app\upload-keystore.jks`
+- `android\key.properties`
 
 두 파일은 `.gitignore`에 포함되어 GitHub에 올라가지 않는다. keystore는 Play Store 업데이트에 필요하므로 별도 백업이 필요하다.
 
@@ -108,12 +108,12 @@ Windows 환경에서는 최종 iOS/macOS 빌드를 검증할 수 없다.
 
 ## 저장소 상태
 
-- 프로젝트 위치: `D:\Daily`
-- Flutter SDK 위치: `D:\flutter-sdk`
-- Pub 캐시 위치: `D:\PubCache`
-- Gradle 캐시 위치: `D:\GradleCache`
-- Android SDK 위치: `D:\AndroidSdk`
-- 임시 파일 위치: `D:\Temp`
+- 프로젝트 위치: `E:\From_D_Drive\Daily`
+- Flutter SDK 위치: `E:\From_D_Drive\flutter-sdk`
+- Pub 캐시 위치: `E:\From_D_Drive\PubCache`
+- Gradle 캐시 위치: `E:\From_D_Drive\GradleCache`
+- Android SDK 위치: `E:\From_D_Drive\AndroidSdk`
+- 임시 파일 위치: `E:\From_D_Drive\Temp`
 - JDK 위치: `C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot`
 - Firebase CLI: `15.17.0`
 - FlutterFire CLI: `1.3.2`

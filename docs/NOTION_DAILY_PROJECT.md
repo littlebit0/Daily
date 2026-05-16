@@ -98,13 +98,13 @@ iOS, iPadOS, macOS, Android, Windows를 하나의 코드베이스로 관리하�
 
 Android:
 
-- App Bundle 생성 완료: `D:\Daily\build\app\outputs\bundle\release\app-release.aab`
+- App Bundle 생성 완료: `build\app\outputs\bundle\release\app-release.aab`
 - 로컬 upload keystore 생성 완료
 - Play Store 업로드 전 keystore 별도 백업 필요
 
 Windows:
 
-- release 실행 파일 생성 완료: `D:\Daily\build\windows\x64\runner\Release\daily.exe`
+- release 실행 파일 생성 완료: `build\windows\x64\runner\Release\daily.exe`
 - 배포 패키징 방식은 아직 결정 전
 
 iOS/macOS:

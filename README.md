@@ -51,14 +51,14 @@ Firebase Authentication의 이메일/비밀번호 로그인 제공자는 Firebas
 ## 개발 명령
 
 ```powershell
-cd D:\Daily
+cd E:\From_D_Drive\Daily
 .\tool\flutter.ps1 pub get
 .\tool\flutter.ps1 pub run build_runner build
 .\tool\flutter.ps1 analyze
 .\tool\flutter.ps1 test
 ```
 
-`tool/flutter.ps1`은 기본 Flutter SDK로 `D:\flutter-sdk`를 사용하고, `PUB_CACHE=D:\PubCache`, `GRADLE_USER_HOME=D:\GradleCache`, `TEMP=D:\Temp`, `TMP=D:\Temp`, Java 임시 경로를 자동으로 설정한다. C 드라이브 용량 문제와 깨진 Pub 캐시를 피하기 위해 이 스크립트를 기본으로 사용한다.
+`tool/flutter.ps1`은 프로젝트 상위 폴더의 `flutter-sdk`, `PubCache`, `GradleCache`, `AndroidSdk`, `Temp`를 우선 사용한다. 현재 E 드라이브 복사본에서는 `E:\From_D_Drive` 아래 도구 폴더를 사용한다.
 
 ## 검증 상태
 
@@ -71,12 +71,12 @@ cd D:\Daily
 
 배포 산출물:
 
-- Android App Bundle: `D:\Daily\build\app\outputs\bundle\release\app-release.aab`
-- Windows 실행 파일: `D:\Daily\build\windows\x64\runner\Release\daily.exe`
+- Android App Bundle: `build\app\outputs\bundle\release\app-release.aab`
+- Windows 실행 파일: `build\windows\x64\runner\Release\daily.exe`
 
 현재 로컬 개발 환경에는 다음 도구가 구성되어 있다.
 
-- Android SDK: `D:\AndroidSdk`
+- Android SDK: `E:\From_D_Drive\AndroidSdk`
 - JDK 17: `C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot`
 - Firebase CLI: `15.17.0`
 - FlutterFire CLI: `1.3.2`
@@ -86,8 +86,8 @@ cd D:\Daily
 
 Android release 서명 파일은 로컬에만 보관하고 Git에는 올리지 않는다.
 
-- Keystore: `D:\Daily\android\app\upload-keystore.jks`
-- 설정 파일: `D:\Daily\android\key.properties`
+- Keystore: `android\app\upload-keystore.jks`
+- 설정 파일: `android\key.properties`
 
 이 keystore는 향후 Play Store 업데이트에 필요하므로 별도 안전한 위치에 백업해야 한다.
 
