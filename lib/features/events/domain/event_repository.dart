@@ -10,6 +10,8 @@ abstract interface class EventRepository {
 
   Future<List<CalendarEvent>> pendingSyncEvents();
 
+  Future<List<CalendarEvent>> allEventsForSync();
+
   Future<void> save(CalendarEvent event);
 
   Future<void> markSynced(String eventId);
@@ -17,4 +19,6 @@ abstract interface class EventRepository {
   Future<void> delete(String eventId);
 
   Future<void> hardDelete(String eventId);
+
+  Future<void> clearAll();
 }

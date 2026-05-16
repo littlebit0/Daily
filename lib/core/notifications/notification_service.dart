@@ -11,4 +11,6 @@ abstract interface class NotificationService {
     required int hour,
     required int minute,
   });
+
+  Future<void> cancelMorningBriefing();
 }

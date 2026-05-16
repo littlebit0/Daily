@@ -14,6 +14,7 @@ class EventDraft {
     this.colorValue,
     this.reminderMinutesBefore = 60,
     this.recurrence = const RecurrenceRule(),
+    this.showDday = false,
   });
 
   final String title;
@@ -26,6 +27,7 @@ class EventDraft {
   final int? colorValue;
   final int? reminderMinutesBefore;
   final RecurrenceRule recurrence;
+  final bool showDday;
 
   CalendarEvent toEvent({
     required String id,
@@ -49,6 +51,7 @@ class EventDraft {
       updatedAt: now,
       deviceId: deviceId,
       syncStatus: 'pending',
+      showDday: showDday,
     );
   }
 
@@ -63,6 +66,7 @@ class EventDraft {
     int? colorValue,
     int? reminderMinutesBefore,
     RecurrenceRule? recurrence,
+    bool? showDday,
     bool clearMemo = false,
     bool clearLocation = false,
     bool clearReminder = false,
@@ -80,6 +84,7 @@ class EventDraft {
           ? null
           : reminderMinutesBefore ?? this.reminderMinutesBefore,
       recurrence: recurrence ?? this.recurrence,
+      showDday: showDday ?? this.showDday,
     );
   }
 }

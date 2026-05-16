@@ -120,7 +120,7 @@ class _SearchResultTile extends StatelessWidget {
       onTap: onTap,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xffd8dce3)),
+        side: const BorderSide(color: Color(0xffedf0f5)),
       ),
       leading: CircleAvatar(
         backgroundColor: Color(event.colorValue).withValues(alpha: 0.12),

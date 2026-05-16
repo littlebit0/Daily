@@ -11,6 +11,7 @@ import '../../features/events/data/app_database.dart';
 import '../../features/events/data/drift_event_repository.dart';
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
+import '../calendar/korean_holiday_service.dart';
 import '../backup/backup_service.dart';
 import '../backup/file_backup_service.dart';
 import '../firebase/firebase_app_service.dart';
@@ -19,7 +20,8 @@ import '../notifications/local_notification_service.dart';
 import '../notifications/notification_service.dart';
 import '../settings/app_settings.dart';
 import '../settings/settings_repository.dart';
-import '../sync/firestore_sync_service.dart';
+import '../sync/google_drive_auth_service.dart';
+import '../sync/google_drive_sync_service.dart';
 import '../sync/sync_service.dart';
 
 class CalendarRange {
@@ -56,7 +58,13 @@ final eventRepositoryProvider = Provider<EventRepository>((ref) {
 });
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
-  return LocalNotificationService();
+  return LocalNotificationService(
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+  );
+});
+
+final koreanHolidayServiceProvider = Provider<KoreanHolidayService>((ref) {
+  return KoreanHolidayService();
 });
 
 final firebaseAppServiceProvider = Provider<FirebaseAppService>((ref) {
@@ -71,13 +79,23 @@ final authStateProvider = StreamProvider((ref) {
   return ref.watch(firebaseAuthServiceProvider).authStateChanges();
 });
 
-final syncServiceProvider = Provider<SyncService>((ref) {
-  return FirestoreSyncService(
-    firebaseAppService: ref.watch(firebaseAppServiceProvider),
-    authService: ref.watch(firebaseAuthServiceProvider),
+final googleDriveAuthServiceProvider = Provider<GoogleDriveAuthService>((ref) {
+  return GoogleDriveAuthService();
+});
+
+final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
+  final service = GoogleDriveSyncService(
+    authService: ref.watch(googleDriveAuthServiceProvider),
     eventRepository: ref.watch(eventRepositoryProvider),
     notificationService: ref.watch(notificationServiceProvider),
+    settingsRepository: ref.watch(settingsRepositoryProvider),
   );
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+final syncServiceProvider = Provider<SyncService>((ref) {
+  return ref.watch(googleDriveSyncServiceProvider);
 });
 
 final backupServiceProvider = Provider<BackupService>((ref) {
@@ -114,9 +132,16 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
 
 final eventsInRangeProvider =
     StreamProvider.family<List<CalendarEvent>, CalendarRange>((ref, range) {
+      final holidays = ref
+          .watch(koreanHolidayServiceProvider)
+          .holidayEventsInRange(range.start, range.end);
       return ref
           .watch(eventRepositoryProvider)
-          .watchEventsInRange(range.start, range.end);
+          .watchEventsInRange(range.start, range.end)
+          .map((events) {
+            return [...events, ...holidays]
+              ..sort((a, b) => a.startAt.compareTo(b.startAt));
+          });
     });
 
 final eventsForSelectedDateProvider = Provider<AsyncValue<List<CalendarEvent>>>(

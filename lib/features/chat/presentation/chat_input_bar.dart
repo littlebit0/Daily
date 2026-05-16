@@ -30,7 +30,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: const BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xffd8dce3))),
+          border: Border(top: BorderSide(color: Color(0xffedf0f5))),
         ),
         child: Row(
           children: [
@@ -119,7 +119,7 @@ class _DraftConfirmationSheet extends StatelessWidget {
     final scheduleTime = _formatScheduleTime(draft);
     final reminder = draft.reminderMinutesBefore == null
         ? '없음'
-        : '${draft.reminderMinutesBefore}분 전';
+        : _minutesLabel(draft.reminderMinutesBefore!);
 
     return SafeArea(
       child: Padding(
@@ -202,6 +202,22 @@ class _DraftConfirmationSheet extends StatelessWidget {
       return '${dateFormatter.format(draft.startAt)}  ${timeFormatter.format(draft.startAt)} - ${timeFormatter.format(draft.endAt)}';
     }
     return '${dateFormatter.format(draft.startAt)} ${timeFormatter.format(draft.startAt)} - ${dateFormatter.format(draft.endAt)} ${timeFormatter.format(draft.endAt)}';
+  }
+
+  String _minutesLabel(int minutes) {
+    if (minutes == 0) {
+      return '정시';
+    }
+    if (minutes < 60) {
+      return '$minutes분 전';
+    }
+    if (minutes % 1440 == 0) {
+      return '${minutes ~/ 1440}일 전';
+    }
+    if (minutes % 60 == 0) {
+      return '${minutes ~/ 60}시간 전';
+    }
+    return '$minutes분 전';
   }
 
   bool _sameDay(DateTime a, DateTime b) {

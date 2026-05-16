@@ -1,39 +1,165 @@
-enum EventCategory {
-  health('건강', 0xff2f9e9b, ['병원', '치과', '약', '검진', '운동', '진료']),
-  work('업무', 0xff4f7cff, ['회의', '미팅', '업무', '프로젝트', '마감', '출근']),
-  appointment('약속', 0xffff8a3d, ['약속', '점심', '저녁', '카페', '식사', '만남']),
-  family('가족', 0xffb45cff, ['가족', '엄마', '아빠', '부모님', '동생', '형', '누나']),
-  personal('개인', 0xff5b7c99, ['개인', '정리', '휴식', '독서', '공부']),
-  travel('이동/여행', 0xff2f80ed, ['여행', '비행기', '기차', '이동', '호텔', '공항']),
-  deadline('결제/마감', 0xffd64545, ['결제', '납부', '마감', '청구', '월세', '카드']),
-  other('기타', 0xff7a7f87, []);
+class EventCategory {
+  const EventCategory({
+    required this.id,
+    required this.label,
+    required this.colorValue,
+    this.locked = false,
+    this.keywords = const [],
+  });
 
-  const EventCategory(this.label, this.colorValue, this.keywords);
-
+  final String id;
   final String label;
   final int colorValue;
+  final bool locked;
   final List<String> keywords;
 
-  static EventCategory fromName(String? name) {
-    if (name == null || name.isEmpty) {
-      return EventCategory.other;
+  String get name => id;
+
+  static const basic = EventCategory(
+    id: 'basic',
+    label: '기본',
+    colorValue: 0xff2563eb,
+    keywords: ['일정', '약속', '회의', '미팅', '업무', '개인', '병원', '이동', '여행', '마감'],
+  );
+
+  static const holiday = EventCategory(
+    id: 'holiday',
+    label: '공휴일',
+    colorValue: 0xffef4444,
+    locked: true,
+  );
+
+  static const values = <EventCategory>[basic, holiday];
+
+  // Backward-compatible aliases for old saved data and tests. They are no
+  // longer shown as default categories.
+  static const other = basic;
+  static const health = basic;
+  static const work = basic;
+  static const appointment = basic;
+  static const family = basic;
+  static const personal = basic;
+  static const travel = basic;
+  static const deadline = basic;
+
+  EventCategory copyWith({
+    String? id,
+    String? label,
+    int? colorValue,
+    bool? locked,
+    List<String>? keywords,
+  }) {
+    return EventCategory(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      colorValue: colorValue ?? this.colorValue,
+      locked: locked ?? this.locked,
+      keywords: keywords ?? this.keywords,
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'id': id,
+      'label': label,
+      'colorValue': colorValue,
+      'locked': locked,
+    };
+  }
+
+  static EventCategory fromJson(Map<String, Object?> json) {
+    final id = json['id'] as String? ?? '';
+    if (id == holiday.id) {
+      return holiday;
     }
-    return EventCategory.values.firstWhere(
-      (category) => category.name == name || category.label == name,
-      orElse: () => EventCategory.other,
+    if (id == basic.id) {
+      return basic.copyWith(
+        label: json['label'] as String? ?? basic.label,
+        colorValue: json['colorValue'] as int? ?? basic.colorValue,
+        locked: json['locked'] as bool? ?? basic.locked,
+      );
+    }
+    final label = (json['label'] as String? ?? '분류').trim();
+    return EventCategory(
+      id: id.isEmpty ? _customId(label) : id,
+      label: label.isEmpty ? '분류' : label,
+      colorValue: json['colorValue'] as int? ?? basic.colorValue,
+      locked: json['locked'] as bool? ?? false,
+    );
+  }
+
+  static EventCategory fromName(String? name) {
+    return fromStored(name);
+  }
+
+  static EventCategory fromStored(String? value, {int? colorValue}) {
+    final normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return basic;
+    }
+    if (normalized == holiday.id || normalized == holiday.label) {
+      return holiday;
+    }
+    if (normalized == basic.id || normalized == basic.label) {
+      return basic;
+    }
+
+    // Old default categories and old enum names collapse into the new default.
+    const legacyBasicNames = {
+      'other',
+      'health',
+      'work',
+      'appointment',
+      'family',
+      'personal',
+      'travel',
+      'deadline',
+    };
+    if (legacyBasicNames.contains(normalized)) {
+      return basic;
+    }
+
+    final looksLikeGeneratedId = normalized.startsWith('custom_');
+    return EventCategory(
+      id: looksLikeGeneratedId ? normalized : _customId(normalized),
+      label: looksLikeGeneratedId ? '분류' : normalized,
+      colorValue: colorValue ?? basic.colorValue,
     );
   }
 
   static EventCategory classify(String input) {
     final normalized = input.toLowerCase();
-    for (final category in EventCategory.values) {
-      if (category == EventCategory.other) {
-        continue;
-      }
-      if (category.keywords.any(normalized.contains)) {
-        return category;
-      }
+    if (basic.keywords.any(normalized.contains)) {
+      return basic;
     }
-    return EventCategory.other;
+    return basic;
   }
+
+  static EventCategory custom({
+    required String label,
+    required int colorValue,
+  }) {
+    return EventCategory(
+      id: _customId(label),
+      label: label.trim(),
+      colorValue: colorValue,
+    );
+  }
+
+  static String _customId(String value) {
+    final normalized = value.trim().toLowerCase();
+    final code = normalized.codeUnits.fold<int>(
+      17,
+      (hash, code) => (hash * 31 + code) & 0x7fffffff,
+    );
+    return 'custom_$code';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is EventCategory && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 }

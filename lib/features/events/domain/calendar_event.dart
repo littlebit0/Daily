@@ -20,6 +20,10 @@ class CalendarEvent {
     this.deletedAt,
     this.deviceId = '',
     this.syncStatus = 'pending',
+    this.showDday = false,
+    this.readOnly = false,
+    this.systemEvent = false,
+    this.holiday = false,
   });
 
   final String id;
@@ -39,6 +43,10 @@ class CalendarEvent {
   final DateTime? deletedAt;
   final String deviceId;
   final String syncStatus;
+  final bool showDday;
+  final bool readOnly;
+  final bool systemEvent;
+  final bool holiday;
 
   Duration get duration => endAt.difference(startAt);
 
@@ -68,6 +76,10 @@ class CalendarEvent {
     DateTime? deletedAt,
     String? deviceId,
     String? syncStatus,
+    bool? showDday,
+    bool? readOnly,
+    bool? systemEvent,
+    bool? holiday,
     bool clearOccurrenceId = false,
     bool clearMemo = false,
     bool clearLocation = false,
@@ -96,6 +108,10 @@ class CalendarEvent {
       deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
       deviceId: deviceId ?? this.deviceId,
       syncStatus: syncStatus ?? this.syncStatus,
+      showDday: showDday ?? this.showDday,
+      readOnly: readOnly ?? this.readOnly,
+      systemEvent: systemEvent ?? this.systemEvent,
+      holiday: holiday ?? this.holiday,
     );
   }
 }

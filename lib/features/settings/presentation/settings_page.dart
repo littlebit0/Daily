@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../events/domain/event_category.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -13,18 +16,36 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   final _apiKeyController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   var _backupMessage = '';
-  var _authBusy = false;
+  var _syncMessage = '';
+  var _syncBusy = false;
+  String? _driveEmail;
+
+  static const _categoryColors = [
+    0xff2563eb,
+    0xff10b981,
+    0xfff59e0b,
+    0xffec4899,
+    0xff8b5cf6,
+    0xff14b8a6,
+    0xff64748b,
+    0xffef4444,
+  ];
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() async {
       final key = await ref.read(settingsRepositoryProvider).geminiApiKey();
+      await ref.read(googleDriveAuthServiceProvider).initialize();
+      final driveAccount = ref
+          .read(googleDriveAuthServiceProvider)
+          .currentAccount;
       if (mounted) {
         _apiKeyController.text = key ?? '';
+        setState(() {
+          _driveEmail = driveAccount?.email;
+        });
       }
     });
   }
@@ -32,144 +53,260 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   void dispose() {
     _apiKeyController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(appSettingsProvider);
-    final authState = ref.watch(authStateProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('설정')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
         children: [
-          _SectionTitle('알림'),
-          DropdownButtonFormField<int>(
-            initialValue: settings.defaultReminderMinutes,
-            decoration: const InputDecoration(labelText: '기본 일정 알림'),
-            items: const [
-              DropdownMenuItem(value: 10, child: Text('10분 전')),
-              DropdownMenuItem(value: 30, child: Text('30분 전')),
-              DropdownMenuItem(value: 60, child: Text('1시간 전')),
-              DropdownMenuItem(value: 1440, child: Text('하루 전')),
-            ],
-            onChanged: (value) {
-              if (value != null) {
-                _save(settings.copyWith(defaultReminderMinutes: value));
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('아침 브리핑'),
-            subtitle: Text(
-              '${settings.morningBriefingHour.toString().padLeft(2, '0')}:${settings.morningBriefingMinute.toString().padLeft(2, '0')}',
-            ),
-            trailing: const Icon(Icons.schedule),
-            onTap: () async {
-              final picked = await showTimePicker(
-                context: context,
-                initialTime: TimeOfDay(
+          _SettingsSection(
+            title: '알림',
+            children: [
+              _PresetMinutesTile(
+                title: '기본 일정 알림',
+                value: settings.defaultReminderMinutes,
+                presets: const [0, 10, 30, 60, 1440],
+                onChanged: (value) =>
+                    _save(settings.copyWith(defaultReminderMinutes: value)),
+                onCustom: () async {
+                  final value = await _showNumberDialog(
+                    context: context,
+                    title: '기본 알림 직접 입력',
+                    label: '몇 분 전에 알릴까요?',
+                    initialValue: settings.defaultReminderMinutes,
+                  );
+                  if (value != null && value >= 0) {
+                    await _save(
+                      settings.copyWith(defaultReminderMinutes: value),
+                    );
+                  }
+                },
+              ),
+              const Divider(height: 1),
+              _TimeTile(
+                title: '종일 일정 알림 시간',
+                subtitle: '종일 일정의 알림 기준 시간',
+                hour: settings.allDayReminderHour,
+                minute: settings.allDayReminderMinute,
+                onChanged: (time) => _save(
+                  settings.copyWith(
+                    allDayReminderHour: time.hour,
+                    allDayReminderMinute: time.minute,
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: settings.morningBriefingEnabled,
+                title: const Text('아침 브리핑'),
+                subtitle: const Text('매일 지정한 시간에 오늘 일정을 알려줍니다.'),
+                onChanged: (value) async {
+                  final updated = settings.copyWith(
+                    morningBriefingEnabled: value,
+                  );
+                  await _save(updated);
+                  if (value) {
+                    await ref
+                        .read(notificationServiceProvider)
+                        .scheduleMorningBriefing(
+                          hour: updated.morningBriefingHour,
+                          minute: updated.morningBriefingMinute,
+                        );
+                  } else {
+                    await ref
+                        .read(notificationServiceProvider)
+                        .cancelMorningBriefing();
+                  }
+                },
+              ),
+              if (settings.morningBriefingEnabled)
+                _TimeTile(
+                  title: '아침 브리핑 시간',
+                  subtitle: '직접 입력 또는 시간 선택',
                   hour: settings.morningBriefingHour,
                   minute: settings.morningBriefingMinute,
-                ),
-              );
-              if (picked != null) {
-                final updated = settings.copyWith(
-                  morningBriefingHour: picked.hour,
-                  morningBriefingMinute: picked.minute,
-                );
-                await _save(updated);
-                await ref
-                    .read(notificationServiceProvider)
-                    .scheduleMorningBriefing(
-                      hour: picked.hour,
-                      minute: picked.minute,
+                  onChanged: (time) async {
+                    final updated = settings.copyWith(
+                      morningBriefingHour: time.hour,
+                      morningBriefingMinute: time.minute,
                     );
-              }
-            },
-          ),
-          const SizedBox(height: 22),
-          _SectionTitle('AI'),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: settings.aiEnabled,
-            title: const Text('Gemini 사용'),
-            onChanged: (value) => _save(settings.copyWith(aiEnabled: value)),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: settings.blockSensitiveAi,
-            title: const Text('민감 문장 AI 차단'),
-            onChanged: (value) =>
-                _save(settings.copyWith(blockSensitiveAi: value)),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _apiKeyController,
-            obscureText: true,
-            decoration: InputDecoration(
-              labelText: 'Gemini API 키',
-              suffixIcon: IconButton(
-                tooltip: '저장',
-                onPressed: _saveApiKey,
-                icon: const Icon(Icons.save_outlined),
+                    await _save(updated);
+                    await ref
+                        .read(notificationServiceProvider)
+                        .scheduleMorningBriefing(
+                          hour: time.hour,
+                          minute: time.minute,
+                        );
+                  },
+                ),
+              const Divider(height: 1),
+              _DdayOffsetsTile(
+                offsets: settings.dDayReminderOffsets,
+                onChanged: (offsets) =>
+                    _save(settings.copyWith(dDayReminderOffsets: offsets)),
+                onCustom: () async {
+                  final value = await _showNumberDialog(
+                    context: context,
+                    title: 'D-day 알림 직접 입력',
+                    label: 'D-day 기준 일수. 예: -7, 0',
+                    initialValue: -7,
+                  );
+                  if (value != null) {
+                    final offsets = {
+                      ...settings.dDayReminderOffsets,
+                      value,
+                    }.toList()..sort();
+                    await _save(
+                      settings.copyWith(dDayReminderOffsets: offsets),
+                    );
+                  }
+                },
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 22),
-          _SectionTitle('백업'),
-          Row(
+          _SettingsSection(
+            title: '달력',
             children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _backup,
-                  icon: const Icon(Icons.cloud_upload_outlined),
-                  label: const Text('지금 백업'),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('주 시작 요일'),
+                subtitle: const Text('달력의 첫 번째 요일을 선택합니다.'),
+                trailing: SegmentedButton<bool>(
+                  selected: {settings.weekStartsOnMonday},
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('일')),
+                    ButtonSegment(value: true, label: Text('월')),
+                  ],
+                  onSelectionChanged: (selection) {
+                    _save(
+                      settings.copyWith(weekStartsOnMonday: selection.first),
+                    );
+                  },
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
+              const Divider(height: 1),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: settings.showLunarDates,
+                title: const Text('음력 표시'),
+                subtitle: const Text('월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.'),
+                onChanged: (value) =>
+                    _save(settings.copyWith(showLunarDates: value)),
+              ),
+            ],
+          ),
+          _SettingsSection(
+            title: '분류',
+            children: [
+              for (final category in settings.categories)
+                _CategoryTile(
+                  category: category,
+                  onDelete: category.locked
+                      ? null
+                      : () => _deleteCategory(settings, category),
+                ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
                 child: OutlinedButton.icon(
-                  onPressed: _restore,
-                  icon: const Icon(Icons.restore),
-                  label: const Text('복원'),
+                  onPressed: () => _addCategory(settings),
+                  icon: const Icon(Icons.add),
+                  label: const Text('분류 추가'),
                 ),
               ),
             ],
           ),
-          if (_backupMessage.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              _backupMessage,
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
-          ],
-          const SizedBox(height: 22),
-          _SectionTitle('동기화'),
-          authState.when(
-            data: (user) => user == null
-                ? _SignedOutSyncSettings(
-                    emailController: _emailController,
-                    passwordController: _passwordController,
-                    busy: _authBusy,
-                    onSignIn: () => _authenticate(createAccount: false),
-                    onCreateAccount: () => _authenticate(createAccount: true),
-                  )
-                : _SignedInSyncSettings(
-                    email: user.email ?? user.uid,
-                    onSignOut: _signOut,
+          _SettingsSection(
+            title: 'AI',
+            children: [
+              Opacity(
+                opacity: 0.45,
+                child: IgnorePointer(
+                  child: Column(
+                    children: [
+                      const ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.auto_awesome_outlined),
+                        title: Text('AI 기능'),
+                        subtitle: Text('개발 중입니다.'),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: settings.aiEnabled,
+                        title: const Text('Gemini 사용'),
+                        onChanged: (_) {},
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: settings.blockSensitiveAi,
+                        title: const Text('민감 문장 AI 차단'),
+                        onChanged: (_) {},
+                      ),
+                      TextField(
+                        controller: _apiKeyController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Gemini API 키',
+                        ),
+                      ),
+                    ],
                   ),
-            error: (error, stackTrace) => Text(
-              'Firebase 설정 필요: $error',
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
-            loading: () => const LinearProgressIndicator(),
+                ),
+              ),
+            ],
+          ),
+          _SettingsSection(
+            title: '백업',
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _backup,
+                      icon: const Icon(Icons.cloud_upload_outlined),
+                      label: const Text('지금 백업'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _restore,
+                      icon: const Icon(Icons.restore),
+                      label: const Text('복원'),
+                    ),
+                  ),
+                ],
+              ),
+              if (_backupMessage.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _backupMessage,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ],
+            ],
+          ),
+          _SettingsSection(
+            title: '동기화',
+            children: [
+              _GoogleDriveSyncSettings(
+                email: _driveEmail,
+                busy: _syncBusy,
+                message: _syncMessage,
+                onConnect: _connectGoogleDrive,
+                onSyncNow: _syncGoogleDriveNow,
+                onDisconnect: _logoutGoogleDrive,
+                onDeleteAccount: _deleteAccount,
+              ),
+            ],
           ),
         ],
       ),
@@ -179,17 +316,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _save(AppSettings settings) async {
     await ref.read(settingsRepositoryProvider).save(settings);
     ref.read(appSettingsProvider.notifier).state = settings;
-  }
-
-  Future<void> _saveApiKey() async {
-    await ref
-        .read(settingsRepositoryProvider)
-        .saveGeminiApiKey(_apiKeyController.text);
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('API 키를 저장했습니다.')));
-    }
+    unawaited(
+      ref.read(googleDriveSyncServiceProvider).syncNow().catchError((_) {}),
+    );
   }
 
   Future<void> _backup() async {
@@ -206,119 +335,676 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _authenticate({required bool createAccount}) async {
-    setState(() => _authBusy = true);
+  Future<void> _addCategory(AppSettings settings) async {
+    final category = await _showCategoryDialog(context);
+    if (category == null) {
+      return;
+    }
+    final categories = [
+      ...settings.categories.where((item) => item.id != category.id),
+      category,
+    ];
+    await _save(
+      settings.copyWith(categories: _normalizeCategories(categories)),
+    );
+  }
+
+  Future<void> _deleteCategory(
+    AppSettings settings,
+    EventCategory category,
+  ) async {
+    final categories = settings.categories
+        .where((item) => item.id != category.id)
+        .toList();
+    await _save(
+      settings.copyWith(categories: _normalizeCategories(categories)),
+    );
+  }
+
+  List<EventCategory> _normalizeCategories(List<EventCategory> categories) {
+    final normalized = categories
+        .where((category) => category.id != EventCategory.holiday.id)
+        .toList();
+    normalized.add(EventCategory.holiday);
+    return normalized;
+  }
+
+  Future<void> _connectGoogleDrive() async {
+    setState(() {
+      _syncBusy = true;
+      _syncMessage = '';
+    });
     try {
-      final auth = ref.read(firebaseAuthServiceProvider);
-      final email = _emailController.text.trim();
-      final password = _passwordController.text;
-      final credential = createAccount
-          ? await auth.createAccount(email: email, password: password)
-          : await auth.signIn(email: email, password: password);
-      if (credential == null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Firebase 설정이 아직 준비되지 않았습니다.')),
-        );
+      final account = await ref.read(googleDriveAuthServiceProvider).signIn();
+      await ref
+          .read(googleDriveSyncServiceProvider)
+          .syncNow(promptIfNecessary: true);
+      if (!mounted) {
+        return;
       }
-      await ref.read(syncServiceProvider).start();
+      ref.read(appSettingsProvider.notifier).state = ref
+          .read(settingsRepositoryProvider)
+          .load();
+      setState(() {
+        _driveEmail = account?.email;
+        _syncMessage = 'Google Drive 동기화가 연결되었습니다.';
+      });
     } on Object catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
+        setState(() => _syncMessage = '$error');
       }
     } finally {
       if (mounted) {
-        setState(() => _authBusy = false);
+        setState(() => _syncBusy = false);
       }
     }
   }
 
-  Future<void> _signOut() async {
-    await ref.read(firebaseAuthServiceProvider).signOut();
+  Future<void> _syncGoogleDriveNow() async {
+    setState(() {
+      _syncBusy = true;
+      _syncMessage = '';
+    });
+    try {
+      await ref
+          .read(googleDriveSyncServiceProvider)
+          .syncNow(promptIfNecessary: true);
+      if (mounted) {
+        ref.read(appSettingsProvider.notifier).state = ref
+            .read(settingsRepositoryProvider)
+            .load();
+        setState(() => _syncMessage = 'Google Drive 동기화 완료');
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _syncMessage = '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncBusy = false);
+      }
+    }
+  }
+
+  Future<void> _logoutGoogleDrive() async {
+    setState(() {
+      _syncBusy = true;
+      _syncMessage = '';
+    });
+    try {
+      await ref.read(googleDriveAuthServiceProvider).signOut();
+      final settings = ref
+          .read(appSettingsProvider)
+          .copyWith(onboardingCompleted: false);
+      await ref.read(settingsRepositoryProvider).save(settings);
+      ref.read(appSettingsProvider.notifier).state = settings;
+      if (mounted) {
+        setState(() {
+          _driveEmail = null;
+          _syncMessage = '로그아웃되었습니다.';
+        });
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncBusy = false);
+      }
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('회원탈퇴'),
+        content: const Text(
+          'Google Drive 백업과 이 기기의 모든 일정, 설정을 삭제하고 처음 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('탈퇴'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _syncBusy = true;
+      _syncMessage = '';
+    });
+    try {
+      final events = await ref.read(eventRepositoryProvider).allEventsForSync();
+      for (final event in events) {
+        await ref
+            .read(notificationServiceProvider)
+            .cancelEventReminder(event.id);
+      }
+      await ref.read(notificationServiceProvider).cancelMorningBriefing();
+      await ref
+          .read(googleDriveSyncServiceProvider)
+          .deleteCloudBackup(promptIfNecessary: true);
+      await ref.read(eventRepositoryProvider).clearAll();
+      await ref.read(settingsRepositoryProvider).resetAll();
+      await ref.read(googleDriveAuthServiceProvider).signOut();
+      ref.read(appSettingsProvider.notifier).state = const AppSettings();
+      if (mounted) {
+        setState(() {
+          _driveEmail = null;
+          _syncMessage = '회원탈퇴가 완료되었습니다.';
+        });
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _syncMessage = '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncBusy = false);
+      }
+    }
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.label);
+class _SettingsSection extends StatelessWidget {
+  const _SettingsSection({required this.title, required this.children});
 
-  final String label;
+  final String title;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(label, style: Theme.of(context).textTheme.titleMedium),
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xffedf0f5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              ...children,
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _SignedOutSyncSettings extends StatelessWidget {
-  const _SignedOutSyncSettings({
-    required this.emailController,
-    required this.passwordController,
-    required this.busy,
-    required this.onSignIn,
-    required this.onCreateAccount,
+class _PresetMinutesTile extends StatelessWidget {
+  const _PresetMinutesTile({
+    required this.title,
+    required this.value,
+    required this.presets,
+    required this.onChanged,
+    required this.onCustom,
   });
 
-  final TextEditingController emailController;
-  final TextEditingController passwordController;
-  final bool busy;
-  final VoidCallback onSignIn;
-  final VoidCallback onCreateAccount;
+  final String title;
+  final int value;
+  final List<int> presets;
+  final ValueChanged<int> onChanged;
+  final VoidCallback onCustom;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        TextField(
-          controller: emailController,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: '이메일'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: passwordController,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: '비밀번호'),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton(
-                onPressed: busy ? null : onSignIn,
-                child: const Text('로그인'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: busy ? null : onCreateAccount,
-                child: const Text('계정 만들기'),
-              ),
-            ),
-          ],
-        ),
-      ],
+    final selectedValue = presets.contains(value) ? value : -1;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title),
+      subtitle: Text(_minutesLabel(value)),
+      trailing: Wrap(
+        spacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          DropdownButton<int>(
+            value: selectedValue,
+            items: [
+              for (final preset in presets)
+                DropdownMenuItem(
+                  value: preset,
+                  child: Text(_minutesLabel(preset)),
+                ),
+              const DropdownMenuItem(value: -1, child: Text('직접 입력')),
+            ],
+            onChanged: (next) {
+              if (next == null) {
+                return;
+              }
+              if (next == -1) {
+                onCustom();
+              } else {
+                onChanged(next);
+              }
+            },
+          ),
+          IconButton(
+            tooltip: '직접 입력',
+            onPressed: onCustom,
+            icon: const Icon(Icons.edit_outlined),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _SignedInSyncSettings extends StatelessWidget {
-  const _SignedInSyncSettings({required this.email, required this.onSignOut});
+class _TimeTile extends StatelessWidget {
+  const _TimeTile({
+    required this.title,
+    required this.subtitle,
+    required this.hour,
+    required this.minute,
+    required this.onChanged,
+  });
 
-  final String email;
-  final VoidCallback onSignOut;
+  final String title;
+  final String subtitle;
+  final int hour;
+  final int minute;
+  final ValueChanged<TimeOfDay> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final time = TimeOfDay(hour: hour, minute: minute);
+    final label = _timeLabel(hour, minute);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title),
+      subtitle: Text('$subtitle · $label'),
+      trailing: Wrap(
+        spacing: 4,
+        children: [
+          IconButton(
+            tooltip: '시간 선택',
+            onPressed: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: time,
+              );
+              if (picked != null) {
+                onChanged(picked);
+              }
+            },
+            icon: const Icon(Icons.schedule),
+          ),
+          IconButton(
+            tooltip: '직접 입력',
+            onPressed: () async {
+              final picked = await _showTimeTextDialog(
+                context: context,
+                initialHour: hour,
+                initialMinute: minute,
+              );
+              if (picked != null) {
+                onChanged(picked);
+              }
+            },
+            icon: const Icon(Icons.edit_outlined),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DdayOffsetsTile extends StatelessWidget {
+  const _DdayOffsetsTile({
+    required this.offsets,
+    required this.onChanged,
+    required this.onCustom,
+  });
+
+  final List<int> offsets;
+  final ValueChanged<List<int>> onChanged;
+  final VoidCallback onCustom;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = offsets.toSet();
+    const presets = [-30, -14, -7, -3, -1, 0];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('D-day 알림'),
+          const SizedBox(height: 4),
+          Text(
+            'D-day 표시가 켜진 일정에 적용됩니다.',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final offset in presets)
+                FilterChip(
+                  label: Text(_ddayLabel(offset)),
+                  selected: selected.contains(offset),
+                  onSelected: (checked) {
+                    final next = {...selected};
+                    if (checked) {
+                      next.add(offset);
+                    } else {
+                      next.remove(offset);
+                    }
+                    onChanged(next.toList()..sort());
+                  },
+                ),
+              ActionChip(
+                avatar: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('직접 입력'),
+                onPressed: onCustom,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoryTile extends StatelessWidget {
+  const _CategoryTile({required this.category, required this.onDelete});
+
+  final EventCategory category;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      title: Text(email),
-      subtitle: const Text('Firestore 실시간 동기화 사용 중'),
-      trailing: TextButton(onPressed: onSignOut, child: const Text('로그아웃')),
+      leading: Container(
+        width: 14,
+        height: 14,
+        decoration: BoxDecoration(
+          color: Color(category.colorValue),
+          shape: BoxShape.circle,
+        ),
+      ),
+      title: Text(category.label),
+      subtitle: Text(category.locked ? '삭제 불가' : '사용자 분류'),
+      trailing: IconButton(
+        tooltip: category.locked ? '삭제 불가' : '분류 삭제',
+        onPressed: onDelete,
+        icon: const Icon(Icons.delete_outline),
+      ),
     );
   }
+}
+
+class _GoogleDriveSyncSettings extends StatelessWidget {
+  const _GoogleDriveSyncSettings({
+    required this.email,
+    required this.busy,
+    required this.message,
+    required this.onConnect,
+    required this.onSyncNow,
+    required this.onDisconnect,
+    required this.onDeleteAccount,
+  });
+
+  final String? email;
+  final bool busy;
+  final String message;
+  final VoidCallback onConnect;
+  final VoidCallback onSyncNow;
+  final VoidCallback onDisconnect;
+  final VoidCallback onDeleteAccount;
+
+  @override
+  Widget build(BuildContext context) {
+    final connected = email != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.cloud_sync_outlined),
+          title: Text(connected ? email! : 'Google Drive 연결 없음'),
+          subtitle: Text(
+            connected
+                ? '개인 Google Drive AppData 공간으로 자동 동기화합니다.'
+                : '연결하면 로그인 직후 자동 복원과 변경 후 자동 백업을 사용할 수 있습니다.',
+          ),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: busy ? null : (connected ? onSyncNow : onConnect),
+                icon: busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(connected ? Icons.sync : Icons.login),
+                label: Text(connected ? '지금 동기화' : 'Google Drive 연결'),
+              ),
+            ),
+            if (connected) ...[
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: busy ? null : onDisconnect,
+                child: const Text('로그아웃'),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: busy ? null : onDeleteAccount,
+          icon: const Icon(Icons.person_remove_outlined),
+          label: const Text('회원탈퇴'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.red,
+            side: const BorderSide(color: Colors.red),
+          ),
+        ),
+        if (message.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text(message, style: Theme.of(context).textTheme.labelMedium),
+        ],
+      ],
+    );
+  }
+}
+
+Future<EventCategory?> _showCategoryDialog(BuildContext context) async {
+  final controller = TextEditingController();
+  var selectedColor = _SettingsPageState._categoryColors.first;
+  final category = await showDialog<EventCategory>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('분류 추가'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: '이름'),
+            ),
+            const SizedBox(height: 14),
+            Text('색상', style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final colorValue in _SettingsPageState._categoryColors)
+                  ChoiceChip(
+                    selected: selectedColor == colorValue,
+                    label: const SizedBox.shrink(),
+                    avatar: CircleAvatar(
+                      radius: 8,
+                      backgroundColor: Color(colorValue),
+                    ),
+                    onSelected: (_) =>
+                        setState(() => selectedColor = colorValue),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final label = controller.text.trim();
+              if (label.isEmpty) {
+                return;
+              }
+              Navigator.of(context).pop(
+                EventCategory.custom(label: label, colorValue: selectedColor),
+              );
+            },
+            child: const Text('추가'),
+          ),
+        ],
+      ),
+    ),
+  );
+  controller.dispose();
+  return category;
+}
+
+Future<int?> _showNumberDialog({
+  required BuildContext context,
+  required String title,
+  required String label,
+  required int initialValue,
+}) async {
+  final controller = TextEditingController(text: '$initialValue');
+  final result = await showDialog<int>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(labelText: label),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final value = int.tryParse(controller.text.trim());
+            Navigator.of(context).pop(value);
+          },
+          child: const Text('적용'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  return result;
+}
+
+Future<TimeOfDay?> _showTimeTextDialog({
+  required BuildContext context,
+  required int initialHour,
+  required int initialMinute,
+}) async {
+  final controller = TextEditingController(
+    text: _timeLabel(initialHour, initialMinute),
+  );
+  final result = await showDialog<TimeOfDay>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('시간 직접 입력'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        keyboardType: TextInputType.datetime,
+        decoration: const InputDecoration(labelText: 'HH:mm'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final value = controller.text.trim();
+            final parts = value.split(':');
+            if (parts.length != 2) {
+              Navigator.of(context).pop();
+              return;
+            }
+            final hour = int.tryParse(parts[0]);
+            final minute = int.tryParse(parts[1]);
+            if (hour == null ||
+                minute == null ||
+                hour < 0 ||
+                hour > 23 ||
+                minute < 0 ||
+                minute > 59) {
+              Navigator.of(context).pop();
+              return;
+            }
+            Navigator.of(context).pop(TimeOfDay(hour: hour, minute: minute));
+          },
+          child: const Text('적용'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  return result;
+}
+
+String _minutesLabel(int minutes) {
+  if (minutes == 0) {
+    return '정시';
+  }
+  if (minutes < 60) {
+    return '$minutes분 전';
+  }
+  if (minutes % 1440 == 0) {
+    return '${minutes ~/ 1440}일 전';
+  }
+  if (minutes % 60 == 0) {
+    return '${minutes ~/ 60}시간 전';
+  }
+  return '$minutes분 전';
+}
+
+String _ddayLabel(int offset) {
+  if (offset == 0) {
+    return 'D-day';
+  }
+  return offset < 0 ? 'D$offset' : 'D+$offset';
+}
+
+String _timeLabel(int hour, int minute) {
+  return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
 }

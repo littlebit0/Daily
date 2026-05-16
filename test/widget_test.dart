@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   testWidgets('Daily opens to the monthly calendar shell', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
     final preferences = await SharedPreferences.getInstance();
     final settingsRepository = SettingsRepository(preferences: preferences);
 
@@ -28,7 +28,7 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('년'), findsWidgets);
+    expect(find.byType(PageView), findsOneWidget);
     expect(find.text('일정을 입력하세요'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -37,7 +37,7 @@ void main() {
   testWidgets('swiping the monthly calendar moves to the next month', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
     final preferences = await SharedPreferences.getInstance();
     final settingsRepository = SettingsRepository(preferences: preferences);
 
@@ -72,6 +72,9 @@ void main() {
 }
 
 class _FakeNotification implements NotificationService {
+  @override
+  Future<void> cancelMorningBriefing() async {}
+
   @override
   Future<void> cancelEventReminder(String eventId) async {}
 
@@ -113,6 +116,9 @@ class _FakeEventRepository implements EventRepository {
   Future<List<CalendarEvent>> pendingSyncEvents() async => const [];
 
   @override
+  Future<List<CalendarEvent>> allEventsForSync() async => const [];
+
+  @override
   Future<void> markSynced(String eventId) async {}
 
   @override
@@ -125,4 +131,7 @@ class _FakeEventRepository implements EventRepository {
 
   @override
   Future<void> hardDelete(String eventId) async {}
+
+  @override
+  Future<void> clearAll() async {}
 }

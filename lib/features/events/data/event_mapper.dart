@@ -18,7 +18,7 @@ extension EventRecordMapper on EventRecord {
       startAt: baseStart,
       endAt: baseStart.add(duration),
       allDay: allDay,
-      category: EventCategory.fromName(category),
+      category: EventCategory.fromStored(category, colorValue: colorValue),
       colorValue: colorValue,
       reminderMinutesBefore: reminderMinutesBefore,
       recurrence: RecurrenceRule(
@@ -32,6 +32,7 @@ extension EventRecordMapper on EventRecord {
       deletedAt: deletedAt,
       deviceId: deviceId,
       syncStatus: syncStatus,
+      showDday: showDday,
     );
   }
 }

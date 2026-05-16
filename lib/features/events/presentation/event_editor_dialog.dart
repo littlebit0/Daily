@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../domain/calendar_event.dart';
 import '../domain/event_category.dart';
@@ -7,10 +6,18 @@ import '../domain/event_draft.dart';
 import '../domain/recurrence_rule.dart';
 
 class EventEditorDialog extends StatefulWidget {
-  const EventEditorDialog({super.key, required this.initialDate, this.event});
+  const EventEditorDialog({
+    super.key,
+    required this.initialDate,
+    this.event,
+    this.categories = EventCategory.values,
+    this.defaultReminderMinutes = 60,
+  });
 
   final DateTime initialDate;
   final CalendarEvent? event;
+  final List<EventCategory> categories;
+  final int defaultReminderMinutes;
 
   @override
   State<EventEditorDialog> createState() => _EventEditorDialogState();
@@ -28,6 +35,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   late EventCategory _category;
   late int? _reminder;
   late RecurrenceFrequency _frequency;
+  late bool _showDday;
 
   @override
   void initState() {
@@ -63,9 +71,14 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     );
     _endTime = TimeOfDay.fromDateTime(sourceEnd);
     _allDay = event?.allDay ?? false;
-    _category = event?.category ?? EventCategory.other;
-    _reminder = event?.reminderMinutesBefore ?? 60;
+    final usableCategories = _usableCategories;
+    _category = usableCategories.firstWhere(
+      (category) => category.id == event?.category.id,
+      orElse: () => usableCategories.first,
+    );
+    _reminder = event?.reminderMinutesBefore ?? widget.defaultReminderMinutes;
     _frequency = event?.recurrence.frequency ?? RecurrenceFrequency.none;
+    _showDday = event?.showDday ?? false;
   }
 
   @override
@@ -78,15 +91,15 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final startDateLabel = DateFormat('yyyy년 M월 d일').format(_startDate);
-    final endDateLabel = DateFormat('yyyy년 M월 d일').format(_endDate);
+    final startDateLabel = _formatDate(_startDate);
+    final endDateLabel = _formatDate(_endDate);
     final startTimeLabel = _startTime.format(context);
     final endTimeLabel = _endTime.format(context);
 
     return AlertDialog(
       title: Text(widget.event == null ? '일정 추가' : '일정 수정'),
       content: SizedBox(
-        width: 420,
+        width: 430,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -150,9 +163,10 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                 contentPadding: EdgeInsets.zero,
               ),
               DropdownButtonFormField<EventCategory>(
+                key: ValueKey(_category.id),
                 initialValue: _category,
                 decoration: const InputDecoration(labelText: '분류'),
-                items: EventCategory.values
+                items: _usableCategories
                     .map(
                       (category) => DropdownMenuItem(
                         value: category,
@@ -180,20 +194,36 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                 },
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<int?>(
-                initialValue: _allDay ? null : _reminder,
-                decoration: const InputDecoration(labelText: '알림'),
-                items: const [
-                  DropdownMenuItem<int?>(value: null, child: Text('없음')),
-                  DropdownMenuItem(value: 10, child: Text('10분 전')),
-                  DropdownMenuItem(value: 30, child: Text('30분 전')),
-                  DropdownMenuItem(value: 60, child: Text('1시간 전')),
-                  DropdownMenuItem(value: 1440, child: Text('하루 전')),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int?>(
+                      key: ValueKey(_reminder),
+                      initialValue: _reminder,
+                      decoration: const InputDecoration(labelText: '알림'),
+                      items: _reminderItems(),
+                      onChanged: (value) => setState(() => _reminder = value),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.outlined(
+                    tooltip: '알림 직접 입력',
+                    onPressed: _pickCustomReminder,
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
                 ],
-                onChanged: _allDay
-                    ? null
-                    : (value) => setState(() => _reminder = value),
               ),
+              if (_allDay)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '종일 일정은 설정의 종일 알림 시간을 기준으로 예약됩니다.',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 12),
               DropdownButtonFormField<RecurrenceFrequency>(
                 initialValue: _frequency,
@@ -211,6 +241,14 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                     setState(() => _frequency = value);
                   }
                 },
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                value: _showDday,
+                onChanged: (value) => setState(() => _showDday = value),
+                title: const Text('D-day 표시'),
+                subtitle: const Text('달력과 일정 목록에 D-day를 함께 표시합니다.'),
+                contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 12),
               TextField(
@@ -235,6 +273,49 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
         FilledButton(onPressed: _submit, child: const Text('저장')),
       ],
     );
+  }
+
+  List<DropdownMenuItem<int?>> _reminderItems() {
+    final values = <int?>[null, 0, 10, 30, 60, 1440];
+    if (_reminder != null && !values.contains(_reminder)) {
+      values.add(_reminder);
+    }
+    return values
+        .map(
+          (value) => DropdownMenuItem(value: value, child: Text(_label(value))),
+        )
+        .toList();
+  }
+
+  String _label(int? minutes) {
+    if (minutes == null) {
+      return '없음';
+    }
+    if (minutes == 0) {
+      return '정시';
+    }
+    if (minutes < 60) {
+      return '$minutes분 전';
+    }
+    if (minutes % 1440 == 0) {
+      return '${minutes ~/ 1440}일 전';
+    }
+    if (minutes % 60 == 0) {
+      return '${minutes ~/ 60}시간 전';
+    }
+    return '$minutes분 전';
+  }
+
+  Future<void> _pickCustomReminder() async {
+    final picked = await _showNumberDialog(
+      context: context,
+      title: '알림 직접 입력',
+      label: '몇 분 전에 알릴까요?',
+      initialValue: _reminder ?? 0,
+    );
+    if (picked != null && picked >= 0) {
+      setState(() => _reminder = picked);
+    }
   }
 
   Future<void> _pickStartDate() async {
@@ -336,10 +417,22 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
       allDay: _allDay,
       category: _category,
       colorValue: _category.colorValue,
-      reminderMinutesBefore: _allDay ? null : _reminder,
+      reminderMinutesBefore: _reminder,
       recurrence: RecurrenceRule(frequency: _frequency),
+      showDday: _showDday,
     );
     Navigator.of(context).pop(draft);
+  }
+
+  List<EventCategory> get _usableCategories {
+    final categories = widget.categories
+        .where((category) => category.id != EventCategory.holiday.id)
+        .toList();
+    return categories.isEmpty ? const [EventCategory.basic] : categories;
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}년 ${date.month}월 ${date.day}일';
   }
 }
 
@@ -374,4 +467,40 @@ class _LabeledPickerButton extends StatelessWidget {
       ],
     );
   }
+}
+
+Future<int?> _showNumberDialog({
+  required BuildContext context,
+  required String title,
+  required String label,
+  required int initialValue,
+}) async {
+  final controller = TextEditingController(text: '$initialValue');
+  final result = await showDialog<int>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(labelText: label),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final value = int.tryParse(controller.text.trim());
+            Navigator.of(context).pop(value);
+          },
+          child: const Text('적용'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  return result;
 }

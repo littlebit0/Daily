@@ -15,7 +15,7 @@ class EventRecords extends Table {
   DateTimeColumn get startAt => dateTime()();
   DateTimeColumn get endAt => dateTime()();
   BoolColumn get allDay => boolean().withDefault(const Constant(false))();
-  TextColumn get category => text().withDefault(const Constant('other'))();
+  TextColumn get category => text().withDefault(const Constant('basic'))();
   IntColumn get colorValue => integer()();
   IntColumn get reminderMinutesBefore => integer().nullable()();
   TextColumn get recurrenceFrequency =>
@@ -29,6 +29,7 @@ class EventRecords extends Table {
   DateTimeColumn get deletedAt => dateTime().nullable()();
   TextColumn get deviceId => text().withDefault(const Constant(''))();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();
+  BoolColumn get showDday => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -39,7 +40,21 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onUpgrade: (migrator, from, to) async {
+        if (from < 2) {
+          await migrator.addColumn(eventRecords, eventRecords.showDday);
+          await customStatement(
+            "UPDATE event_records SET category = 'basic', color_value = 4280640491 WHERE category != 'holiday'",
+          );
+        }
+      },
+    );
+  }
 
   Future<File> databaseFile() async {
     final directory = await getApplicationSupportDirectory();

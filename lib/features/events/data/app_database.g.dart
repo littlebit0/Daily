@@ -90,7 +90,7 @@ class $EventRecordsTable extends EventRecords
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant('other'),
+    defaultValue: const Constant('basic'),
   );
   static const VerificationMeta _colorValueMeta = const VerificationMeta(
     'colorValue',
@@ -216,6 +216,21 @@ class $EventRecordsTable extends EventRecords
     requiredDuringInsert: false,
     defaultValue: const Constant('pending'),
   );
+  static const VerificationMeta _showDdayMeta = const VerificationMeta(
+    'showDday',
+  );
+  @override
+  late final GeneratedColumn<bool> showDday = GeneratedColumn<bool>(
+    'show_dday',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("show_dday" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -237,6 +252,7 @@ class $EventRecordsTable extends EventRecords
     deletedAt,
     deviceId,
     syncStatus,
+    showDday,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -390,6 +406,12 @@ class $EventRecordsTable extends EventRecords
         syncStatus.isAcceptableOrUnknown(data['sync_status']!, _syncStatusMeta),
       );
     }
+    if (data.containsKey('show_dday')) {
+      context.handle(
+        _showDdayMeta,
+        showDday.isAcceptableOrUnknown(data['show_dday']!, _showDdayMeta),
+      );
+    }
     return context;
   }
 
@@ -475,6 +497,10 @@ class $EventRecordsTable extends EventRecords
         DriftSqlType.string,
         data['${effectivePrefix}sync_status'],
       )!,
+      showDday: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_dday'],
+      )!,
     );
   }
 
@@ -504,6 +530,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
   final DateTime? deletedAt;
   final String deviceId;
   final String syncStatus;
+  final bool showDday;
   const EventRecord({
     required this.id,
     required this.title,
@@ -524,6 +551,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     this.deletedAt,
     required this.deviceId,
     required this.syncStatus,
+    required this.showDday,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -559,6 +587,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     }
     map['device_id'] = Variable<String>(deviceId);
     map['sync_status'] = Variable<String>(syncStatus);
+    map['show_dday'] = Variable<bool>(showDday);
     return map;
   }
 
@@ -593,6 +622,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           : Value(deletedAt),
       deviceId: Value(deviceId),
       syncStatus: Value(syncStatus),
+      showDday: Value(showDday),
     );
   }
 
@@ -625,6 +655,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       deviceId: serializer.fromJson<String>(json['deviceId']),
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
+      showDday: serializer.fromJson<bool>(json['showDday']),
     );
   }
   @override
@@ -650,6 +681,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'deviceId': serializer.toJson<String>(deviceId),
       'syncStatus': serializer.toJson<String>(syncStatus),
+      'showDday': serializer.toJson<bool>(showDday),
     };
   }
 
@@ -673,6 +705,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     Value<DateTime?> deletedAt = const Value.absent(),
     String? deviceId,
     String? syncStatus,
+    bool? showDday,
   }) => EventRecord(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -699,6 +732,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     deviceId: deviceId ?? this.deviceId,
     syncStatus: syncStatus ?? this.syncStatus,
+    showDday: showDday ?? this.showDday,
   );
   EventRecord copyWithCompanion(EventRecordsCompanion data) {
     return EventRecord(
@@ -735,6 +769,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       syncStatus: data.syncStatus.present
           ? data.syncStatus.value
           : this.syncStatus,
+      showDday: data.showDday.present ? data.showDday.value : this.showDday,
     );
   }
 
@@ -759,7 +794,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('deviceId: $deviceId, ')
-          ..write('syncStatus: $syncStatus')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('showDday: $showDday')
           ..write(')'))
         .toString();
   }
@@ -785,6 +821,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     deletedAt,
     deviceId,
     syncStatus,
+    showDday,
   );
   @override
   bool operator ==(Object other) =>
@@ -808,7 +845,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
           other.deviceId == this.deviceId &&
-          other.syncStatus == this.syncStatus);
+          other.syncStatus == this.syncStatus &&
+          other.showDday == this.showDday);
 }
 
 class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
@@ -831,6 +869,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
   final Value<DateTime?> deletedAt;
   final Value<String> deviceId;
   final Value<String> syncStatus;
+  final Value<bool> showDday;
   final Value<int> rowid;
   const EventRecordsCompanion({
     this.id = const Value.absent(),
@@ -852,6 +891,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     this.deletedAt = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.syncStatus = const Value.absent(),
+    this.showDday = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   EventRecordsCompanion.insert({
@@ -874,6 +914,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     this.deletedAt = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.syncStatus = const Value.absent(),
+    this.showDday = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -902,6 +943,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Expression<DateTime>? deletedAt,
     Expression<String>? deviceId,
     Expression<String>? syncStatus,
+    Expression<bool>? showDday,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -926,6 +968,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (deviceId != null) 'device_id': deviceId,
       if (syncStatus != null) 'sync_status': syncStatus,
+      if (showDday != null) 'show_dday': showDday,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -950,6 +993,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Value<DateTime?>? deletedAt,
     Value<String>? deviceId,
     Value<String>? syncStatus,
+    Value<bool>? showDday,
     Value<int>? rowid,
   }) {
     return EventRecordsCompanion(
@@ -973,6 +1017,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       deletedAt: deletedAt ?? this.deletedAt,
       deviceId: deviceId ?? this.deviceId,
       syncStatus: syncStatus ?? this.syncStatus,
+      showDday: showDday ?? this.showDday,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1039,6 +1084,9 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     if (syncStatus.present) {
       map['sync_status'] = Variable<String>(syncStatus.value);
     }
+    if (showDday.present) {
+      map['show_dday'] = Variable<bool>(showDday.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1067,6 +1115,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
           ..write('deletedAt: $deletedAt, ')
           ..write('deviceId: $deviceId, ')
           ..write('syncStatus: $syncStatus, ')
+          ..write('showDday: $showDday, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1105,6 +1154,7 @@ typedef $$EventRecordsTableCreateCompanionBuilder =
       Value<DateTime?> deletedAt,
       Value<String> deviceId,
       Value<String> syncStatus,
+      Value<bool> showDday,
       Value<int> rowid,
     });
 typedef $$EventRecordsTableUpdateCompanionBuilder =
@@ -1128,6 +1178,7 @@ typedef $$EventRecordsTableUpdateCompanionBuilder =
       Value<DateTime?> deletedAt,
       Value<String> deviceId,
       Value<String> syncStatus,
+      Value<bool> showDday,
       Value<int> rowid,
     });
 
@@ -1232,6 +1283,11 @@ class $$EventRecordsTableFilterComposer
 
   ColumnFilters<String> get syncStatus => $composableBuilder(
     column: $table.syncStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get showDday => $composableBuilder(
+    column: $table.showDday,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1339,6 +1395,11 @@ class $$EventRecordsTableOrderingComposer
     column: $table.syncStatus,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get showDday => $composableBuilder(
+    column: $table.showDday,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$EventRecordsTableAnnotationComposer
@@ -1420,6 +1481,9 @@ class $$EventRecordsTableAnnotationComposer
     column: $table.syncStatus,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get showDday =>
+      $composableBuilder(column: $table.showDday, builder: (column) => column);
 }
 
 class $$EventRecordsTableTableManager
@@ -1472,6 +1536,7 @@ class $$EventRecordsTableTableManager
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> deviceId = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
+                Value<bool> showDday = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EventRecordsCompanion(
                 id: id,
@@ -1493,6 +1558,7 @@ class $$EventRecordsTableTableManager
                 deletedAt: deletedAt,
                 deviceId: deviceId,
                 syncStatus: syncStatus,
+                showDday: showDday,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -1516,6 +1582,7 @@ class $$EventRecordsTableTableManager
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> deviceId = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
+                Value<bool> showDday = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EventRecordsCompanion.insert(
                 id: id,
@@ -1537,6 +1604,7 @@ class $$EventRecordsTableTableManager
                 deletedAt: deletedAt,
                 deviceId: deviceId,
                 syncStatus: syncStatus,
+                showDday: showDday,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

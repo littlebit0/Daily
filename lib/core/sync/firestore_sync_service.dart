@@ -129,6 +129,8 @@ class FirestoreSyncService implements SyncService {
       'endAt': Timestamp.fromDate(event.endAt.toUtc()),
       'allDay': event.allDay,
       'category': event.category.name,
+      'categoryLabel': event.category.label,
+      'categoryLocked': event.category.locked,
       'colorValue': event.colorValue,
       'reminderMinutesBefore': event.reminderMinutesBefore,
       'recurrenceFrequency': event.recurrence.frequency.name,
@@ -143,6 +145,7 @@ class FirestoreSyncService implements SyncService {
           ? null
           : Timestamp.fromDate(event.deletedAt!.toUtc()),
       'deviceId': event.deviceId,
+      'showDday': event.showDday,
     };
   }
 
@@ -162,7 +165,17 @@ class FirestoreSyncService implements SyncService {
       return null;
     }
 
-    final category = EventCategory.fromName(data['category'] as String?);
+    final colorValue = data['colorValue'] as int?;
+    final categoryLabel =
+        (data['categoryLabel'] as String?) ??
+        (data['category'] as String?) ??
+        '';
+    final category = EventCategory.fromJson({
+      'id': data['category'] as String? ?? '',
+      'label': categoryLabel,
+      'colorValue': colorValue,
+      'locked': data['categoryLocked'] as bool? ?? false,
+    });
     return CalendarEvent(
       id: id,
       title: data['title'] as String? ?? 'New event',
@@ -172,7 +185,7 @@ class FirestoreSyncService implements SyncService {
       endAt: endAt,
       allDay: data['allDay'] as bool? ?? false,
       category: category,
-      colorValue: data['colorValue'] as int? ?? category.colorValue,
+      colorValue: colorValue ?? category.colorValue,
       reminderMinutesBefore: data['reminderMinutesBefore'] as int?,
       recurrence: RecurrenceRule(
         frequency: RecurrenceFrequency.fromName(
@@ -187,6 +200,7 @@ class FirestoreSyncService implements SyncService {
       deletedAt: _readDate(data['deletedAt']),
       deviceId: data['deviceId'] as String? ?? '',
       syncStatus: 'synced',
+      showDday: data['showDday'] as bool? ?? false,
     );
   }
 

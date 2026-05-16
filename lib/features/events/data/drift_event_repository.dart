@@ -68,6 +68,15 @@ class DriftEventRepository implements EventRepository {
   }
 
   @override
+  Future<List<CalendarEvent>> allEventsForSync() async {
+    final rows = await (_database.select(
+      _database.eventRecords,
+    )..orderBy([(table) => OrderingTerm.asc(table.updatedAt)])).get();
+
+    return rows.map((record) => record.toDomain()).toList();
+  }
+
+  @override
   Future<void> save(CalendarEvent event) {
     return _database
         .into(_database.eventRecords)
@@ -80,7 +89,7 @@ class DriftEventRepository implements EventRepository {
             startAt: Value(event.startAt),
             endAt: Value(event.endAt),
             allDay: Value(event.allDay),
-            category: Value(event.category.name),
+            category: Value(_storedCategoryValue(event)),
             colorValue: Value(event.colorValue),
             reminderMinutesBefore: Value(event.reminderMinutesBefore),
             recurrenceFrequency: Value(event.recurrence.frequency.name),
@@ -92,6 +101,7 @@ class DriftEventRepository implements EventRepository {
             deletedAt: Value(event.deletedAt),
             deviceId: Value(event.deviceId),
             syncStatus: Value(event.syncStatus),
+            showDday: Value(event.showDday),
           ),
         );
   }
@@ -120,5 +130,17 @@ class DriftEventRepository implements EventRepository {
     return (_database.delete(
       _database.eventRecords,
     )..where((table) => table.id.equals(eventId))).go();
+  }
+
+  @override
+  Future<void> clearAll() {
+    return _database.delete(_database.eventRecords).go();
+  }
+
+  String _storedCategoryValue(CalendarEvent event) {
+    if (event.category.id == 'basic' || event.category.id == 'holiday') {
+      return event.category.id;
+    }
+    return event.category.label;
   }
 }

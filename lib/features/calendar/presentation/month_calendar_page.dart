@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../chat/presentation/chat_input_bar.dart';
@@ -15,9 +14,12 @@ class MonthCalendarPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
     final month = ref.watch(visibleMonthProvider);
     final selectedDate = ref.watch(selectedDateProvider);
-    final eventsAsync = ref.watch(eventsInRangeProvider(_monthRangeFor(month)));
+    final eventsAsync = ref.watch(
+      eventsInRangeProvider(_monthRangeFor(month, settings.weekStartsOnMonday)),
+    );
     final wide = MediaQuery.sizeOf(context).width >= 880;
 
     return Scaffold(
@@ -33,6 +35,8 @@ class MonthCalendarPage extends ConsumerWidget {
                           child: _MonthPageView(
                             month: month,
                             selectedDate: selectedDate,
+                            weekStartsOnMonday: settings.weekStartsOnMonday,
+                            showLunarDates: settings.showLunarDates,
                             onMonthDelta: (delta) =>
                                 _moveMonth(ref, month, selectedDate, delta),
                             onDateSelected: (date, events) {
@@ -44,8 +48,9 @@ class MonthCalendarPage extends ConsumerWidget {
                         Container(
                           width: 360,
                           decoration: const BoxDecoration(
+                            color: Colors.white,
                             border: Border(
-                              left: BorderSide(color: Color(0xffd8dce3)),
+                              left: BorderSide(color: Color(0xffedf0f5)),
                             ),
                           ),
                           child: eventsAsync.when(
@@ -65,6 +70,8 @@ class MonthCalendarPage extends ConsumerWidget {
                   : _MonthPageView(
                       month: month,
                       selectedDate: selectedDate,
+                      weekStartsOnMonday: settings.weekStartsOnMonday,
+                      showLunarDates: settings.showLunarDates,
                       onMonthDelta: (delta) =>
                           _moveMonth(ref, month, selectedDate, delta),
                       onDateSelected: (date, events) {
@@ -105,15 +112,10 @@ class MonthCalendarPage extends ConsumerWidget {
     DateTime selectedDate,
     int delta,
   ) {
-    final nextMonth = DateTime(currentMonth.year, currentMonth.month + delta);
-    final lastDay = DateUtils.getDaysInMonth(nextMonth.year, nextMonth.month);
-    final selectedDay = selectedDate.day > lastDay ? lastDay : selectedDate.day;
-
-    ref.read(visibleMonthProvider.notifier).state = nextMonth;
-    ref.read(selectedDateProvider.notifier).state = DateTime(
-      nextMonth.year,
-      nextMonth.month,
-      selectedDay,
+    _setVisibleMonth(
+      ref,
+      DateTime(currentMonth.year, currentMonth.month + delta),
+      selectedDate,
     );
   }
 }
@@ -122,12 +124,16 @@ class _MonthPageView extends StatefulWidget {
   const _MonthPageView({
     required this.month,
     required this.selectedDate,
+    required this.weekStartsOnMonday,
+    required this.showLunarDates,
     required this.onMonthDelta,
     required this.onDateSelected,
   });
 
   final DateTime month;
   final DateTime selectedDate;
+  final bool weekStartsOnMonday;
+  final bool showLunarDates;
   final ValueChanged<int> onMonthDelta;
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
 
@@ -181,6 +187,8 @@ class _MonthPageViewState extends State<_MonthPageView> {
         return _CalendarMonthPage(
           month: pageMonth,
           selectedDate: widget.selectedDate,
+          weekStartsOnMonday: widget.weekStartsOnMonday,
+          showLunarDates: widget.showLunarDates,
           onDateSelected: widget.onDateSelected,
         );
       },
@@ -196,22 +204,30 @@ class _CalendarMonthPage extends ConsumerWidget {
   const _CalendarMonthPage({
     required this.month,
     required this.selectedDate,
+    required this.weekStartsOnMonday,
+    required this.showLunarDates,
     required this.onDateSelected,
   });
 
   final DateTime month;
   final DateTime selectedDate;
+  final bool weekStartsOnMonday;
+  final bool showLunarDates;
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final eventsAsync = ref.watch(eventsInRangeProvider(_monthRangeFor(month)));
+    final eventsAsync = ref.watch(
+      eventsInRangeProvider(_monthRangeFor(month, weekStartsOnMonday)),
+    );
 
     return eventsAsync.when(
       data: (events) => CalendarMonthGrid(
         month: month,
         selectedDate: selectedDate,
         events: events,
+        weekStartsOnMonday: weekStartsOnMonday,
+        showLunarDates: showLunarDates,
         onDateSelected: (date) {
           onDateSelected(date, _eventsForDay(events, date));
         },
@@ -221,6 +237,8 @@ class _CalendarMonthPage extends ConsumerWidget {
         month: month,
         selectedDate: selectedDate,
         events: const [],
+        weekStartsOnMonday: weekStartsOnMonday,
+        showLunarDates: showLunarDates,
         onDateSelected: (date) {
           onDateSelected(date, const <CalendarEvent>[]);
         },
@@ -237,37 +255,40 @@ class _CalendarHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final label = DateFormat('yyyy년 M월').format(month);
+    final label = '${month.year}년 ${month.month}월';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
       child: Row(
         children: [
-          Text(label, style: Theme.of(context).textTheme.headlineMedium),
+          TextButton.icon(
+            onPressed: () => _showMonthPicker(context, ref),
+            icon: const Icon(Icons.calendar_month_outlined, size: 20),
+            label: Text(
+              label,
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xff111827),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
           const Spacer(),
           IconButton(
-            tooltip: '이전 월',
+            tooltip: '이전 달',
             onPressed: () => _moveMonth(ref, -1),
             icon: const Icon(Icons.chevron_left),
           ),
           IconButton(
-            tooltip: '다음 월',
+            tooltip: '다음 달',
             onPressed: () => _moveMonth(ref, 1),
             icon: const Icon(Icons.chevron_right),
           ),
           IconButton(
             tooltip: '오늘',
-            onPressed: () {
-              final now = DateTime.now();
-              ref.read(visibleMonthProvider.notifier).state = DateTime(
-                now.year,
-                now.month,
-              );
-              ref.read(selectedDateProvider.notifier).state = DateTime(
-                now.year,
-                now.month,
-                now.day,
-              );
-            },
+            onPressed: () => _goToday(ref),
             icon: const Icon(Icons.today_outlined),
           ),
           IconButton(
@@ -289,23 +310,168 @@ class _CalendarHeader extends ConsumerWidget {
     );
   }
 
-  void _moveMonth(WidgetRef ref, int delta) {
-    final nextMonth = DateTime(month.year, month.month + delta);
-    final lastDay = DateUtils.getDaysInMonth(nextMonth.year, nextMonth.month);
-    final selectedDay = selectedDate.day > lastDay ? lastDay : selectedDate.day;
+  Future<void> _showMonthPicker(BuildContext context, WidgetRef ref) async {
+    final picked = await showDialog<DateTime>(
+      context: context,
+      builder: (_) => _MonthPickerDialog(initialMonth: month),
+    );
+    if (picked == null) {
+      return;
+    }
+    _setVisibleMonth(ref, picked, selectedDate);
+  }
 
-    ref.read(visibleMonthProvider.notifier).state = nextMonth;
+  void _moveMonth(WidgetRef ref, int delta) {
+    _setVisibleMonth(
+      ref,
+      DateTime(month.year, month.month + delta),
+      selectedDate,
+    );
+  }
+
+  void _goToday(WidgetRef ref) {
+    final now = DateTime.now();
+    ref.read(visibleMonthProvider.notifier).state = DateTime(
+      now.year,
+      now.month,
+    );
     ref.read(selectedDateProvider.notifier).state = DateTime(
-      nextMonth.year,
-      nextMonth.month,
-      selectedDay,
+      now.year,
+      now.month,
+      now.day,
     );
   }
 }
 
-CalendarRange _monthRangeFor(DateTime month) {
+class _MonthPickerDialog extends StatefulWidget {
+  const _MonthPickerDialog({required this.initialMonth});
+
+  final DateTime initialMonth;
+
+  @override
+  State<_MonthPickerDialog> createState() => _MonthPickerDialogState();
+}
+
+class _MonthPickerDialogState extends State<_MonthPickerDialog> {
+  late int _year;
+  late int _month;
+
+  @override
+  void initState() {
+    super.initState();
+    _year = widget.initialMonth.year;
+    _month = widget.initialMonth.month;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('연월 선택'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  tooltip: '10년 전',
+                  onPressed: () => setState(() => _year -= 10),
+                  icon: const Icon(Icons.keyboard_double_arrow_left),
+                ),
+                IconButton(
+                  tooltip: '1년 전',
+                  onPressed: () => setState(() => _year -= 1),
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      '$_year년',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '1년 후',
+                  onPressed: () => setState(() => _year += 1),
+                  icon: const Icon(Icons.chevron_right),
+                ),
+                IconButton(
+                  tooltip: '10년 후',
+                  onPressed: () => setState(() => _year += 10),
+                  icon: const Icon(Icons.keyboard_double_arrow_right),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 1.8,
+              ),
+              itemCount: 12,
+              itemBuilder: (context, index) {
+                final value = index + 1;
+                final selected = value == _month;
+                return FilledButton.tonal(
+                  onPressed: () => setState(() => _month = value),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: selected
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : const Color(0xfff3f6fb),
+                    foregroundColor: selected
+                        ? Theme.of(context).colorScheme.onPrimaryContainer
+                        : const Color(0xff1f2937),
+                  ),
+                  child: Text('$value월'),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(DateTime(_year, _month)),
+          child: const Text('이동'),
+        ),
+      ],
+    );
+  }
+}
+
+void _setVisibleMonth(
+  WidgetRef ref,
+  DateTime nextMonth,
+  DateTime selectedDate,
+) {
+  final month = DateTime(nextMonth.year, nextMonth.month);
+  final lastDay = DateUtils.getDaysInMonth(month.year, month.month);
+  final selectedDay = selectedDate.day > lastDay ? lastDay : selectedDate.day;
+
+  ref.read(visibleMonthProvider.notifier).state = month;
+  ref.read(selectedDateProvider.notifier).state = DateTime(
+    month.year,
+    month.month,
+    selectedDay,
+  );
+}
+
+CalendarRange _monthRangeFor(DateTime month, bool weekStartsOnMonday) {
   final first = DateTime(month.year, month.month);
-  final gridStart = first.subtract(Duration(days: first.weekday - 1));
+  final leadingDays = weekStartsOnMonday
+      ? first.weekday - 1
+      : first.weekday % 7;
+  final gridStart = first.subtract(Duration(days: leadingDays));
   return CalendarRange(gridStart, gridStart.add(const Duration(days: 42)));
 }
 

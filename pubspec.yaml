@@ -50,6 +50,9 @@ dependencies:
   firebase_core: ^4.8.0
   firebase_auth: ^6.5.0
   cloud_firestore: ^6.4.0
+  google_sign_in: ^7.2.0
+  http: ^1.6.0
+  klc: ^0.1.0
 
 dev_dependencies:
   flutter_test:
@@ -63,6 +66,19 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.15.0
   drift_dev: ^2.33.0
+  msix: ^3.16.13
+
+msix_config:
+  display_name: Daily
+  publisher_display_name: littlebit0
+  identity_name: littlebit0.Daily
+  msix_version: 1.0.0.1
+  logo_path: ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png
+  capabilities: internetClient
+  output_path: dist
+  output_name: daily-windows-1.0.0+1
+  architecture: x64
+  install_certificate: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
