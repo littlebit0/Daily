@@ -116,10 +116,7 @@ class _DraftConfirmationSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final date = DateFormat('yyyy년 M월 d일').format(draft.startAt);
-    final time = draft.allDay
-        ? '종일'
-        : '${DateFormat('HH:mm').format(draft.startAt)} - ${DateFormat('HH:mm').format(draft.endAt)}';
+    final scheduleTime = _formatScheduleTime(draft);
     final reminder = draft.reminderMinutesBefore == null
         ? '없음'
         : '${draft.reminderMinutesBefore}분 전';
@@ -161,7 +158,7 @@ class _DraftConfirmationSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('$date  $time'),
+                  Text(scheduleTime),
                   Text('분류: ${draft.category.label}'),
                   Text('알림: $reminder'),
                 ],
@@ -189,5 +186,25 @@ class _DraftConfirmationSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatScheduleTime(EventDraft draft) {
+    final dateFormatter = DateFormat('yyyy년 M월 d일');
+    final timeFormatter = DateFormat('HH:mm');
+    if (draft.allDay) {
+      final inclusiveEnd = draft.endAt.subtract(const Duration(days: 1));
+      if (_sameDay(draft.startAt, inclusiveEnd)) {
+        return '${dateFormatter.format(draft.startAt)}  종일';
+      }
+      return '${dateFormatter.format(draft.startAt)} - ${dateFormatter.format(inclusiveEnd)}  종일';
+    }
+    if (_sameDay(draft.startAt, draft.endAt)) {
+      return '${dateFormatter.format(draft.startAt)}  ${timeFormatter.format(draft.startAt)} - ${timeFormatter.format(draft.endAt)}';
+    }
+    return '${dateFormatter.format(draft.startAt)} ${timeFormatter.format(draft.startAt)} - ${dateFormatter.format(draft.endAt)} ${timeFormatter.format(draft.endAt)}';
+  }
+
+  bool _sameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 }

@@ -104,6 +104,9 @@ class EventDetailsPanel extends ConsumerWidget {
               colorValue: draft.colorValue ?? draft.category.colorValue,
               reminderMinutesBefore: draft.reminderMinutesBefore,
               recurrence: draft.recurrence,
+              clearMemo: draft.memo == null,
+              clearLocation: draft.location == null,
+              clearReminder: draft.reminderMinutesBefore == null,
             ),
           );
     }
@@ -123,10 +126,7 @@ class _EventTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formatter = DateFormat('HH:mm');
-    final timeLabel = event.allDay
-        ? '종일'
-        : '${formatter.format(event.startAt)} 시작';
+    final timeLabel = _formatTimeLabel(event);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -182,5 +182,25 @@ class _EventTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatTimeLabel(CalendarEvent event) {
+    final dateFormatter = DateFormat('M월 d일');
+    final timeFormatter = DateFormat('HH:mm');
+    if (event.allDay) {
+      final inclusiveEnd = event.endAt.subtract(const Duration(days: 1));
+      if (_sameDay(event.startAt, inclusiveEnd)) {
+        return '종일';
+      }
+      return '${dateFormatter.format(event.startAt)} - ${dateFormatter.format(inclusiveEnd)} 종일';
+    }
+    if (_sameDay(event.startAt, event.endAt)) {
+      return '${timeFormatter.format(event.startAt)} - ${timeFormatter.format(event.endAt)}';
+    }
+    return '${dateFormatter.format(event.startAt)} ${timeFormatter.format(event.startAt)} - ${dateFormatter.format(event.endAt)} ${timeFormatter.format(event.endAt)}';
+  }
+
+  bool _sameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 }

@@ -6,6 +6,16 @@ import '../domain/schedule_parser.dart';
 
 class RuleBasedScheduleParser implements ScheduleParser {
   static final _monthDayPattern = RegExp(r'(\d{1,2})\s*월\s*(\d{1,2})\s*일');
+  static final _monthDayRangePattern = RegExp(
+    r'(\d{1,2})\s*월\s*(\d{1,2})\s*일?\s*(?:부터|에서|~|-)\s*(?:(\d{1,2})\s*월\s*)?(\d{1,2})\s*일?\s*(?:까지)?',
+  );
+  static final _relativeDateRangePattern = RegExp(
+    r'(오늘|내일|모레)\s*(?:부터|에서|~|-)\s*(오늘|내일|모레)\s*(?:까지)?',
+  );
+  static final _durationDaysPattern = RegExp(r'(\d{1,2})\s*일\s*(?:동안|간)');
+  static final _durationNightsPattern = RegExp(
+    r'(\d{1,2})\s*박\s*(\d{1,2})\s*일',
+  );
   static final _timePattern = RegExp(
     r'(오전|오후|아침|점심|저녁|밤)?\s*(\d{1,2})(?:\s*시|:)(?:\s*(\d{1,2})\s*분?)?',
   );
@@ -24,12 +34,17 @@ class RuleBasedScheduleParser implements ScheduleParser {
       return const EventParseResult(question: '등록할 일정 내용을 입력해 주세요.');
     }
 
-    final date = _parseDate(normalized, baseDate, selectedDate);
-    final parsedTime = _parseTime(normalized);
+    final dateRange = _parseDateRange(normalized, baseDate, selectedDate);
+    final date =
+        dateRange?.startDate ?? _parseDate(normalized, baseDate, selectedDate);
+    final parsedTimes = _parseTimes(normalized);
+    final parsedTime = parsedTimes.isEmpty ? null : parsedTimes[0];
+    final parsedEndTime = parsedTimes.length > 1 ? parsedTimes[1] : null;
     final reminder = _parseReminder(normalized) ?? defaultReminderMinutes;
     final recurrence = _parseRecurrence(normalized);
     final title = _cleanTitle(normalized);
     final category = EventCategory.classify(normalized);
+    final allDay = parsedTime == null && parsedEndTime == null;
 
     final startAt = parsedTime == null
         ? DateTime(date.year, date.month, date.day)
@@ -40,22 +55,106 @@ class RuleBasedScheduleParser implements ScheduleParser {
             parsedTime.hour,
             parsedTime.minute,
           );
-    final endAt = parsedTime == null
-        ? startAt.add(const Duration(days: 1))
-        : startAt.add(const Duration(hours: 1));
+    final endAt = _resolveEndAt(
+      startAt: startAt,
+      endDate: dateRange?.endDate,
+      endTime: parsedEndTime,
+      allDay: allDay,
+    );
 
     return EventParseResult(
       draft: EventDraft(
         title: title.isEmpty ? '새 일정' : title,
         startAt: startAt,
         endAt: endAt,
-        allDay: parsedTime == null,
+        allDay: allDay,
         category: category,
         colorValue: category.colorValue,
-        reminderMinutesBefore: parsedTime == null ? null : reminder,
+        reminderMinutesBefore: allDay ? null : reminder,
         recurrence: recurrence,
       ),
     );
+  }
+
+  _ParsedDateRange? _parseDateRange(
+    String input,
+    DateTime baseDate,
+    DateTime? selectedDate,
+  ) {
+    final today = DateTime(baseDate.year, baseDate.month, baseDate.day);
+
+    final monthDayRange = _monthDayRangePattern.firstMatch(input);
+    if (monthDayRange != null) {
+      final startMonth = int.parse(monthDayRange.group(1)!);
+      final startDay = int.parse(monthDayRange.group(2)!);
+      final endMonth = int.tryParse(monthDayRange.group(3) ?? '') ?? startMonth;
+      final endDay = int.parse(monthDayRange.group(4)!);
+      final startDate = _resolveMonthDay(startMonth, startDay, today);
+      var endDate = DateTime(startDate.year, endMonth, endDay);
+      if (endDate.isBefore(startDate)) {
+        endDate = DateTime(startDate.year + 1, endMonth, endDay);
+      }
+      return _ParsedDateRange(startDate, endDate);
+    }
+
+    final monthDays = _monthDayPattern.allMatches(input).toList();
+    if (monthDays.length >= 2 && _hasRangeConnector(input)) {
+      final startMatch = monthDays[0];
+      final endMatch = monthDays[1];
+      final startDate = _resolveMonthDay(
+        int.parse(startMatch.group(1)!),
+        int.parse(startMatch.group(2)!),
+        today,
+      );
+      var endDate = DateTime(
+        startDate.year,
+        int.parse(endMatch.group(1)!),
+        int.parse(endMatch.group(2)!),
+      );
+      if (endDate.isBefore(startDate)) {
+        endDate = DateTime(endDate.year + 1, endDate.month, endDate.day);
+      }
+      return _ParsedDateRange(startDate, endDate);
+    }
+
+    final relativeRange = _relativeDateRangePattern.firstMatch(input);
+    if (relativeRange != null) {
+      final startDate = _resolveRelativeDate(relativeRange.group(1)!, today);
+      var endDate = _resolveRelativeDate(relativeRange.group(2)!, today);
+      if (endDate.isBefore(startDate)) {
+        endDate = startDate;
+      }
+      return _ParsedDateRange(startDate, endDate);
+    }
+
+    final nights = _durationNightsPattern.firstMatch(input);
+    if (nights != null) {
+      final days = int.parse(nights.group(2)!);
+      final startDate = _parseDate(input, baseDate, selectedDate);
+      return _ParsedDateRange(
+        startDate,
+        startDate.add(Duration(days: (days - 1).clamp(0, 3650).toInt())),
+      );
+    }
+
+    final durationDays = _durationDaysPattern.firstMatch(input);
+    if (durationDays != null) {
+      final days = int.parse(durationDays.group(1)!);
+      final startDate = _parseDate(input, baseDate, selectedDate);
+      return _ParsedDateRange(
+        startDate,
+        startDate.add(Duration(days: (days - 1).clamp(0, 3650).toInt())),
+      );
+    }
+
+    return null;
+  }
+
+  bool _hasRangeConnector(String input) {
+    return input.contains('부터') ||
+        input.contains('까지') ||
+        input.contains('에서') ||
+        input.contains('~');
   }
 
   DateTime _parseDate(String input, DateTime baseDate, DateTime? selectedDate) {
@@ -74,12 +173,7 @@ class RuleBasedScheduleParser implements ScheduleParser {
     if (monthDay != null) {
       final month = int.parse(monthDay.group(1)!);
       final day = int.parse(monthDay.group(2)!);
-      var year = today.year;
-      final date = DateTime(year, month, day);
-      if (date.isBefore(today.subtract(const Duration(days: 1)))) {
-        year += 1;
-      }
-      return DateTime(year, month, day);
+      return _resolveMonthDay(month, day, today);
     }
 
     final weekday = _parseWeekday(input);
@@ -101,13 +195,39 @@ class RuleBasedScheduleParser implements ScheduleParser {
     return today;
   }
 
-  _ParsedTime? _parseTime(String input) {
-    final match = _timePattern.firstMatch(input);
-    if (match == null) {
-      return null;
+  DateTime _resolveMonthDay(int month, int day, DateTime today) {
+    var year = today.year;
+    var date = DateTime(year, month, day);
+    if (date.isBefore(today.subtract(const Duration(days: 1)))) {
+      year += 1;
+      date = DateTime(year, month, day);
     }
+    return date;
+  }
 
-    final marker = match.group(1);
+  DateTime _resolveRelativeDate(String value, DateTime today) {
+    return switch (value) {
+      '모레' => today.add(const Duration(days: 2)),
+      '내일' => today.add(const Duration(days: 1)),
+      _ => today,
+    };
+  }
+
+  List<_ParsedTime> _parseTimes(String input) {
+    final times = <_ParsedTime>[];
+    String? previousMarker;
+    for (final match in _timePattern.allMatches(input)) {
+      final parsed = _parseTimeMatch(match, previousMarker);
+      if (parsed != null) {
+        times.add(parsed);
+        previousMarker = match.group(1) ?? previousMarker;
+      }
+    }
+    return times;
+  }
+
+  _ParsedTime? _parseTimeMatch(RegExpMatch match, String? fallbackMarker) {
+    final marker = match.group(1) ?? fallbackMarker;
     var hour = int.parse(match.group(2)!);
     final minute = int.tryParse(match.group(3) ?? '') ?? 0;
 
@@ -125,6 +245,57 @@ class RuleBasedScheduleParser implements ScheduleParser {
       return null;
     }
     return _ParsedTime(hour, minute);
+  }
+
+  DateTime _resolveEndAt({
+    required DateTime startAt,
+    required DateTime? endDate,
+    required _ParsedTime? endTime,
+    required bool allDay,
+  }) {
+    if (endDate != null) {
+      if (allDay) {
+        return DateTime(
+          endDate.year,
+          endDate.month,
+          endDate.day,
+        ).add(const Duration(days: 1));
+      }
+      if (endTime != null) {
+        final endAt = DateTime(
+          endDate.year,
+          endDate.month,
+          endDate.day,
+          endTime.hour,
+          endTime.minute,
+        );
+        return endAt.isAfter(startAt)
+            ? endAt
+            : endAt.add(const Duration(days: 1));
+      }
+      return DateTime(
+        endDate.year,
+        endDate.month,
+        endDate.day,
+      ).add(const Duration(days: 1));
+    }
+
+    if (endTime != null) {
+      final endAt = DateTime(
+        startAt.year,
+        startAt.month,
+        startAt.day,
+        endTime.hour,
+        endTime.minute,
+      );
+      return endAt.isAfter(startAt)
+          ? endAt
+          : endAt.add(const Duration(days: 1));
+    }
+
+    return allDay
+        ? startAt.add(const Duration(days: 1))
+        : startAt.add(const Duration(hours: 1));
   }
 
   int? _parseReminder(String input) {
@@ -171,6 +342,10 @@ class RuleBasedScheduleParser implements ScheduleParser {
   String _cleanTitle(String input) {
     var value = input;
     final removalPatterns = [
+      _monthDayRangePattern,
+      _relativeDateRangePattern,
+      _durationNightsPattern,
+      _durationDaysPattern,
       _monthDayPattern,
       _timePattern,
       _hourReminderPattern,
@@ -178,6 +353,7 @@ class RuleBasedScheduleParser implements ScheduleParser {
       RegExp(r'오늘|내일|모레|이번 주|이번주|다음 주|다음주'),
       RegExp(r'월요일|화요일|수요일|목요일|금요일|토요일|일요일'),
       RegExp(r'매일|매주|매월|매년'),
+      RegExp(r'부터|까지|에서'),
       RegExp(r'알림|일정|등록|넣어줘|추가해줘|잡아줘|해줘'),
       RegExp(r'[,，]'),
     ];
@@ -193,4 +369,11 @@ class _ParsedTime {
 
   final int hour;
   final int minute;
+}
+
+class _ParsedDateRange {
+  const _ParsedDateRange(this.startDate, this.endDate);
+
+  final DateTime startDate;
+  final DateTime endDate;
 }

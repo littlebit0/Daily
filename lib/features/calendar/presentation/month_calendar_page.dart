@@ -17,84 +17,71 @@ class MonthCalendarPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final month = ref.watch(visibleMonthProvider);
     final selectedDate = ref.watch(selectedDateProvider);
-    final range = _monthRange(month);
-    final eventsAsync = ref.watch(eventsInRangeProvider(range));
+    final eventsAsync = ref.watch(eventsInRangeProvider(_monthRangeFor(month)));
     final wide = MediaQuery.sizeOf(context).width >= 880;
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            _CalendarHeader(month: month),
+            _CalendarHeader(month: month, selectedDate: selectedDate),
             Expanded(
-              child: eventsAsync.when(
-                data: (events) => wide
-                    ? Row(
-                        children: [
-                          Expanded(
-                            child: CalendarMonthGrid(
-                              month: month,
-                              selectedDate: selectedDate,
-                              events: events,
-                              onDateSelected: (date) {
-                                ref.read(selectedDateProvider.notifier).state =
-                                    date;
-                              },
+              child: wide
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: _MonthPageView(
+                            month: month,
+                            selectedDate: selectedDate,
+                            onMonthDelta: (delta) =>
+                                _moveMonth(ref, month, selectedDate, delta),
+                            onDateSelected: (date, events) {
+                              ref.read(selectedDateProvider.notifier).state =
+                                  date;
+                            },
+                          ),
+                        ),
+                        Container(
+                          width: 360,
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              left: BorderSide(color: Color(0xffd8dce3)),
                             ),
                           ),
-                          Container(
-                            width: 360,
-                            decoration: const BoxDecoration(
-                              border: Border(
-                                left: BorderSide(color: Color(0xffd8dce3)),
-                              ),
-                            ),
-                            child: EventDetailsPanel(
+                          child: eventsAsync.when(
+                            data: (events) => EventDetailsPanel(
                               date: selectedDate,
                               events: _eventsForDay(events, selectedDate),
                             ),
+                            error: (error, stackTrace) =>
+                                Center(child: Text('$error')),
+                            loading: () => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
                           ),
-                        ],
-                      )
-                    : CalendarMonthGrid(
-                        month: month,
-                        selectedDate: selectedDate,
-                        events: events,
-                        onDateSelected: (date) {
-                          ref.read(selectedDateProvider.notifier).state = date;
-                          _showDaySheet(
-                            context,
-                            date,
-                            _eventsForDay(events, date),
-                          );
-                        },
-                      ),
-                error: (error, stackTrace) => Center(child: Text('$error')),
-                loading: () => const Center(child: CircularProgressIndicator()),
-              ),
+                        ),
+                      ],
+                    )
+                  : _MonthPageView(
+                      month: month,
+                      selectedDate: selectedDate,
+                      onMonthDelta: (delta) =>
+                          _moveMonth(ref, month, selectedDate, delta),
+                      onDateSelected: (date, events) {
+                        ref.read(selectedDateProvider.notifier).state = date;
+                        _showDaySheet(
+                          context,
+                          date,
+                          _eventsForDay(events, date),
+                        );
+                      },
+                    ),
             ),
             const ChatInputBar(),
           ],
         ),
       ),
     );
-  }
-
-  CalendarRange _monthRange(DateTime month) {
-    final first = DateTime(month.year, month.month);
-    final gridStart = first.subtract(Duration(days: first.weekday - 1));
-    return CalendarRange(gridStart, gridStart.add(const Duration(days: 42)));
-  }
-
-  List<CalendarEvent> _eventsForDay(List<CalendarEvent> events, DateTime date) {
-    final start = DateTime(date.year, date.month, date.day);
-    final end = start.add(const Duration(days: 1));
-    return events
-        .where(
-          (event) => event.startAt.isBefore(end) && event.endAt.isAfter(start),
-        )
-        .toList()
-      ..sort((a, b) => a.startAt.compareTo(b.startAt));
   }
 
   void _showDaySheet(
@@ -111,12 +98,142 @@ class MonthCalendarPage extends ConsumerWidget {
       ),
     );
   }
+
+  void _moveMonth(
+    WidgetRef ref,
+    DateTime currentMonth,
+    DateTime selectedDate,
+    int delta,
+  ) {
+    final nextMonth = DateTime(currentMonth.year, currentMonth.month + delta);
+    final lastDay = DateUtils.getDaysInMonth(nextMonth.year, nextMonth.month);
+    final selectedDay = selectedDate.day > lastDay ? lastDay : selectedDate.day;
+
+    ref.read(visibleMonthProvider.notifier).state = nextMonth;
+    ref.read(selectedDateProvider.notifier).state = DateTime(
+      nextMonth.year,
+      nextMonth.month,
+      selectedDay,
+    );
+  }
+}
+
+class _MonthPageView extends StatefulWidget {
+  const _MonthPageView({
+    required this.month,
+    required this.selectedDate,
+    required this.onMonthDelta,
+    required this.onDateSelected,
+  });
+
+  final DateTime month;
+  final DateTime selectedDate;
+  final ValueChanged<int> onMonthDelta;
+  final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
+
+  @override
+  State<_MonthPageView> createState() => _MonthPageViewState();
+}
+
+class _MonthPageViewState extends State<_MonthPageView> {
+  late final PageController _controller;
+  var _resettingPage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController(initialPage: 1);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MonthPageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_sameMonth(oldWidget.month, widget.month) || !_controller.hasClients) {
+      return;
+    }
+    _resettingPage = true;
+    _controller.jumpToPage(1);
+    _resettingPage = false;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      controller: _controller,
+      itemCount: 3,
+      onPageChanged: (index) {
+        if (_resettingPage || index == 1) {
+          return;
+        }
+        widget.onMonthDelta(index - 1);
+      },
+      itemBuilder: (context, index) {
+        final pageMonth = DateTime(
+          widget.month.year,
+          widget.month.month + index - 1,
+        );
+        return _CalendarMonthPage(
+          month: pageMonth,
+          selectedDate: widget.selectedDate,
+          onDateSelected: widget.onDateSelected,
+        );
+      },
+    );
+  }
+
+  bool _sameMonth(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month;
+  }
+}
+
+class _CalendarMonthPage extends ConsumerWidget {
+  const _CalendarMonthPage({
+    required this.month,
+    required this.selectedDate,
+    required this.onDateSelected,
+  });
+
+  final DateTime month;
+  final DateTime selectedDate;
+  final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventsAsync = ref.watch(eventsInRangeProvider(_monthRangeFor(month)));
+
+    return eventsAsync.when(
+      data: (events) => CalendarMonthGrid(
+        month: month,
+        selectedDate: selectedDate,
+        events: events,
+        onDateSelected: (date) {
+          onDateSelected(date, _eventsForDay(events, date));
+        },
+      ),
+      error: (error, stackTrace) => Center(child: Text('$error')),
+      loading: () => CalendarMonthGrid(
+        month: month,
+        selectedDate: selectedDate,
+        events: const [],
+        onDateSelected: (date) {
+          onDateSelected(date, const <CalendarEvent>[]);
+        },
+      ),
+    );
+  }
 }
 
 class _CalendarHeader extends ConsumerWidget {
-  const _CalendarHeader({required this.month});
+  const _CalendarHeader({required this.month, required this.selectedDate});
 
   final DateTime month;
+  final DateTime selectedDate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -128,12 +245,12 @@ class _CalendarHeader extends ConsumerWidget {
           Text(label, style: Theme.of(context).textTheme.headlineMedium),
           const Spacer(),
           IconButton(
-            tooltip: '이전 달',
+            tooltip: '이전 월',
             onPressed: () => _moveMonth(ref, -1),
             icon: const Icon(Icons.chevron_left),
           ),
           IconButton(
-            tooltip: '다음 달',
+            tooltip: '다음 월',
             onPressed: () => _moveMonth(ref, 1),
             icon: const Icon(Icons.chevron_right),
           ),
@@ -173,9 +290,32 @@ class _CalendarHeader extends ConsumerWidget {
   }
 
   void _moveMonth(WidgetRef ref, int delta) {
-    ref.read(visibleMonthProvider.notifier).state = DateTime(
-      month.year,
-      month.month + delta,
+    final nextMonth = DateTime(month.year, month.month + delta);
+    final lastDay = DateUtils.getDaysInMonth(nextMonth.year, nextMonth.month);
+    final selectedDay = selectedDate.day > lastDay ? lastDay : selectedDate.day;
+
+    ref.read(visibleMonthProvider.notifier).state = nextMonth;
+    ref.read(selectedDateProvider.notifier).state = DateTime(
+      nextMonth.year,
+      nextMonth.month,
+      selectedDay,
     );
   }
+}
+
+CalendarRange _monthRangeFor(DateTime month) {
+  final first = DateTime(month.year, month.month);
+  final gridStart = first.subtract(Duration(days: first.weekday - 1));
+  return CalendarRange(gridStart, gridStart.add(const Duration(days: 42)));
+}
+
+List<CalendarEvent> _eventsForDay(List<CalendarEvent> events, DateTime date) {
+  final start = DateTime(date.year, date.month, date.day);
+  final end = start.add(const Duration(days: 1));
+  return events
+      .where(
+        (event) => event.startAt.isBefore(end) && event.endAt.isAfter(start),
+      )
+      .toList()
+    ..sort((a, b) => a.startAt.compareTo(b.startAt));
 }

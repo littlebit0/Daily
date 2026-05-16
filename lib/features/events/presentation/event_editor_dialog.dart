@@ -20,8 +20,10 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _memoController;
   late final TextEditingController _locationController;
-  late DateTime _date;
-  late TimeOfDay _time;
+  late DateTime _startDate;
+  late DateTime _endDate;
+  late TimeOfDay _startTime;
+  late TimeOfDay _endTime;
   late bool _allDay;
   late EventCategory _category;
   late int? _reminder;
@@ -35,8 +37,22 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     _memoController = TextEditingController(text: event?.memo ?? '');
     _locationController = TextEditingController(text: event?.location ?? '');
     final sourceDate = event?.startAt ?? widget.initialDate;
-    _date = DateTime(sourceDate.year, sourceDate.month, sourceDate.day);
-    _time = TimeOfDay.fromDateTime(
+    _startDate = DateTime(sourceDate.year, sourceDate.month, sourceDate.day);
+    final sourceEnd = event == null
+        ? DateTime(
+            widget.initialDate.year,
+            widget.initialDate.month,
+            widget.initialDate.day,
+            10,
+          )
+        : event.allDay
+        ? event.endAt.subtract(const Duration(days: 1))
+        : event.endAt;
+    _endDate = DateTime(sourceEnd.year, sourceEnd.month, sourceEnd.day);
+    if (_endDate.isBefore(_startDate)) {
+      _endDate = _startDate;
+    }
+    _startTime = TimeOfDay.fromDateTime(
       event?.startAt ??
           DateTime(
             widget.initialDate.year,
@@ -45,6 +61,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
             9,
           ),
     );
+    _endTime = TimeOfDay.fromDateTime(sourceEnd);
     _allDay = event?.allDay ?? false;
     _category = event?.category ?? EventCategory.other;
     _reminder = event?.reminderMinutesBefore ?? 60;
@@ -61,8 +78,10 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final dateLabel = DateFormat('yyyy년 M월 d일').format(_date);
-    final timeLabel = _time.format(context);
+    final startDateLabel = DateFormat('yyyy년 M월 d일').format(_startDate);
+    final endDateLabel = DateFormat('yyyy년 M월 d일').format(_endDate);
+    final startTimeLabel = _startTime.format(context);
+    final endTimeLabel = _endTime.format(context);
 
     return AlertDialog(
       title: Text(widget.event == null ? '일정 추가' : '일정 수정'),
@@ -81,22 +100,48 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickDate,
-                      icon: const Icon(Icons.calendar_today_outlined),
-                      label: Text(dateLabel),
+                    child: _LabeledPickerButton(
+                      label: '시작일',
+                      icon: Icons.calendar_today_outlined,
+                      value: startDateLabel,
+                      onPressed: _pickStartDate,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _allDay ? null : _pickTime,
-                      icon: const Icon(Icons.schedule),
-                      label: Text(_allDay ? '종일' : timeLabel),
+                    child: _LabeledPickerButton(
+                      label: '종료일',
+                      icon: Icons.event_available_outlined,
+                      value: endDateLabel,
+                      onPressed: _pickEndDate,
                     ),
                   ),
                 ],
               ),
+              if (!_allDay) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _LabeledPickerButton(
+                        label: '시작 시간',
+                        icon: Icons.schedule,
+                        value: startTimeLabel,
+                        onPressed: _pickStartTime,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _LabeledPickerButton(
+                        label: '종료 시간',
+                        icon: Icons.schedule,
+                        value: endTimeLabel,
+                        onPressed: _pickEndTime,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 8),
               SwitchListTile(
                 value: _allDay,
@@ -192,22 +237,54 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     );
   }
 
-  Future<void> _pickDate() async {
+  Future<void> _pickStartDate() async {
     final picked = await showDatePicker(
       context: context,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
-      initialDate: _date,
+      initialDate: _startDate,
     );
     if (picked != null) {
-      setState(() => _date = DateTime(picked.year, picked.month, picked.day));
+      setState(() {
+        _startDate = DateTime(picked.year, picked.month, picked.day);
+        if (_endDate.isBefore(_startDate)) {
+          _endDate = _startDate;
+        }
+      });
     }
   }
 
-  Future<void> _pickTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _time);
+  Future<void> _pickEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDate: _endDate.isBefore(_startDate) ? _startDate : _endDate,
+    );
     if (picked != null) {
-      setState(() => _time = picked);
+      setState(
+        () => _endDate = DateTime(picked.year, picked.month, picked.day),
+      );
+    }
+  }
+
+  Future<void> _pickStartTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _startTime,
+    );
+    if (picked != null) {
+      setState(() => _startTime = picked);
+    }
+  }
+
+  Future<void> _pickEndTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _endTime,
+    );
+    if (picked != null) {
+      setState(() => _endTime = picked);
     }
   }
 
@@ -216,15 +293,36 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     if (title.isEmpty) {
       return;
     }
+    if (_endDate.isBefore(_startDate)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('종료일은 시작일 이후여야 합니다.')));
+      return;
+    }
     final startAt = _allDay
-        ? _date
+        ? _startDate
         : DateTime(
-            _date.year,
-            _date.month,
-            _date.day,
-            _time.hour,
-            _time.minute,
+            _startDate.year,
+            _startDate.month,
+            _startDate.day,
+            _startTime.hour,
+            _startTime.minute,
           );
+    final endAt = _allDay
+        ? _endDate.add(const Duration(days: 1))
+        : DateTime(
+            _endDate.year,
+            _endDate.month,
+            _endDate.day,
+            _endTime.hour,
+            _endTime.minute,
+          );
+    if (!endAt.isAfter(startAt)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('종료 시간은 시작 이후여야 합니다.')));
+      return;
+    }
     final draft = EventDraft(
       title: title,
       memo: _memoController.text.trim().isEmpty
@@ -234,9 +332,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
           ? null
           : _locationController.text.trim(),
       startAt: startAt,
-      endAt: _allDay
-          ? startAt.add(const Duration(days: 1))
-          : startAt.add(const Duration(hours: 1)),
+      endAt: endAt,
       allDay: _allDay,
       category: _category,
       colorValue: _category.colorValue,
@@ -244,5 +340,38 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
       recurrence: RecurrenceRule(frequency: _frequency),
     );
     Navigator.of(context).pop(draft);
+  }
+}
+
+class _LabeledPickerButton extends StatelessWidget {
+  const _LabeledPickerButton({
+    required this.label,
+    required this.icon,
+    required this.value,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final String value;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: onPressed,
+            icon: Icon(icon, size: 18),
+            label: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+    );
   }
 }
