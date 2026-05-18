@@ -2,6 +2,7 @@ import 'package:daily/app/daily_app.dart';
 import 'package:daily/core/di/app_providers.dart';
 import 'package:daily/core/notifications/notification_service.dart';
 import 'package:daily/core/settings/settings_repository.dart';
+import 'package:daily/core/sync/google_drive_auth_service.dart';
 import 'package:daily/core/sync/sync_service.dart';
 import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_repository.dart';
@@ -23,10 +24,14 @@ void main() {
           notificationServiceProvider.overrideWithValue(_FakeNotification()),
           syncServiceProvider.overrideWithValue(_FakeSync()),
           eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(),
+          ),
         ],
         child: const DailyApp(),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.byType(PageView), findsOneWidget);
     expect(find.text('일정을 입력하세요'), findsOneWidget);
@@ -48,6 +53,9 @@ void main() {
           notificationServiceProvider.overrideWithValue(_FakeNotification()),
           syncServiceProvider.overrideWithValue(_FakeSync()),
           eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(),
+          ),
         ],
         child: const DailyApp(),
       ),
@@ -69,6 +77,22 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+}
+
+class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
+  @override
+  GoogleDriveAccount? get currentAccount =>
+      const GoogleDriveAccount(email: 'tester@example.com');
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<Map<String, String>?> authorizationHeaders({
+    bool promptIfNecessary = false,
+  }) async {
+    return const {'Authorization': 'Bearer test-token'};
+  }
 }
 
 class _FakeNotification implements NotificationService {

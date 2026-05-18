@@ -13,7 +13,6 @@ class WelcomePage extends ConsumerStatefulWidget {
 class _WelcomePageState extends ConsumerState<WelcomePage> {
   var _busy = false;
   var _message = '';
-  String? _email;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +43,8 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Google Drive 동기화를 연결하면 백업을 복원하고 이후 변경 사항을 자동으로 저장합니다.',
+                    'Daily는 Google 계정으로 로그인해야 사용할 수 있습니다. '
+                    '로그인하면 계정 백업을 복원하고 이후 변경 사항을 자동으로 동기화합니다.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: const Color(0xff5f6875),
@@ -60,7 +60,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.login),
-                    label: Text(_email == null ? 'Google로 로그인' : _email!),
+                    label: const Text('Google로 로그인'),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
@@ -76,16 +76,6 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                       style: Theme.of(context).textTheme.labelMedium,
                     ),
                   ],
-                  const SizedBox(height: 24),
-                  FilledButton(
-                    onPressed: _busy ? null : _finish,
-                    child: const Text('시작하기'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: _busy ? null : _finish,
-                    child: const Text('나중에 하기'),
-                  ),
                 ],
               ),
             ),
@@ -108,19 +98,19 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
         }
         return;
       }
+
+      setState(() => _message = '계정 백업을 확인하는 중입니다.');
       await ref
           .read(googleDriveSyncServiceProvider)
           .syncNow(promptIfNecessary: true);
+
+      final restoredSettings = ref.read(settingsRepositoryProvider).load();
+      final updated = restoredSettings.copyWith(onboardingCompleted: true);
+      await ref.read(settingsRepositoryProvider).save(updated);
       if (!mounted) {
         return;
       }
-      ref.read(appSettingsProvider.notifier).state = ref
-          .read(settingsRepositoryProvider)
-          .load();
-      setState(() {
-        _email = account.email;
-        _message = 'Google Drive 동기화가 준비되었습니다.';
-      });
+      ref.read(appSettingsProvider.notifier).state = updated;
     } on UnsupportedError catch (error) {
       if (mounted) {
         setState(() => _message = error.message ?? '$error');
@@ -155,12 +145,5 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
         setState(() => _busy = false);
       }
     }
-  }
-
-  Future<void> _finish() async {
-    final settings = ref.read(appSettingsProvider);
-    final updated = settings.copyWith(onboardingCompleted: true);
-    await ref.read(settingsRepositoryProvider).save(updated);
-    ref.read(appSettingsProvider.notifier).state = updated;
   }
 }

@@ -295,7 +295,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
           _SettingsSection(
-            title: '동기화',
+            title: '계정',
             children: [
               _GoogleDriveSyncSettings(
                 email: _driveEmail,
@@ -387,7 +387,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           .load();
       setState(() {
         _driveEmail = account?.email;
-        _syncMessage = 'Google Drive 동기화가 연결되었습니다.';
+        _syncMessage = 'Google 계정 로그인이 완료되었습니다.';
       });
     } on Object catch (error) {
       if (mounted) {
@@ -413,7 +413,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ref.read(appSettingsProvider.notifier).state = ref
             .read(settingsRepositoryProvider)
             .load();
-        setState(() => _syncMessage = 'Google Drive 동기화 완료');
+        setState(() => _syncMessage = '계정 동기화 완료');
       }
     } on Object catch (error) {
       if (mounted) {
@@ -458,7 +458,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       builder: (context) => AlertDialog(
         title: const Text('회원탈퇴'),
         content: const Text(
-          'Google Drive 백업과 이 기기의 모든 일정, 설정을 삭제하고 처음 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.',
+          '계정 백업과 이 기기의 모든 일정, 설정을 삭제하고 로그인 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.',
         ),
         actions: [
           TextButton(
@@ -778,12 +778,12 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.cloud_sync_outlined),
-          title: Text(connected ? email! : 'Google Drive 연결 없음'),
+          leading: const Icon(Icons.account_circle_outlined),
+          title: Text(connected ? email! : 'Google 계정 로그인 필요'),
           subtitle: Text(
             connected
-                ? '개인 Google Drive AppData 공간으로 자동 동기화합니다.'
-                : '연결하면 로그인 직후 자동 복원과 변경 후 자동 백업을 사용할 수 있습니다.',
+                ? '이 Google 계정으로 모든 기기의 일정을 자동 백업하고 복원합니다.'
+                : 'Google 계정으로 로그인해야 Daily를 사용할 수 있습니다.',
           ),
         ),
         Row(
@@ -798,7 +798,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Icon(connected ? Icons.sync : Icons.login),
-                label: Text(connected ? '지금 동기화' : 'Google Drive 연결'),
+                label: Text(connected ? '지금 동기화' : 'Google로 로그인'),
               ),
             ),
             if (connected) ...[

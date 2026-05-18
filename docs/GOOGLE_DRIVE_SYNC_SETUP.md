@@ -29,6 +29,17 @@ until OAuth clients and scopes are configured.
 .\tool\flutter.ps1 run --dart-define=GOOGLE_SIGN_IN_SERVER_CLIENT_ID="<web-client-id>"
 ```
 
+- Windows Google Drive sync uses a desktop OAuth browser flow with PKCE and a
+  local loopback callback. It can receive a Desktop app OAuth client ID through
+  either an environment variable or a build define:
+
+```powershell
+$env:GOOGLE_DESKTOP_CLIENT_ID = "<desktop-client-id>"
+.\tool\flutter.ps1 run -d windows
+
+.\tool\flutter.ps1 build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>"
+```
+
 ## Stage 2: Google Cloud/Firebase setup status
 
 Project currently used by the app:
@@ -49,8 +60,9 @@ Still required before public release:
 
 1. Confirm OAuth consent screen public-facing text, privacy policy, and support
    email.
-2. Publish the OAuth app to production when the app is ready for external users.
-3. Re-test Google Drive sign-in/sync from a fresh Google account.
+2. Create an OAuth client with application type `Desktop app` for Windows.
+3. Publish the OAuth app to production when the app is ready for external users.
+4. Re-test Google Drive sign-in/sync from a fresh Google account.
 
 Android debug signing certificate:
 
@@ -75,11 +87,11 @@ scope for an app's own configuration data:
 ## Stage 3: Platform rollout
 
 1. Android: first runtime target. The current app code is wired for this.
-2. iOS/iPadOS/macOS: add OAuth clients and platform files, then test the same
+2. Windows: the app now uses desktop OAuth instead of the unsupported native
+   Google Sign-In plugin path. A Desktop app OAuth client ID must be supplied
+   through `GOOGLE_DESKTOP_CLIENT_ID`.
+3. iOS/iPadOS/macOS: add OAuth clients and platform files, then test the same
    Drive AppData sync flow.
-3. Windows: the app builds and the sync UI degrades gracefully when native
-   Google Sign-In is unavailable. If Windows sync is required for public users,
-   add a desktop OAuth browser flow with a local redirect.
 
 ## Stage 4: Hardening before public release
 

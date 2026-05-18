@@ -330,7 +330,7 @@ class GoogleDriveSyncService implements SyncService {
       return;
     }
     throw GoogleDriveSyncException(
-      'Google Drive sync failed: HTTP ${response.statusCode} ${response.body}',
+      'Google 계정 동기화 실패: HTTP ${response.statusCode} ${response.body}',
     );
   }
 
