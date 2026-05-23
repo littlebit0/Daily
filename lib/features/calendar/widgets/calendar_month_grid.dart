@@ -1,12 +1,14 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/calendar/korean_lunar_calendar.dart';
 import '../../events/domain/calendar_event.dart';
 
-class CalendarMonthGrid extends StatelessWidget {
+class CalendarMonthGrid extends StatefulWidget {
   const CalendarMonthGrid({
     super.key,
     required this.month,
@@ -15,6 +17,7 @@ class CalendarMonthGrid extends StatelessWidget {
     required this.weekStartsOnMonday,
     required this.showLunarDates,
     required this.onDateSelected,
+    this.onDateRangeSelected,
   });
 
   final DateTime month;
@@ -23,17 +26,28 @@ class CalendarMonthGrid extends StatelessWidget {
   final bool weekStartsOnMonday;
   final bool showLunarDates;
   final ValueChanged<DateTime> onDateSelected;
+  final Future<void> Function(DateTime start, DateTime end)?
+  onDateRangeSelected;
+
+  @override
+  State<CalendarMonthGrid> createState() => _CalendarMonthGridState();
+}
+
+class _CalendarMonthGridState extends State<CalendarMonthGrid> {
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
+  bool _mouseRangeActive = false;
 
   @override
   Widget build(BuildContext context) {
-    final days = _visibleDays(month, weekStartsOnMonday);
+    final days = _visibleDays(widget.month, widget.weekStartsOnMonday);
     final weeks = List.generate(
       6,
       (weekIndex) => days.skip(weekIndex * 7).take(7).toList(),
     );
     final compact = MediaQuery.sizeOf(context).width < 720;
     final maxFlags = compact ? 3 : 8;
-    final holidayDays = _holidayDays(events);
+    final holidayDays = _holidayDays(widget.events);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
@@ -53,27 +67,88 @@ class CalendarMonthGrid extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
           child: Column(
             children: [
-              _WeekdayHeader(weekStartsOnMonday: weekStartsOnMonday),
+              _WeekdayHeader(weekStartsOnMonday: widget.weekStartsOnMonday),
               Expanded(
-                child: Column(
-                  children: [
-                    for (final week in weeks)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: _WeekRow(
-                            month: month,
-                            selectedDate: selectedDate,
-                            weekDays: week,
-                            events: events,
-                            maxFlags: maxFlags,
-                            holidayDays: holidayDays,
-                            showLunarDates: showLunarDates,
-                            onDateSelected: onDateSelected,
-                          ),
-                        ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => Listener(
+                    onPointerDown: (event) {
+                      if (event.kind != PointerDeviceKind.mouse ||
+                          event.buttons != kPrimaryMouseButton) {
+                        return;
+                      }
+                      _mouseRangeActive = true;
+                      _startRangeSelection(
+                        event.localPosition,
+                        days,
+                        constraints,
+                      );
+                    },
+                    onPointerMove: (event) {
+                      if (!_mouseRangeActive) {
+                        return;
+                      }
+                      if ((event.buttons & kPrimaryMouseButton) == 0) {
+                        _mouseRangeActive = false;
+                        _finishRangeSelection();
+                        return;
+                      }
+                      _updateRangeSelection(
+                        event.localPosition,
+                        days,
+                        constraints,
+                      );
+                    },
+                    onPointerUp: (event) {
+                      if (!_mouseRangeActive) {
+                        return;
+                      }
+                      _mouseRangeActive = false;
+                      _finishRangeSelection();
+                    },
+                    onPointerCancel: (_) {
+                      _mouseRangeActive = false;
+                      _clearRangeSelection();
+                    },
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onLongPressStart: (details) => _startRangeSelection(
+                        details.localPosition,
+                        days,
+                        constraints,
                       ),
-                  ],
+                      onLongPressMoveUpdate: (details) => _updateRangeSelection(
+                        details.localPosition,
+                        days,
+                        constraints,
+                      ),
+                      onLongPressEnd: (_) => _finishRangeSelection(),
+                      onLongPressCancel: _clearRangeSelection,
+                      child: Column(
+                        children: [
+                          for (final week in weeks)
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: _WeekRow(
+                                  month: widget.month,
+                                  selectedDate: widget.selectedDate,
+                                  selectedRangeStart: _rangeStart,
+                                  selectedRangeEnd: _rangeEnd,
+                                  weekDays: week,
+                                  events: widget.events,
+                                  maxFlags: maxFlags,
+                                  holidayDays: holidayDays,
+                                  showLunarDates: widget.showLunarDates,
+                                  onDateSelected: widget.onDateSelected,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -81,6 +156,77 @@ class CalendarMonthGrid extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _startRangeSelection(
+    Offset position,
+    List<DateTime> days,
+    BoxConstraints constraints,
+  ) {
+    final day = _dayAtPosition(position, days, constraints);
+    if (day == null) {
+      return;
+    }
+    setState(() {
+      _rangeStart = day;
+      _rangeEnd = day;
+    });
+  }
+
+  void _updateRangeSelection(
+    Offset position,
+    List<DateTime> days,
+    BoxConstraints constraints,
+  ) {
+    if (_rangeStart == null) {
+      return;
+    }
+    final day = _dayAtPosition(position, days, constraints);
+    if (day == null || _sameDay(day, _rangeEnd)) {
+      return;
+    }
+    setState(() => _rangeEnd = day);
+  }
+
+  void _finishRangeSelection() {
+    final start = _rangeStart;
+    final end = _rangeEnd;
+    _clearRangeSelection();
+    if (start == null || end == null) {
+      return;
+    }
+    final normalizedStart = _isAfter(start, end) ? end : start;
+    final normalizedEnd = _isAfter(start, end) ? start : end;
+    if (_sameDay(normalizedStart, normalizedEnd)) {
+      return;
+    }
+    final callback = widget.onDateRangeSelected;
+    if (callback != null) {
+      unawaited(callback(normalizedStart, normalizedEnd));
+    }
+  }
+
+  void _clearRangeSelection() {
+    if (_rangeStart == null && _rangeEnd == null) {
+      return;
+    }
+    setState(() {
+      _rangeStart = null;
+      _rangeEnd = null;
+    });
+  }
+
+  DateTime? _dayAtPosition(
+    Offset position,
+    List<DateTime> days,
+    BoxConstraints constraints,
+  ) {
+    if (constraints.maxWidth <= 0 || constraints.maxHeight <= 0) {
+      return null;
+    }
+    final col = (position.dx / (constraints.maxWidth / 7)).floor().clamp(0, 6);
+    final row = (position.dy / (constraints.maxHeight / 6)).floor().clamp(0, 5);
+    return days[row * 7 + col];
   }
 
   List<DateTime> _visibleDays(DateTime month, bool weekStartsOnMonday) {
@@ -111,6 +257,21 @@ class CalendarMonthGrid extends StatelessWidget {
       }
     }
     return days;
+  }
+
+  bool _isAfter(DateTime a, DateTime b) {
+    return DateTime(
+      a.year,
+      a.month,
+      a.day,
+    ).isAfter(DateTime(b.year, b.month, b.day));
+  }
+
+  bool _sameDay(DateTime a, DateTime? b) {
+    return b != null &&
+        a.year == b.year &&
+        a.month == b.month &&
+        a.day == b.day;
   }
 }
 
@@ -161,6 +322,8 @@ class _WeekRow extends StatelessWidget {
   const _WeekRow({
     required this.month,
     required this.selectedDate,
+    required this.selectedRangeStart,
+    required this.selectedRangeEnd,
     required this.weekDays,
     required this.events,
     required this.maxFlags,
@@ -171,6 +334,8 @@ class _WeekRow extends StatelessWidget {
 
   final DateTime month;
   final DateTime selectedDate;
+  final DateTime? selectedRangeStart;
+  final DateTime? selectedRangeEnd;
   final List<DateTime> weekDays;
   final List<CalendarEvent> events;
   final int maxFlags;
@@ -216,6 +381,7 @@ class _WeekRow extends StatelessWidget {
                         day: day,
                         inMonth: day.month == month.month,
                         selected: _sameDay(day, selectedDate),
+                        rangeSelected: _inSelectedRange(day),
                         today: _sameDay(day, DateTime.now()),
                         holiday: holidayDays.contains(_dayStart(day)),
                         showLunarDate: showLunarDates,
@@ -338,6 +504,19 @@ class _WeekRow extends StatelessWidget {
   DateTime _dayStart(DateTime value) {
     return DateTime(value.year, value.month, value.day);
   }
+
+  bool _inSelectedRange(DateTime day) {
+    final start = selectedRangeStart;
+    final end = selectedRangeEnd;
+    if (start == null || end == null) {
+      return false;
+    }
+    final dayStart = _dayStart(day);
+    final normalizedStart = _dayStart(start.isAfter(end) ? end : start);
+    final normalizedEnd = _dayStart(start.isAfter(end) ? start : end);
+    return !dayStart.isBefore(normalizedStart) &&
+        !dayStart.isAfter(normalizedEnd);
+  }
 }
 
 class _DayCellBackground extends StatelessWidget {
@@ -345,6 +524,7 @@ class _DayCellBackground extends StatelessWidget {
     required this.day,
     required this.inMonth,
     required this.selected,
+    required this.rangeSelected,
     required this.today,
     required this.holiday,
     required this.showLunarDate,
@@ -354,6 +534,7 @@ class _DayCellBackground extends StatelessWidget {
   final DateTime day;
   final bool inMonth;
   final bool selected;
+  final bool rangeSelected;
   final bool today;
   final bool holiday;
   final bool showLunarDate;
@@ -365,6 +546,8 @@ class _DayCellBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final fill = selected
         ? const Color(0xffedf4ff)
+        : rangeSelected
+        ? const Color(0xffe8f2ff)
         : holiday && inMonth
         ? const Color(0xfffff4f4)
         : Colors.transparent;
@@ -385,6 +568,8 @@ class _DayCellBackground extends StatelessWidget {
                     context,
                   ).colorScheme.primary.withValues(alpha: 0.30),
                 )
+              : rangeSelected
+              ? Border.all(color: const Color(0xff93c5fd))
               : null,
         ),
         alignment: Alignment.topLeft,

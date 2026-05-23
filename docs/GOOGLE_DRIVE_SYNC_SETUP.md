@@ -35,32 +35,41 @@ until OAuth clients and scopes are configured.
 
 ```powershell
 $env:GOOGLE_DESKTOP_CLIENT_ID = "<desktop-client-id>"
+$env:GOOGLE_DESKTOP_CLIENT_SECRET = "<desktop-client-secret>"
 .\tool\flutter.ps1 run -d windows
 
-.\tool\flutter.ps1 build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>"
+.\tool\flutter.ps1 build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="<desktop-client-secret>"
 ```
 
 ## Stage 2: Google Cloud/Firebase setup status
 
-Project currently used by the app:
+OAuth clients currently used by the app:
 
-- Firebase/Google Cloud project: `daily-littlebit0`
-- Android package name: `com.littlebit0.daily`
+- Google Cloud project number: `234127810480`
+- Android package name: `com.littlebit0.dailycalendar`
 - OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
+- Android OAuth client:
+  `234127810480-otvrdan5a1q6gbqejulbp4e7tueebr4n.apps.googleusercontent.com`
+- Web OAuth client for Android sign-in:
+  `234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com`
+- Windows Desktop OAuth client:
+  `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
 
-Completed on 2026-05-16:
+Completed before the Android package rename:
 
 - Google Drive API enabled for `daily-littlebit0`.
-- Android debug SHA-1 and SHA-256 registered in Firebase.
-- Android upload/release SHA-1 and SHA-256 registered in Firebase.
-- `android/app/google-services.json` refreshed.
-- The refreshed config contains Android OAuth clients and a Web OAuth client.
+- Android debug and upload/release SHA values were registered for the previous
+  package name.
+- The checked-in `android/app/google-services.json` still belongs to the
+  previous Android package and should be replaced after creating a Firebase app
+  for `com.littlebit0.dailycalendar`.
 
 Still required before public release:
 
 1. Confirm OAuth consent screen public-facing text, privacy policy, and support
    email.
-2. Create an OAuth client with application type `Desktop app` for Windows.
+2. After the first AAB upload, add another Android OAuth client using the Play
+   Console app signing certificate SHA-1 from App integrity.
 3. Publish the OAuth app to production when the app is ready for external users.
 4. Re-test Google Drive sign-in/sync from a fresh Google account.
 
@@ -89,7 +98,9 @@ scope for an app's own configuration data:
 1. Android: first runtime target. The current app code is wired for this.
 2. Windows: the app now uses desktop OAuth instead of the unsupported native
    Google Sign-In plugin path. A Desktop app OAuth client ID must be supplied
-   through `GOOGLE_DESKTOP_CLIENT_ID`.
+   through `GOOGLE_DESKTOP_CLIENT_ID`. Some Google Desktop OAuth clients also
+   require the generated client secret during token exchange; provide it through
+   `GOOGLE_DESKTOP_CLIENT_SECRET` when building the Windows release.
 3. iOS/iPadOS/macOS: add OAuth clients and platform files, then test the same
    Drive AppData sync flow.
 

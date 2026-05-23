@@ -10,7 +10,7 @@ Daily는 개인용 독립 캘린더 앱입니다. 앱을 열면 바로 월간 �
 - 단순 문장은 규칙 기반 파서로 처리하고, 복잡한 문장만 Gemini API를 선택적으로 사용한다.
 - 로컬 SQLite를 우선 저장소로 사용하고 Firebase Auth + Cloud Firestore로 여러 기기 실시간 동기화를 붙인다.
 - 기본 알림은 일정 시작 1시간 전, 아침 브리핑은 오전 8시다.
-- 배포용 앱 식별자는 `com.littlebit0.daily`를 사용한다.
+- Android 배포용 앱 식별자는 `com.littlebit0.dailycalendar`를 사용한다.
 
 ## 현재 구현 범위
 

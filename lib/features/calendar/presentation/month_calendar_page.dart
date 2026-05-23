@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/di/app_providers.dart';
 import '../../chat/presentation/chat_input_bar.dart';
 import '../../events/domain/calendar_event.dart';
+import '../../events/domain/event_category.dart';
+import '../../events/domain/event_draft.dart';
 import '../../events/presentation/event_details_panel.dart';
+import '../../events/presentation/event_editor_dialog.dart';
 import '../../search/presentation/search_page.dart';
 import '../../settings/presentation/settings_page.dart';
 import '../widgets/calendar_month_grid.dart';
@@ -217,6 +220,7 @@ class _CalendarMonthPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
     final eventsAsync = ref.watch(
       eventsInRangeProvider(_monthRangeFor(month, weekStartsOnMonday)),
     );
@@ -231,6 +235,14 @@ class _CalendarMonthPage extends ConsumerWidget {
         onDateSelected: (date) {
           onDateSelected(date, _eventsForDay(events, date));
         },
+        onDateRangeSelected: (start, end) => _addEventForRange(
+          context,
+          ref,
+          start,
+          end,
+          settings.categories,
+          settings.defaultReminderMinutes,
+        ),
       ),
       error: (error, stackTrace) => Center(child: Text('$error')),
       loading: () => CalendarMonthGrid(
@@ -242,8 +254,39 @@ class _CalendarMonthPage extends ConsumerWidget {
         onDateSelected: (date) {
           onDateSelected(date, const <CalendarEvent>[]);
         },
+        onDateRangeSelected: (start, end) => _addEventForRange(
+          context,
+          ref,
+          start,
+          end,
+          settings.categories,
+          settings.defaultReminderMinutes,
+        ),
       ),
     );
+  }
+
+  Future<void> _addEventForRange(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime start,
+    DateTime end,
+    List<EventCategory> categories,
+    int defaultReminderMinutes,
+  ) async {
+    final draft = await showDialog<EventDraft>(
+      context: context,
+      builder: (_) => EventEditorDialog(
+        initialDate: start,
+        initialEndDate: end,
+        initialAllDay: true,
+        categories: categories,
+        defaultReminderMinutes: defaultReminderMinutes,
+      ),
+    );
+    if (draft != null) {
+      await ref.read(eventCommandServiceProvider).create(draft);
+    }
   }
 }
 

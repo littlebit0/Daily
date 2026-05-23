@@ -35,10 +35,15 @@ class GoogleDriveAuthService {
   static const _serverClientId = String.fromEnvironment(
     'GOOGLE_SIGN_IN_SERVER_CLIENT_ID',
     defaultValue:
-        '424765276744-j32k4bdck7lr4ba0lg5s99u91c4849bp.apps.googleusercontent.com',
+        '234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com',
   );
   static const _desktopClientId = String.fromEnvironment(
     'GOOGLE_DESKTOP_CLIENT_ID',
+    defaultValue:
+        '234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com',
+  );
+  static const _desktopClientSecret = String.fromEnvironment(
+    'GOOGLE_DESKTOP_CLIENT_SECRET',
   );
   static const _storagePrefix = 'daily.google_drive.';
   static const _accessTokenKey = '${_storagePrefix}access_token';
@@ -70,6 +75,14 @@ class GoogleDriveAuthService {
       return fromBuild;
     }
     return Platform.environment['GOOGLE_DESKTOP_CLIENT_ID']?.trim() ?? '';
+  }
+
+  String get _configuredDesktopClientSecret {
+    final fromBuild = _desktopClientSecret.trim();
+    if (fromBuild.isNotEmpty) {
+      return fromBuild;
+    }
+    return Platform.environment['GOOGLE_DESKTOP_CLIENT_SECRET']?.trim() ?? '';
   }
 
   Future<void> initialize() {
@@ -300,13 +313,13 @@ class GoogleDriveAuthService {
     final response = await _httpClient.post(
       Uri.https('oauth2.googleapis.com', '/token'),
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {
+      body: _withDesktopClientSecret({
         'client_id': _configuredDesktopClientId,
         'code': codeResponse.code,
         'code_verifier': codeResponse.codeVerifier,
         'grant_type': 'authorization_code',
         'redirect_uri': codeResponse.redirectUri,
-      },
+      }),
     );
     final decoded = _decodeTokenResponse(response);
     final refreshToken = decoded['refresh_token'] as String?;
@@ -324,11 +337,11 @@ class GoogleDriveAuthService {
     final response = await _httpClient.post(
       Uri.https('oauth2.googleapis.com', '/token'),
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {
+      body: _withDesktopClientSecret({
         'client_id': _configuredDesktopClientId,
         'refresh_token': refreshToken,
         'grant_type': 'refresh_token',
-      },
+      }),
     );
     final decoded = _decodeTokenResponse(response);
     final tokens = _tokensFromJson(decoded, refreshToken: refreshToken);
@@ -337,6 +350,14 @@ class GoogleDriveAuthService {
     if (account != null) {
       await _saveDesktopSession(tokens, account);
     }
+  }
+
+  Map<String, String> _withDesktopClientSecret(Map<String, String> body) {
+    final clientSecret = _configuredDesktopClientSecret;
+    if (clientSecret.isEmpty) {
+      return body;
+    }
+    return {...body, 'client_secret': clientSecret};
   }
 
   Map<String, Object?> _decodeTokenResponse(http.Response response) {

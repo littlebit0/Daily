@@ -43,9 +43,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           .currentAccount;
       if (mounted) {
         _apiKeyController.text = key ?? '';
-        setState(() {
-          _driveEmail = driveAccount?.email;
-        });
+        setState(() => _driveEmail = driveAccount?.email);
       }
     });
   }
@@ -129,7 +127,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               if (settings.morningBriefingEnabled)
                 _TimeTile(
                   title: '아침 브리핑 시간',
-                  subtitle: '직접 입력 또는 시간 선택',
+                  subtitle: '브리핑을 받을 시간',
                   hour: settings.morningBriefingHour,
                   minute: settings.morningBriefingMinute,
                   onChanged: (time) async {
@@ -353,6 +351,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     AppSettings settings,
     EventCategory category,
   ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('분류 삭제'),
+        content: Text('"${category.label}" 분류를 삭제할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
     final categories = settings.categories
         .where((item) => item.id != category.id)
         .toList();
@@ -569,37 +588,23 @@ class _PresetMinutesTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(title),
       subtitle: Text(_minutesLabel(value)),
-      trailing: Wrap(
-        spacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          DropdownButton<int>(
-            value: selectedValue,
-            items: [
-              for (final preset in presets)
-                DropdownMenuItem(
-                  value: preset,
-                  child: Text(_minutesLabel(preset)),
-                ),
-              const DropdownMenuItem(value: -1, child: Text('직접 입력')),
-            ],
-            onChanged: (next) {
-              if (next == null) {
-                return;
-              }
-              if (next == -1) {
-                onCustom();
-              } else {
-                onChanged(next);
-              }
-            },
-          ),
-          IconButton(
-            tooltip: '직접 입력',
-            onPressed: onCustom,
-            icon: const Icon(Icons.edit_outlined),
-          ),
+      trailing: DropdownButton<int>(
+        value: selectedValue,
+        items: [
+          for (final preset in presets)
+            DropdownMenuItem(value: preset, child: Text(_minutesLabel(preset))),
+          const DropdownMenuItem(value: -1, child: Text('직접 입력')),
         ],
+        onChanged: (next) {
+          if (next == null) {
+            return;
+          }
+          if (next == -1) {
+            onCustom();
+          } else {
+            onChanged(next);
+          }
+        },
       ),
     );
   }
@@ -628,37 +633,18 @@ class _TimeTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(title),
       subtitle: Text('$subtitle · $label'),
-      trailing: Wrap(
-        spacing: 4,
-        children: [
-          IconButton(
-            tooltip: '시간 선택',
-            onPressed: () async {
-              final picked = await showTimePicker(
-                context: context,
-                initialTime: time,
-              );
-              if (picked != null) {
-                onChanged(picked);
-              }
-            },
-            icon: const Icon(Icons.schedule),
-          ),
-          IconButton(
-            tooltip: '직접 입력',
-            onPressed: () async {
-              final picked = await _showTimeTextDialog(
-                context: context,
-                initialHour: hour,
-                initialMinute: minute,
-              );
-              if (picked != null) {
-                onChanged(picked);
-              }
-            },
-            icon: const Icon(Icons.edit_outlined),
-          ),
-        ],
+      trailing: IconButton(
+        tooltip: '시간 선택',
+        onPressed: () async {
+          final picked = await showTimePicker(
+            context: context,
+            initialTime: time,
+          );
+          if (picked != null) {
+            onChanged(picked);
+          }
+        },
+        icon: const Icon(Icons.schedule),
       ),
     );
   }
@@ -687,7 +673,7 @@ class _DdayOffsetsTile extends StatelessWidget {
           const Text('D-day 알림'),
           const SizedBox(height: 4),
           Text(
-            'D-day 표시가 켜진 일정에 적용됩니다.',
+            'D-day 표시가 켜진 일정에 적용합니다.',
             style: Theme.of(context).textTheme.labelMedium,
           ),
           const SizedBox(height: 8),
@@ -709,11 +695,7 @@ class _DdayOffsetsTile extends StatelessWidget {
                     onChanged(next.toList()..sort());
                   },
                 ),
-              ActionChip(
-                avatar: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('직접 입력'),
-                onPressed: onCustom,
-              ),
+              ActionChip(label: const Text('직접 입력'), onPressed: onCustom),
             ],
           ),
         ],
@@ -779,7 +761,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.account_circle_outlined),
-          title: Text(connected ? email! : 'Google 계정 로그인 필요'),
+          title: Text(connected ? email! : 'Google 계정 로그인이 필요'),
           subtitle: Text(
             connected
                 ? '이 Google 계정으로 모든 기기의 일정을 자동 백업하고 복원합니다.'
@@ -919,59 +901,6 @@ Future<int?> _showNumberDialog({
           onPressed: () {
             final value = int.tryParse(controller.text.trim());
             Navigator.of(context).pop(value);
-          },
-          child: const Text('적용'),
-        ),
-      ],
-    ),
-  );
-  controller.dispose();
-  return result;
-}
-
-Future<TimeOfDay?> _showTimeTextDialog({
-  required BuildContext context,
-  required int initialHour,
-  required int initialMinute,
-}) async {
-  final controller = TextEditingController(
-    text: _timeLabel(initialHour, initialMinute),
-  );
-  final result = await showDialog<TimeOfDay>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('시간 직접 입력'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.datetime,
-        decoration: const InputDecoration(labelText: 'HH:mm'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('취소'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final value = controller.text.trim();
-            final parts = value.split(':');
-            if (parts.length != 2) {
-              Navigator.of(context).pop();
-              return;
-            }
-            final hour = int.tryParse(parts[0]);
-            final minute = int.tryParse(parts[1]);
-            if (hour == null ||
-                minute == null ||
-                hour < 0 ||
-                hour > 23 ||
-                minute < 0 ||
-                minute > 59) {
-              Navigator.of(context).pop();
-              return;
-            }
-            Navigator.of(context).pop(TimeOfDay(hour: hour, minute: minute));
           },
           child: const Text('적용'),
         ),

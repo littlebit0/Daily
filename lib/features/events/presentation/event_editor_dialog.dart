@@ -9,12 +9,16 @@ class EventEditorDialog extends StatefulWidget {
   const EventEditorDialog({
     super.key,
     required this.initialDate,
+    this.initialEndDate,
+    this.initialAllDay,
     this.event,
     this.categories = EventCategory.values,
     this.defaultReminderMinutes = 60,
   });
 
   final DateTime initialDate;
+  final DateTime? initialEndDate;
+  final bool? initialAllDay;
   final CalendarEvent? event;
   final List<EventCategory> categories;
   final int defaultReminderMinutes;
@@ -46,11 +50,12 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     _locationController = TextEditingController(text: event?.location ?? '');
     final sourceDate = event?.startAt ?? widget.initialDate;
     _startDate = DateTime(sourceDate.year, sourceDate.month, sourceDate.day);
+    final initialEndDate = widget.initialEndDate ?? widget.initialDate;
     final sourceEnd = event == null
         ? DateTime(
-            widget.initialDate.year,
-            widget.initialDate.month,
-            widget.initialDate.day,
+            initialEndDate.year,
+            initialEndDate.month,
+            initialEndDate.day,
             10,
           )
         : event.allDay
@@ -70,7 +75,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
           ),
     );
     _endTime = TimeOfDay.fromDateTime(sourceEnd);
-    _allDay = event?.allDay ?? false;
+    _allDay = event?.allDay ?? widget.initialAllDay ?? false;
     final usableCategories = _usableCategories;
     _category = usableCategories.firstWhere(
       (category) => category.id == event?.category.id,

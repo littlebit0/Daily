@@ -1,4 +1,4 @@
-package com.littlebit0.daily
+package com.littlebit0.dailycalendar
 
 import io.flutter.embedding.android.FlutterActivity
 

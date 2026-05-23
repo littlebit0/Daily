@@ -117,7 +117,7 @@ Windows 환경에서는 최종 iOS/macOS 빌드를 검증할 수 없다.
 - JDK 위치: `C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot`
 - Firebase CLI: `15.17.0`
 - FlutterFire CLI: `1.3.2`
-- 배포용 앱 식별자: `com.littlebit0.daily`
+- Android 배포용 앱 식별자: `com.littlebit0.dailycalendar`
 
 ## 다음 권장 순서
 
