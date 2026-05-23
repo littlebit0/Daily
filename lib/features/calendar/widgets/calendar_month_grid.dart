@@ -50,7 +50,9 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
     final holidayDays = _holidayDays(widget.events);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      padding: compact
+          ? const EdgeInsets.fromLTRB(4, 0, 4, 8)
+          : const EdgeInsets.fromLTRB(12, 0, 12, 10),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: const Color(0xffffffff),
@@ -64,7 +66,9 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+          padding: compact
+              ? const EdgeInsets.fromLTRB(3, 6, 3, 6)
+              : const EdgeInsets.fromLTRB(8, 7, 8, 8),
           child: Column(
             children: [
               _WeekdayHeader(weekStartsOnMonday: widget.weekStartsOnMonday),
@@ -141,6 +145,8 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                                   maxFlags: maxFlags,
                                   holidayDays: holidayDays,
                                   showLunarDates: widget.showLunarDates,
+                                  showEventTimes: !compact,
+                                  compact: compact,
                                   onDateSelected: widget.onDateSelected,
                                 ),
                               ),
@@ -329,6 +335,8 @@ class _WeekRow extends StatelessWidget {
     required this.maxFlags,
     required this.holidayDays,
     required this.showLunarDates,
+    required this.showEventTimes,
+    required this.compact,
     required this.onDateSelected,
   });
 
@@ -341,6 +349,8 @@ class _WeekRow extends StatelessWidget {
   final int maxFlags;
   final Set<DateTime> holidayDays;
   final bool showLunarDates;
+  final bool showEventTimes;
+  final bool compact;
   final ValueChanged<DateTime> onDateSelected;
 
   static const _flagTop = 34.0;
@@ -356,6 +366,8 @@ class _WeekRow extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cellWidth = constraints.maxWidth / 7;
+        final flagInset = compact ? 1.0 : 5.0;
+        final overflowInset = compact ? 2.0 : 6.0;
         final usableFlagHeight = math.max(
           0,
           constraints.maxHeight - _flagTop - 18,
@@ -395,12 +407,12 @@ class _WeekRow extends StatelessWidget {
                   children: [
                     for (final segment in visibleSegments)
                       Positioned(
-                        left: segment.startCol * cellWidth + 5,
+                        left: segment.startCol * cellWidth + flagInset,
                         top: _flagTop + segment.lane * (_flagHeight + _flagGap),
                         width:
                             (segment.endCol - segment.startCol + 1) *
                                 cellWidth -
-                            10,
+                            flagInset * 2,
                         height: _flagHeight,
                         child: _EventSpanFlag(
                           key: ValueKey(
@@ -410,14 +422,16 @@ class _WeekRow extends StatelessWidget {
                           segmentStart: weekStart.add(
                             Duration(days: segment.startCol),
                           ),
+                          showTime: showEventTimes,
+                          compact: compact,
                         ),
                       ),
                     for (var index = 0; index < overflowCounts.length; index++)
                       if (overflowCounts[index] > 0)
                         Positioned(
-                          left: index * cellWidth + 6,
+                          left: index * cellWidth + overflowInset,
                           bottom: 4,
-                          width: cellWidth - 12,
+                          width: cellWidth - overflowInset * 2,
                           child: Text(
                             '+${overflowCounts[index]}',
                             maxLines: 1,
@@ -659,25 +673,27 @@ class _EventSpanFlag extends StatelessWidget {
     super.key,
     required this.event,
     required this.segmentStart,
+    required this.showTime,
+    required this.compact,
   });
 
   final CalendarEvent event;
   final DateTime segmentStart;
+  final bool showTime;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final color = Color(event.colorValue);
     final formatter = DateFormat('HH:mm');
-    final showTime =
+    final showStartTime =
+        showTime &&
         !event.allDay &&
         event.startAt.year == segmentStart.year &&
         event.startAt.month == segmentStart.month &&
         event.startAt.day == segmentStart.day;
-    final parts = <String>[
-      if (event.showDday) _formatDday(event),
-      if (showTime) formatter.format(event.startAt),
-    ];
-    final prefix = parts.isEmpty ? '' : '${parts.join(' · ')}  ';
+    final prefix = event.showDday && !compact ? '${_formatDday(event)}  ' : '';
+    final suffix = showStartTime ? '  ${formatter.format(event.startAt)}' : '';
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -687,15 +703,15 @@ class _EventSpanFlag extends StatelessWidget {
         borderRadius: BorderRadius.circular(5),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7),
+        padding: EdgeInsets.symmetric(horizontal: compact ? 3 : 7),
         child: Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            '$prefix${event.title}',
+            '$prefix${event.title}$suffix',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: compact ? 10.5 : 11,
               fontWeight: FontWeight.w700,
               color: color,
             ),
