@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -31,8 +32,17 @@ class SettingsRepository {
   static const _blockSensitiveAiKey = 'blockSensitiveAi';
   static const _categoriesKey = 'eventCategories';
   static const _dDayReminderOffsetsKey = 'dDayReminderOffsets';
+  static const _calendarDensityKey = 'calendarDensity';
+  static const _defaultCalendarViewKey = 'defaultCalendarView';
+  static const _hiddenCategoryIdsKey = 'hiddenCategoryIds';
+  static const _calendarShowHolidaysKey = 'calendarShowHolidays';
+  static const _calendarDdayOnlyKey = 'calendarDdayOnly';
+  static const _hideSensitiveEventsKey = 'hideSensitiveEvents';
+  static const _hideSensitiveNotificationsKey = 'hideSensitiveNotifications';
+  static const _appLockEnabledKey = 'appLockEnabled';
   static const _deviceIdKey = 'deviceId';
   static const _geminiKey = 'geminiApiKey';
+  static const _appLockPinHashKey = 'appLockPinHash';
 
   AppSettings load() {
     return AppSettings(
@@ -51,6 +61,21 @@ class SettingsRepository {
       blockSensitiveAi: _preferences.getBool(_blockSensitiveAiKey) ?? true,
       categories: _loadCategories(),
       dDayReminderOffsets: _loadDdayOffsets(),
+      calendarDensity: CalendarDensity.fromName(
+        _preferences.getString(_calendarDensityKey),
+      ),
+      defaultCalendarView: CalendarViewMode.fromName(
+        _preferences.getString(_defaultCalendarViewKey),
+      ),
+      hiddenCategoryIds: _loadStringList(_hiddenCategoryIdsKey),
+      calendarShowHolidays:
+          _preferences.getBool(_calendarShowHolidaysKey) ?? true,
+      calendarDdayOnly: _preferences.getBool(_calendarDdayOnlyKey) ?? false,
+      hideSensitiveEvents:
+          _preferences.getBool(_hideSensitiveEventsKey) ?? false,
+      hideSensitiveNotifications:
+          _preferences.getBool(_hideSensitiveNotificationsKey) ?? false,
+      appLockEnabled: _preferences.getBool(_appLockEnabledKey) ?? false,
     );
   }
 
@@ -101,6 +126,32 @@ class SettingsRepository {
       _dDayReminderOffsetsKey,
       jsonEncode(settings.dDayReminderOffsets),
     );
+    await _preferences.setString(
+      _calendarDensityKey,
+      settings.calendarDensity.name,
+    );
+    await _preferences.setString(
+      _defaultCalendarViewKey,
+      settings.defaultCalendarView.name,
+    );
+    await _preferences.setString(
+      _hiddenCategoryIdsKey,
+      jsonEncode(settings.hiddenCategoryIds),
+    );
+    await _preferences.setBool(
+      _calendarShowHolidaysKey,
+      settings.calendarShowHolidays,
+    );
+    await _preferences.setBool(_calendarDdayOnlyKey, settings.calendarDdayOnly);
+    await _preferences.setBool(
+      _hideSensitiveEventsKey,
+      settings.hideSensitiveEvents,
+    );
+    await _preferences.setBool(
+      _hideSensitiveNotificationsKey,
+      settings.hideSensitiveNotifications,
+    );
+    await _preferences.setBool(_appLockEnabledKey, settings.appLockEnabled);
   }
 
   Future<void> completeOnboarding() async {
@@ -129,6 +180,19 @@ class SettingsRepository {
     return _secureStorage.delete(key: _geminiKey);
   }
 
+  Future<void> saveAppLockPin(String pin) {
+    return _secureStorage.write(key: _appLockPinHashKey, value: _hashPin(pin));
+  }
+
+  Future<void> deleteAppLockPin() {
+    return _secureStorage.delete(key: _appLockPinHashKey);
+  }
+
+  Future<bool> verifyAppLockPin(String pin) async {
+    final stored = await _secureStorage.read(key: _appLockPinHashKey);
+    return stored != null && stored == _hashPin(pin);
+  }
+
   Future<void> resetAll() async {
     await _preferences.remove(_defaultReminderKey);
     await _preferences.remove(_allDayReminderHourKey);
@@ -144,8 +208,17 @@ class SettingsRepository {
     await _preferences.remove(_blockSensitiveAiKey);
     await _preferences.remove(_categoriesKey);
     await _preferences.remove(_dDayReminderOffsetsKey);
+    await _preferences.remove(_calendarDensityKey);
+    await _preferences.remove(_defaultCalendarViewKey);
+    await _preferences.remove(_hiddenCategoryIdsKey);
+    await _preferences.remove(_calendarShowHolidaysKey);
+    await _preferences.remove(_calendarDdayOnlyKey);
+    await _preferences.remove(_hideSensitiveEventsKey);
+    await _preferences.remove(_hideSensitiveNotificationsKey);
+    await _preferences.remove(_appLockEnabledKey);
     await _preferences.remove(_deviceIdKey);
     await deleteGeminiApiKey();
+    await deleteAppLockPin();
   }
 
   List<EventCategory> _loadCategories() {
@@ -190,5 +263,25 @@ class SettingsRepository {
     } on Object {
       return const [-7, -3, -1, 0];
     }
+  }
+
+  List<String> _loadStringList(String key) {
+    final raw = _preferences.getString(key);
+    if (raw == null || raw.isEmpty) {
+      return const [];
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        return const [];
+      }
+      return decoded.whereType<String>().toList();
+    } on Object {
+      return const [];
+    }
+  }
+
+  String _hashPin(String pin) {
+    return sha256.convert(utf8.encode(pin)).toString();
   }
 }

@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('Daily opens to the monthly calendar shell', (tester) async {
+  testWidgets('Daily opens to the weekly calendar shell', (tester) async {
     SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
     final preferences = await SharedPreferences.getInstance();
     final settingsRepository = SettingsRepository(preferences: preferences);
@@ -33,7 +33,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(PageView), findsOneWidget);
+    expect(find.byType(PageView), findsNothing);
+    expect(find.text('일정 없음'), findsWidgets);
     expect(find.text('일정을 입력하세요'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -42,7 +43,10 @@ void main() {
   testWidgets('swiping the monthly calendar moves to the next month', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    SharedPreferences.setMockInitialValues({
+      'onboardingCompleted': true,
+      'defaultCalendarView': 'month',
+    });
     final preferences = await SharedPreferences.getInstance();
     final settingsRepository = SettingsRepository(preferences: preferences);
 
@@ -135,6 +139,9 @@ class _FakeEventRepository implements EventRepository {
 
   @override
   Future<List<CalendarEvent>> search(String query) async => const [];
+
+  @override
+  Future<CalendarEvent?> findById(String id) async => null;
 
   @override
   Future<List<CalendarEvent>> pendingSyncEvents() async => const [];

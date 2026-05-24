@@ -28,7 +28,9 @@ class RecurrenceExpander {
       }
 
       final occurrenceEnd = current.add(duration);
-      if (current.isBefore(rangeEnd) && occurrenceEnd.isAfter(rangeStart)) {
+      if (!event.recurrence.excludes(current) &&
+          current.isBefore(rangeEnd) &&
+          occurrenceEnd.isAfter(rangeStart)) {
         occurrences.add(
           event.copyWith(
             occurrenceId: '${event.id}@${current.toIso8601String()}',

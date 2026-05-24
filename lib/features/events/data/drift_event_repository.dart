@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import 'app_database.dart';
@@ -50,12 +52,22 @@ class DriftEventRepository implements EventRepository {
                     (table.title.contains(normalized) |
                         table.memo.contains(normalized) |
                         table.location.contains(normalized) |
+                        table.url.contains(normalized) |
+                        table.weather.contains(normalized) |
                         table.category.contains(normalized)),
               )
               ..orderBy([(table) => OrderingTerm.desc(table.startAt)]))
             .get();
 
     return rows.map((record) => record.toDomain()).toList();
+  }
+
+  @override
+  Future<CalendarEvent?> findById(String id) async {
+    final row = await (_database.select(
+      _database.eventRecords,
+    )..where((table) => table.id.equals(id))).getSingleOrNull();
+    return row?.toDomain();
   }
 
   @override
@@ -86,6 +98,8 @@ class DriftEventRepository implements EventRepository {
             title: Value(event.title),
             memo: Value(event.memo),
             location: Value(event.location),
+            url: Value(event.url),
+            weather: Value(event.weather),
             startAt: Value(event.startAt),
             endAt: Value(event.endAt),
             allDay: Value(event.allDay),
@@ -96,12 +110,21 @@ class DriftEventRepository implements EventRepository {
             recurrenceInterval: Value(event.recurrence.interval),
             recurrenceUntil: Value(event.recurrence.until),
             recurrenceCount: Value(event.recurrence.count),
+            recurrenceExcludedDates: Value(
+              jsonEncode(
+                event.recurrence.excludedDates
+                    .map((date) => DateTime(date.year, date.month, date.day))
+                    .map((date) => date.toIso8601String())
+                    .toList(),
+              ),
+            ),
             createdAt: Value(event.createdAt),
             updatedAt: Value(event.updatedAt),
             deletedAt: Value(event.deletedAt),
             deviceId: Value(event.deviceId),
             syncStatus: Value(event.syncStatus),
             showDday: Value(event.showDday),
+            sensitive: Value(event.sensitive),
           ),
         );
   }

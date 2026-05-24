@@ -1,5 +1,39 @@
 import '../../features/events/domain/event_category.dart';
 
+enum CalendarDensity {
+  relaxed('넓게'),
+  standard('기본'),
+  dense('많이');
+
+  const CalendarDensity(this.label);
+
+  final String label;
+
+  static CalendarDensity fromName(String? name) {
+    return CalendarDensity.values.firstWhere(
+      (density) => density.name == name,
+      orElse: () => CalendarDensity.standard,
+    );
+  }
+}
+
+enum CalendarViewMode {
+  week('주간'),
+  month('월간'),
+  day('일간');
+
+  const CalendarViewMode(this.label);
+
+  final String label;
+
+  static CalendarViewMode fromName(String? name) {
+    return CalendarViewMode.values.firstWhere(
+      (mode) => mode.name == name,
+      orElse: () => CalendarViewMode.week,
+    );
+  }
+}
+
 class AppSettings {
   const AppSettings({
     this.defaultReminderMinutes = 60,
@@ -16,6 +50,14 @@ class AppSettings {
     this.blockSensitiveAi = true,
     this.categories = _defaultCategories,
     this.dDayReminderOffsets = const [-7, -3, -1, 0],
+    this.calendarDensity = CalendarDensity.standard,
+    this.defaultCalendarView = CalendarViewMode.week,
+    this.hiddenCategoryIds = const <String>[],
+    this.calendarShowHolidays = true,
+    this.calendarDdayOnly = false,
+    this.hideSensitiveEvents = false,
+    this.hideSensitiveNotifications = false,
+    this.appLockEnabled = false,
   });
 
   static const _defaultCategories = <EventCategory>[
@@ -37,6 +79,14 @@ class AppSettings {
   final bool blockSensitiveAi;
   final List<EventCategory> categories;
   final List<int> dDayReminderOffsets;
+  final CalendarDensity calendarDensity;
+  final CalendarViewMode defaultCalendarView;
+  final List<String> hiddenCategoryIds;
+  final bool calendarShowHolidays;
+  final bool calendarDdayOnly;
+  final bool hideSensitiveEvents;
+  final bool hideSensitiveNotifications;
+  final bool appLockEnabled;
 
   AppSettings copyWith({
     int? defaultReminderMinutes,
@@ -53,6 +103,14 @@ class AppSettings {
     bool? blockSensitiveAi,
     List<EventCategory>? categories,
     List<int>? dDayReminderOffsets,
+    CalendarDensity? calendarDensity,
+    CalendarViewMode? defaultCalendarView,
+    List<String>? hiddenCategoryIds,
+    bool? calendarShowHolidays,
+    bool? calendarDdayOnly,
+    bool? hideSensitiveEvents,
+    bool? hideSensitiveNotifications,
+    bool? appLockEnabled,
   }) {
     return AppSettings(
       defaultReminderMinutes:
@@ -73,6 +131,15 @@ class AppSettings {
       blockSensitiveAi: blockSensitiveAi ?? this.blockSensitiveAi,
       categories: categories ?? this.categories,
       dDayReminderOffsets: dDayReminderOffsets ?? this.dDayReminderOffsets,
+      calendarDensity: calendarDensity ?? this.calendarDensity,
+      defaultCalendarView: defaultCalendarView ?? this.defaultCalendarView,
+      hiddenCategoryIds: hiddenCategoryIds ?? this.hiddenCategoryIds,
+      calendarShowHolidays: calendarShowHolidays ?? this.calendarShowHolidays,
+      calendarDdayOnly: calendarDdayOnly ?? this.calendarDdayOnly,
+      hideSensitiveEvents: hideSensitiveEvents ?? this.hideSensitiveEvents,
+      hideSensitiveNotifications:
+          hideSensitiveNotifications ?? this.hideSensitiveNotifications,
+      appLockEnabled: appLockEnabled ?? this.appLockEnabled,
     );
   }
 }

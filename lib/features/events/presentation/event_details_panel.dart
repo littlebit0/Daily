@@ -3,12 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../domain/calendar_event.dart';
 import '../domain/event_category.dart';
 import '../domain/event_draft.dart';
+import '../domain/recurrence_rule.dart';
 import 'event_editor_dialog.dart';
+
+enum _RecurringChangeScope { onlyThis, future, all }
 
 class EventDetailsPanel extends ConsumerWidget {
   const EventDetailsPanel({
@@ -67,6 +71,7 @@ class EventDetailsPanel extends ConsumerWidget {
                     final event = dayEvents[index];
                     return _EventTile(
                       event: event,
+                      hideSensitive: settings.hideSensitiveEvents,
                       onEdit: event.readOnly
                           ? null
                           : () => _editEvent(
@@ -128,25 +133,40 @@ class EventDetailsPanel extends ConsumerWidget {
         defaultReminderMinutes: defaultReminderMinutes,
       ),
     );
-    if (draft != null) {
-      await commandService.save(
-        event.copyWith(
-          title: draft.title,
-          memo: draft.memo,
-          location: draft.location,
-          startAt: draft.startAt,
-          endAt: draft.endAt,
-          allDay: draft.allDay,
-          category: draft.category,
-          colorValue: draft.colorValue ?? draft.category.colorValue,
-          reminderMinutesBefore: draft.reminderMinutesBefore,
-          recurrence: draft.recurrence,
-          showDday: draft.showDday,
-          clearMemo: draft.memo == null,
-          clearLocation: draft.location == null,
-          clearReminder: draft.reminderMinutesBefore == null,
-        ),
-      );
+    if (draft == null) {
+      return;
+    }
+
+    if (!event.isRecurring) {
+      await commandService.save(_applyDraft(event, draft));
+      return;
+    }
+    if (!context.mounted) {
+      return;
+    }
+
+    final scope = await _showRecurringScopeDialog(
+      context,
+      title: '반복 일정 수정',
+      actionLabel: '수정',
+    );
+    if (scope == null) {
+      return;
+    }
+
+    final base =
+        await ref.read(eventRepositoryProvider).findById(event.id) ?? event;
+    switch (scope) {
+      case _RecurringChangeScope.onlyThis:
+        await commandService.save(_excludeOccurrence(base, event.startAt));
+        await commandService.create(
+          draft.copyWith(recurrence: const RecurrenceRule()),
+        );
+      case _RecurringChangeScope.future:
+        await commandService.save(_endBefore(base, event.startAt));
+        await commandService.create(draft);
+      case _RecurringChangeScope.all:
+        await commandService.save(_applyDraft(base, draft));
     }
   }
 
@@ -174,9 +194,122 @@ class EventDetailsPanel extends ConsumerWidget {
         ],
       ),
     );
-    if (confirmed == true) {
+    if (confirmed != true) {
+      return;
+    }
+
+    if (event.isRecurring) {
+      if (!context.mounted) {
+        return;
+      }
+      final scope = await _showRecurringScopeDialog(
+        context,
+        title: '반복 일정 삭제',
+        actionLabel: '삭제',
+      );
+      if (scope == null) {
+        return;
+      }
+      final base =
+          await ref.read(eventRepositoryProvider).findById(event.id) ?? event;
+      switch (scope) {
+        case _RecurringChangeScope.onlyThis:
+          await commandService.save(_excludeOccurrence(base, event.startAt));
+        case _RecurringChangeScope.future:
+          await commandService.save(_endBefore(base, event.startAt));
+        case _RecurringChangeScope.all:
+          await commandService.delete(event.id);
+      }
+    } else {
       await commandService.delete(event.id);
     }
+  }
+
+  CalendarEvent _applyDraft(CalendarEvent event, EventDraft draft) {
+    return event.copyWith(
+      title: draft.title,
+      memo: draft.memo,
+      location: draft.location,
+      url: draft.url,
+      weather: draft.weather,
+      startAt: draft.startAt,
+      endAt: draft.endAt,
+      allDay: draft.allDay,
+      category: draft.category,
+      colorValue: draft.colorValue ?? draft.category.colorValue,
+      reminderMinutesBefore: draft.reminderMinutesBefore,
+      recurrence: draft.recurrence,
+      showDday: draft.showDday,
+      sensitive: draft.sensitive,
+      clearMemo: draft.memo == null,
+      clearLocation: draft.location == null,
+      clearUrl: draft.url == null,
+      clearWeather: draft.weather == null,
+      clearReminder: draft.reminderMinutesBefore == null,
+    );
+  }
+
+  CalendarEvent _excludeOccurrence(CalendarEvent base, DateTime occurrence) {
+    final occurrenceDay = DateTime(
+      occurrence.year,
+      occurrence.month,
+      occurrence.day,
+    );
+    final excluded = {
+      ...base.recurrence.excludedDates.map(
+        (date) => DateTime(date.year, date.month, date.day),
+      ),
+      occurrenceDay,
+    }.toList()..sort((a, b) => a.compareTo(b));
+    return base.copyWith(
+      recurrence: base.recurrence.copyWith(excludedDates: excluded),
+    );
+  }
+
+  CalendarEvent _endBefore(CalendarEvent base, DateTime occurrence) {
+    final until = DateTime(
+      occurrence.year,
+      occurrence.month,
+      occurrence.day,
+    ).subtract(const Duration(days: 1));
+    return base.copyWith(
+      recurrence: base.recurrence.copyWith(until: until, clearCount: true),
+    );
+  }
+
+  Future<_RecurringChangeScope?> _showRecurringScopeDialog(
+    BuildContext context, {
+    required String title,
+    required String actionLabel,
+  }) {
+    return showDialog<_RecurringChangeScope>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text('이 반복 일정의 어느 범위에 $actionLabel을 적용할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(_RecurringChangeScope.onlyThis),
+            child: const Text('이 일정만'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(_RecurringChangeScope.future),
+            child: const Text('이후 일정'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(context).pop(_RecurringChangeScope.all),
+            child: const Text('전체 반복'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatDateLabel(DateTime date) {
@@ -188,11 +321,13 @@ class EventDetailsPanel extends ConsumerWidget {
 class _EventTile extends StatelessWidget {
   const _EventTile({
     required this.event,
+    required this.hideSensitive,
     required this.onEdit,
     required this.onDelete,
   });
 
   final CalendarEvent event;
+  final bool hideSensitive;
   final VoidCallback? onEdit;
   final Future<void> Function()? onDelete;
 
@@ -200,6 +335,7 @@ class _EventTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final timeLabel = _formatTimeLabel(event);
     final color = Color(event.colorValue);
+    final title = hideSensitive && event.sensitive ? '비공개 일정' : event.title;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -227,7 +363,7 @@ class _EventTile extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        event.title,
+                        title,
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
@@ -253,6 +389,26 @@ class _EventTile extends StatelessWidget {
                     event.location!,
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
+                if (event.weather != null && event.weather!.isNotEmpty)
+                  Text(
+                    '날씨: ${event.weather!}',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                if (event.url != null && event.url!.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () => _openUrl(event.url!),
+                    icon: const Icon(Icons.link, size: 16),
+                    label: Text(
+                      event.url!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -271,6 +427,19 @@ class _EventTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _openUrl(String value) async {
+    final raw = value.trim();
+    final uri = Uri.tryParse(
+      raw.startsWith('http://') || raw.startsWith('https://')
+          ? raw
+          : 'https://$raw',
+    );
+    if (uri == null) {
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   String _formatTimeLabel(CalendarEvent event) {

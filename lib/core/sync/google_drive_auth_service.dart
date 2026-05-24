@@ -51,6 +51,8 @@ class GoogleDriveAuthService {
   static const _expiresAtKey = '${_storagePrefix}expires_at';
   static const _emailKey = '${_storagePrefix}email';
   static const _displayNameKey = '${_storagePrefix}display_name';
+  static const _mobileGoogleSignInTimeout = Duration(seconds: 45);
+  static const _mobileAuthorizationTimeout = Duration(seconds: 45);
 
   final FlutterSecureStorage _secureStorage;
   final http.Client _httpClient;
@@ -105,23 +107,49 @@ class GoogleDriveAuthService {
 
     try {
       if (forceAccountSelection) {
-        await GoogleSignIn.instance.signOut();
+        try {
+          await GoogleSignIn.instance.signOut().timeout(
+            _mobileGoogleSignInTimeout,
+          );
+        } on PlatformException catch (error) {
+          if (!_isCredentialClearFailure(error)) {
+            throw GoogleDriveAuthException(_platformAuthMessage(error));
+          }
+        } on TimeoutException {
+          throw const GoogleDriveAuthException(
+            'Google 계정 선택 준비가 시간 초과되었습니다. 다시 시도해 주세요.',
+          );
+        }
         _setCurrentUser(null);
       }
 
       final existing = _currentUser;
       if (existing != null) {
-        await existing.authorizationClient.authorizeScopes(scopes);
+        await existing.authorizationClient
+            .authorizeScopes(scopes)
+            .timeout(_mobileAuthorizationTimeout);
         return _toDriveAccount(existing);
       }
 
-      final user = await GoogleSignIn.instance.authenticate(scopeHint: scopes);
-      await user.authorizationClient.authorizeScopes(scopes);
+      final user = await GoogleSignIn.instance
+          .authenticate(scopeHint: scopes)
+          .timeout(_mobileGoogleSignInTimeout);
+      await user.authorizationClient
+          .authorizeScopes(scopes)
+          .timeout(_mobileAuthorizationTimeout);
       _setCurrentUser(user);
       return _toDriveAccount(user);
     } on GoogleSignInException catch (error) {
       _setCurrentUser(null);
       throw GoogleDriveAuthException(_googleSignInMessage(error));
+    } on PlatformException catch (error) {
+      _setCurrentUser(null);
+      throw GoogleDriveAuthException(_platformAuthMessage(error));
+    } on TimeoutException {
+      _setCurrentUser(null);
+      throw const GoogleDriveAuthException(
+        'Google 로그인 응답이 없어 중단했습니다. 로그인 창을 닫았다면 다시 로그인 버튼을 눌러 주세요.',
+      );
     }
   }
 
@@ -135,7 +163,15 @@ class GoogleDriveAuthService {
       _setCurrentUser(null);
       return;
     }
-    await GoogleSignIn.instance.signOut();
+    try {
+      await GoogleSignIn.instance.signOut().timeout(_mobileGoogleSignInTimeout);
+    } on PlatformException catch (error) {
+      if (!_isCredentialClearFailure(error)) {
+        rethrow;
+      }
+    } on TimeoutException {
+      // Local account state is still cleared below.
+    }
     _setCurrentUser(null);
   }
 
@@ -162,10 +198,17 @@ class GoogleDriveAuthService {
         _setCurrentUser(null);
       }
     }
-    return user?.authorizationClient.authorizationHeaders(
-      scopes,
-      promptIfNecessary: promptIfNecessary,
-    );
+    try {
+      return await user?.authorizationClient
+          .authorizationHeaders(scopes, promptIfNecessary: promptIfNecessary)
+          .timeout(_mobileAuthorizationTimeout);
+    } on PlatformException catch (error) {
+      throw GoogleDriveAuthException(_platformAuthMessage(error));
+    } on TimeoutException {
+      throw const GoogleDriveAuthException(
+        'Google 인증 정보를 가져오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+      );
+    }
   }
 
   Future<void> _initialize() async {
@@ -565,6 +608,25 @@ class GoogleDriveAuthService {
         'Google 로그인 실패: ${error.code.name}'
             '${detailText.isEmpty ? '' : ' ($detailText)'}',
     };
+  }
+
+  bool _isCredentialClearFailure(PlatformException error) {
+    final code = error.code.toLowerCase();
+    final message = error.message?.toLowerCase() ?? '';
+    return code.contains('clear') || message.contains('clear failed');
+  }
+
+  String _platformAuthMessage(PlatformException error) {
+    if (_isCredentialClearFailure(error)) {
+      return 'Google 계정 상태를 초기화하지 못했습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.';
+    }
+    final detail = [
+      if (error.code.trim().isNotEmpty) error.code,
+      if (error.message != null && error.message!.trim().isNotEmpty)
+        error.message!.trim(),
+    ].join(' / ');
+    return 'Google 로그인 처리 중 문제가 발생했습니다.'
+        '${detail.isEmpty ? '' : ' ($detail)'}';
   }
 }
 

@@ -12,6 +12,8 @@ class EventRecords extends Table {
   TextColumn get title => text()();
   TextColumn get memo => text().nullable()();
   TextColumn get location => text().nullable()();
+  TextColumn get url => text().nullable()();
+  TextColumn get weather => text().nullable()();
   DateTimeColumn get startAt => dateTime()();
   DateTimeColumn get endAt => dateTime()();
   BoolColumn get allDay => boolean().withDefault(const Constant(false))();
@@ -24,12 +26,15 @@ class EventRecords extends Table {
       integer().withDefault(const Constant(1))();
   DateTimeColumn get recurrenceUntil => dateTime().nullable()();
   IntColumn get recurrenceCount => integer().nullable()();
+  TextColumn get recurrenceExcludedDates =>
+      text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   DateTimeColumn get deletedAt => dateTime().nullable()();
   TextColumn get deviceId => text().withDefault(const Constant(''))();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();
   BoolColumn get showDday => boolean().withDefault(const Constant(false))();
+  BoolColumn get sensitive => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -40,7 +45,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -50,6 +55,15 @@ class AppDatabase extends _$AppDatabase {
           await migrator.addColumn(eventRecords, eventRecords.showDday);
           await customStatement(
             "UPDATE event_records SET category = 'basic', color_value = 4280640491 WHERE category != 'holiday'",
+          );
+        }
+        if (from < 3) {
+          await migrator.addColumn(eventRecords, eventRecords.url);
+          await migrator.addColumn(eventRecords, eventRecords.weather);
+          await migrator.addColumn(eventRecords, eventRecords.sensitive);
+          await migrator.addColumn(
+            eventRecords,
+            eventRecords.recurrenceExcludedDates,
           );
         }
       },

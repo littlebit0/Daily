@@ -15,12 +15,15 @@ class CalendarEvent {
     this.occurrenceId,
     this.memo,
     this.location,
+    this.url,
+    this.weather,
     this.reminderMinutesBefore,
     this.recurrence = const RecurrenceRule(),
     this.deletedAt,
     this.deviceId = '',
     this.syncStatus = 'pending',
     this.showDday = false,
+    this.sensitive = false,
     this.readOnly = false,
     this.systemEvent = false,
     this.holiday = false,
@@ -31,6 +34,8 @@ class CalendarEvent {
   final String title;
   final String? memo;
   final String? location;
+  final String? url;
+  final String? weather;
   final DateTime startAt;
   final DateTime endAt;
   final bool allDay;
@@ -44,6 +49,7 @@ class CalendarEvent {
   final String deviceId;
   final String syncStatus;
   final bool showDday;
+  final bool sensitive;
   final bool readOnly;
   final bool systemEvent;
   final bool holiday;
@@ -64,6 +70,8 @@ class CalendarEvent {
     String? title,
     String? memo,
     String? location,
+    String? url,
+    String? weather,
     DateTime? startAt,
     DateTime? endAt,
     bool? allDay,
@@ -77,12 +85,15 @@ class CalendarEvent {
     String? deviceId,
     String? syncStatus,
     bool? showDday,
+    bool? sensitive,
     bool? readOnly,
     bool? systemEvent,
     bool? holiday,
     bool clearOccurrenceId = false,
     bool clearMemo = false,
     bool clearLocation = false,
+    bool clearUrl = false,
+    bool clearWeather = false,
     bool clearReminder = false,
     bool clearDeletedAt = false,
   }) {
@@ -94,6 +105,8 @@ class CalendarEvent {
       title: title ?? this.title,
       memo: clearMemo ? null : memo ?? this.memo,
       location: clearLocation ? null : location ?? this.location,
+      url: clearUrl ? null : url ?? this.url,
+      weather: clearWeather ? null : weather ?? this.weather,
       startAt: startAt ?? this.startAt,
       endAt: endAt ?? this.endAt,
       allDay: allDay ?? this.allDay,
@@ -109,6 +122,7 @@ class CalendarEvent {
       deviceId: deviceId ?? this.deviceId,
       syncStatus: syncStatus ?? this.syncStatus,
       showDday: showDday ?? this.showDday,
+      sensitive: sensitive ?? this.sensitive,
       readOnly: readOnly ?? this.readOnly,
       systemEvent: systemEvent ?? this.systemEvent,
       holiday: holiday ?? this.holiday,

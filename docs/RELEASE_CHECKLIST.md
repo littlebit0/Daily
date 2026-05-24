@@ -5,8 +5,8 @@
 - Build artifact: `build/app/outputs/bundle/release/app-release.aab`.
 - Confirm `android/key.properties` exists on the release machine and points to
   the upload keystore.
-- Confirm Firebase Android app has debug and upload/release SHA-1/SHA-256
-  fingerprints.
+- Confirm Google OAuth Android client has the package name and upload/release
+  SHA-1/SHA-256 fingerprints.
 - Confirm OAuth consent screen is published before external Google accounts are
   expected to sign in.
 - Test on a clean Android install:
@@ -16,16 +16,21 @@
   4. Create, edit, delete, and sync an event.
   5. Reinstall and confirm restore.
   6. Log out from Settings and confirm the welcome screen appears.
-  7. Run membership withdrawal and confirm local data is cleared and the Drive
+  7. Add URL, weather, sensitive flag, D-day, and recurrence edits to a sample
+     event.
+  8. Run membership withdrawal and confirm local data is cleared and the Drive
      app-data backup is deleted.
 
 ## Windows
 
 - Build artifact: `build/windows/x64/runner/Release/daily.exe`.
 - The Windows app can be packaged from the release directory.
-- Google Drive sync currently degrades gracefully on platforms where
-  `google_sign_in` has no native implementation. Before public Windows release,
-  add and test a desktop OAuth browser flow if Windows sync must be available.
+- The distributed ZIP must include `daily.exe`, DLL files, and the `data`
+  directory from `build/windows/x64/runner/Release`.
+- Google Drive sync uses the desktop OAuth browser flow on Windows. Build with
+  the Desktop OAuth client ID and secret supplied through dart defines.
+- Closing the main window should leave the app running in the tray, and the
+  tray mini calendar should open from the tray menu.
 
 ## Store and Consent Assets
 

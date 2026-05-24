@@ -22,9 +22,117 @@ class DailyApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: DailyTheme.light(),
       home: settings.onboardingCompleted
-          ? const _GoogleAccountGate()
+          ? settings.appLockEnabled
+                ? const _AppLockGate(child: _GoogleAccountGate())
+                : const _GoogleAccountGate()
           : const WelcomePage(),
     );
+  }
+}
+
+class _AppLockGate extends ConsumerStatefulWidget {
+  const _AppLockGate({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_AppLockGate> createState() => _AppLockGateState();
+}
+
+class _AppLockGateState extends ConsumerState<_AppLockGate>
+    with WidgetsBindingObserver {
+  final _controller = TextEditingController();
+  var _unlocked = false;
+  var _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _controller.clear();
+      if (mounted) {
+        setState(() => _unlocked = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_unlocked) {
+      return widget.child;
+    }
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.lock_outline, size: 42),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Daily 잠금 해제',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: _controller,
+                    autofocus: true,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _unlock(),
+                    decoration: InputDecoration(
+                      labelText: 'PIN',
+                      errorText: _error.isEmpty ? null : _error,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  FilledButton(onPressed: _unlock, child: const Text('잠금 해제')),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _unlock() async {
+    final ok = await ref
+        .read(settingsRepositoryProvider)
+        .verifyAppLockPin(_controller.text.trim());
+    if (!mounted) {
+      return;
+    }
+    if (ok) {
+      setState(() {
+        _unlocked = true;
+        _error = '';
+      });
+    } else {
+      setState(() => _error = 'PIN이 일치하지 않습니다.');
+    }
   }
 }
 

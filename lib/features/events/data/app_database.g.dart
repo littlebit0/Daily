@@ -47,6 +47,26 @@ class $EventRecordsTable extends EventRecords
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _urlMeta = const VerificationMeta('url');
+  @override
+  late final GeneratedColumn<String> url = GeneratedColumn<String>(
+    'url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _weatherMeta = const VerificationMeta(
+    'weather',
+  );
+  @override
+  late final GeneratedColumn<String> weather = GeneratedColumn<String>(
+    'weather',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _startAtMeta = const VerificationMeta(
     'startAt',
   );
@@ -159,6 +179,18 @@ class $EventRecordsTable extends EventRecords
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _recurrenceExcludedDatesMeta =
+      const VerificationMeta('recurrenceExcludedDates');
+  @override
+  late final GeneratedColumn<String> recurrenceExcludedDates =
+      GeneratedColumn<String>(
+        'recurrence_excluded_dates',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -231,12 +263,29 @@ class $EventRecordsTable extends EventRecords
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _sensitiveMeta = const VerificationMeta(
+    'sensitive',
+  );
+  @override
+  late final GeneratedColumn<bool> sensitive = GeneratedColumn<bool>(
+    'sensitive',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sensitive" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     title,
     memo,
     location,
+    url,
+    weather,
     startAt,
     endAt,
     allDay,
@@ -247,12 +296,14 @@ class $EventRecordsTable extends EventRecords
     recurrenceInterval,
     recurrenceUntil,
     recurrenceCount,
+    recurrenceExcludedDates,
     createdAt,
     updatedAt,
     deletedAt,
     deviceId,
     syncStatus,
     showDday,
+    sensitive,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -289,6 +340,18 @@ class $EventRecordsTable extends EventRecords
       context.handle(
         _locationMeta,
         location.isAcceptableOrUnknown(data['location']!, _locationMeta),
+      );
+    }
+    if (data.containsKey('url')) {
+      context.handle(
+        _urlMeta,
+        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
+      );
+    }
+    if (data.containsKey('weather')) {
+      context.handle(
+        _weatherMeta,
+        weather.isAcceptableOrUnknown(data['weather']!, _weatherMeta),
       );
     }
     if (data.containsKey('start_at')) {
@@ -372,6 +435,15 @@ class $EventRecordsTable extends EventRecords
         ),
       );
     }
+    if (data.containsKey('recurrence_excluded_dates')) {
+      context.handle(
+        _recurrenceExcludedDatesMeta,
+        recurrenceExcludedDates.isAcceptableOrUnknown(
+          data['recurrence_excluded_dates']!,
+          _recurrenceExcludedDatesMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -412,6 +484,12 @@ class $EventRecordsTable extends EventRecords
         showDday.isAcceptableOrUnknown(data['show_dday']!, _showDdayMeta),
       );
     }
+    if (data.containsKey('sensitive')) {
+      context.handle(
+        _sensitiveMeta,
+        sensitive.isAcceptableOrUnknown(data['sensitive']!, _sensitiveMeta),
+      );
+    }
     return context;
   }
 
@@ -436,6 +514,14 @@ class $EventRecordsTable extends EventRecords
       location: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}location'],
+      ),
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      ),
+      weather: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}weather'],
       ),
       startAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -477,6 +563,10 @@ class $EventRecordsTable extends EventRecords
         DriftSqlType.int,
         data['${effectivePrefix}recurrence_count'],
       ),
+      recurrenceExcludedDates: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recurrence_excluded_dates'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -501,6 +591,10 @@ class $EventRecordsTable extends EventRecords
         DriftSqlType.bool,
         data['${effectivePrefix}show_dday'],
       )!,
+      sensitive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sensitive'],
+      )!,
     );
   }
 
@@ -515,6 +609,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
   final String title;
   final String? memo;
   final String? location;
+  final String? url;
+  final String? weather;
   final DateTime startAt;
   final DateTime endAt;
   final bool allDay;
@@ -525,17 +621,21 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
   final int recurrenceInterval;
   final DateTime? recurrenceUntil;
   final int? recurrenceCount;
+  final String recurrenceExcludedDates;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final String deviceId;
   final String syncStatus;
   final bool showDday;
+  final bool sensitive;
   const EventRecord({
     required this.id,
     required this.title,
     this.memo,
     this.location,
+    this.url,
+    this.weather,
     required this.startAt,
     required this.endAt,
     required this.allDay,
@@ -546,12 +646,14 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     required this.recurrenceInterval,
     this.recurrenceUntil,
     this.recurrenceCount,
+    required this.recurrenceExcludedDates,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
     required this.deviceId,
     required this.syncStatus,
     required this.showDday,
+    required this.sensitive,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -563,6 +665,12 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     }
     if (!nullToAbsent || location != null) {
       map['location'] = Variable<String>(location);
+    }
+    if (!nullToAbsent || url != null) {
+      map['url'] = Variable<String>(url);
+    }
+    if (!nullToAbsent || weather != null) {
+      map['weather'] = Variable<String>(weather);
     }
     map['start_at'] = Variable<DateTime>(startAt);
     map['end_at'] = Variable<DateTime>(endAt);
@@ -580,6 +688,9 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     if (!nullToAbsent || recurrenceCount != null) {
       map['recurrence_count'] = Variable<int>(recurrenceCount);
     }
+    map['recurrence_excluded_dates'] = Variable<String>(
+      recurrenceExcludedDates,
+    );
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -588,6 +699,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     map['device_id'] = Variable<String>(deviceId);
     map['sync_status'] = Variable<String>(syncStatus);
     map['show_dday'] = Variable<bool>(showDday);
+    map['sensitive'] = Variable<bool>(sensitive);
     return map;
   }
 
@@ -599,6 +711,10 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       location: location == null && nullToAbsent
           ? const Value.absent()
           : Value(location),
+      url: url == null && nullToAbsent ? const Value.absent() : Value(url),
+      weather: weather == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weather),
       startAt: Value(startAt),
       endAt: Value(endAt),
       allDay: Value(allDay),
@@ -615,6 +731,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       recurrenceCount: recurrenceCount == null && nullToAbsent
           ? const Value.absent()
           : Value(recurrenceCount),
+      recurrenceExcludedDates: Value(recurrenceExcludedDates),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -623,6 +740,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       deviceId: Value(deviceId),
       syncStatus: Value(syncStatus),
       showDday: Value(showDday),
+      sensitive: Value(sensitive),
     );
   }
 
@@ -636,6 +754,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       title: serializer.fromJson<String>(json['title']),
       memo: serializer.fromJson<String?>(json['memo']),
       location: serializer.fromJson<String?>(json['location']),
+      url: serializer.fromJson<String?>(json['url']),
+      weather: serializer.fromJson<String?>(json['weather']),
       startAt: serializer.fromJson<DateTime>(json['startAt']),
       endAt: serializer.fromJson<DateTime>(json['endAt']),
       allDay: serializer.fromJson<bool>(json['allDay']),
@@ -650,12 +770,16 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       recurrenceInterval: serializer.fromJson<int>(json['recurrenceInterval']),
       recurrenceUntil: serializer.fromJson<DateTime?>(json['recurrenceUntil']),
       recurrenceCount: serializer.fromJson<int?>(json['recurrenceCount']),
+      recurrenceExcludedDates: serializer.fromJson<String>(
+        json['recurrenceExcludedDates'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       deviceId: serializer.fromJson<String>(json['deviceId']),
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
       showDday: serializer.fromJson<bool>(json['showDday']),
+      sensitive: serializer.fromJson<bool>(json['sensitive']),
     );
   }
   @override
@@ -666,6 +790,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       'title': serializer.toJson<String>(title),
       'memo': serializer.toJson<String?>(memo),
       'location': serializer.toJson<String?>(location),
+      'url': serializer.toJson<String?>(url),
+      'weather': serializer.toJson<String?>(weather),
       'startAt': serializer.toJson<DateTime>(startAt),
       'endAt': serializer.toJson<DateTime>(endAt),
       'allDay': serializer.toJson<bool>(allDay),
@@ -676,12 +802,16 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       'recurrenceInterval': serializer.toJson<int>(recurrenceInterval),
       'recurrenceUntil': serializer.toJson<DateTime?>(recurrenceUntil),
       'recurrenceCount': serializer.toJson<int?>(recurrenceCount),
+      'recurrenceExcludedDates': serializer.toJson<String>(
+        recurrenceExcludedDates,
+      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'deviceId': serializer.toJson<String>(deviceId),
       'syncStatus': serializer.toJson<String>(syncStatus),
       'showDday': serializer.toJson<bool>(showDday),
+      'sensitive': serializer.toJson<bool>(sensitive),
     };
   }
 
@@ -690,6 +820,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     String? title,
     Value<String?> memo = const Value.absent(),
     Value<String?> location = const Value.absent(),
+    Value<String?> url = const Value.absent(),
+    Value<String?> weather = const Value.absent(),
     DateTime? startAt,
     DateTime? endAt,
     bool? allDay,
@@ -700,17 +832,21 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     int? recurrenceInterval,
     Value<DateTime?> recurrenceUntil = const Value.absent(),
     Value<int?> recurrenceCount = const Value.absent(),
+    String? recurrenceExcludedDates,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
     String? deviceId,
     String? syncStatus,
     bool? showDday,
+    bool? sensitive,
   }) => EventRecord(
     id: id ?? this.id,
     title: title ?? this.title,
     memo: memo.present ? memo.value : this.memo,
     location: location.present ? location.value : this.location,
+    url: url.present ? url.value : this.url,
+    weather: weather.present ? weather.value : this.weather,
     startAt: startAt ?? this.startAt,
     endAt: endAt ?? this.endAt,
     allDay: allDay ?? this.allDay,
@@ -727,12 +863,15 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     recurrenceCount: recurrenceCount.present
         ? recurrenceCount.value
         : this.recurrenceCount,
+    recurrenceExcludedDates:
+        recurrenceExcludedDates ?? this.recurrenceExcludedDates,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     deviceId: deviceId ?? this.deviceId,
     syncStatus: syncStatus ?? this.syncStatus,
     showDday: showDday ?? this.showDday,
+    sensitive: sensitive ?? this.sensitive,
   );
   EventRecord copyWithCompanion(EventRecordsCompanion data) {
     return EventRecord(
@@ -740,6 +879,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       title: data.title.present ? data.title.value : this.title,
       memo: data.memo.present ? data.memo.value : this.memo,
       location: data.location.present ? data.location.value : this.location,
+      url: data.url.present ? data.url.value : this.url,
+      weather: data.weather.present ? data.weather.value : this.weather,
       startAt: data.startAt.present ? data.startAt.value : this.startAt,
       endAt: data.endAt.present ? data.endAt.value : this.endAt,
       allDay: data.allDay.present ? data.allDay.value : this.allDay,
@@ -762,6 +903,9 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       recurrenceCount: data.recurrenceCount.present
           ? data.recurrenceCount.value
           : this.recurrenceCount,
+      recurrenceExcludedDates: data.recurrenceExcludedDates.present
+          ? data.recurrenceExcludedDates.value
+          : this.recurrenceExcludedDates,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -770,6 +914,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           ? data.syncStatus.value
           : this.syncStatus,
       showDday: data.showDday.present ? data.showDday.value : this.showDday,
+      sensitive: data.sensitive.present ? data.sensitive.value : this.sensitive,
     );
   }
 
@@ -780,6 +925,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           ..write('title: $title, ')
           ..write('memo: $memo, ')
           ..write('location: $location, ')
+          ..write('url: $url, ')
+          ..write('weather: $weather, ')
           ..write('startAt: $startAt, ')
           ..write('endAt: $endAt, ')
           ..write('allDay: $allDay, ')
@@ -790,22 +937,26 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           ..write('recurrenceInterval: $recurrenceInterval, ')
           ..write('recurrenceUntil: $recurrenceUntil, ')
           ..write('recurrenceCount: $recurrenceCount, ')
+          ..write('recurrenceExcludedDates: $recurrenceExcludedDates, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('deviceId: $deviceId, ')
           ..write('syncStatus: $syncStatus, ')
-          ..write('showDday: $showDday')
+          ..write('showDday: $showDday, ')
+          ..write('sensitive: $sensitive')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     title,
     memo,
     location,
+    url,
+    weather,
     startAt,
     endAt,
     allDay,
@@ -816,13 +967,15 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     recurrenceInterval,
     recurrenceUntil,
     recurrenceCount,
+    recurrenceExcludedDates,
     createdAt,
     updatedAt,
     deletedAt,
     deviceId,
     syncStatus,
     showDday,
-  );
+    sensitive,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -831,6 +984,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           other.title == this.title &&
           other.memo == this.memo &&
           other.location == this.location &&
+          other.url == this.url &&
+          other.weather == this.weather &&
           other.startAt == this.startAt &&
           other.endAt == this.endAt &&
           other.allDay == this.allDay &&
@@ -841,12 +996,14 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           other.recurrenceInterval == this.recurrenceInterval &&
           other.recurrenceUntil == this.recurrenceUntil &&
           other.recurrenceCount == this.recurrenceCount &&
+          other.recurrenceExcludedDates == this.recurrenceExcludedDates &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
           other.deviceId == this.deviceId &&
           other.syncStatus == this.syncStatus &&
-          other.showDday == this.showDday);
+          other.showDday == this.showDday &&
+          other.sensitive == this.sensitive);
 }
 
 class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
@@ -854,6 +1011,8 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
   final Value<String> title;
   final Value<String?> memo;
   final Value<String?> location;
+  final Value<String?> url;
+  final Value<String?> weather;
   final Value<DateTime> startAt;
   final Value<DateTime> endAt;
   final Value<bool> allDay;
@@ -864,18 +1023,22 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
   final Value<int> recurrenceInterval;
   final Value<DateTime?> recurrenceUntil;
   final Value<int?> recurrenceCount;
+  final Value<String> recurrenceExcludedDates;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<String> deviceId;
   final Value<String> syncStatus;
   final Value<bool> showDday;
+  final Value<bool> sensitive;
   final Value<int> rowid;
   const EventRecordsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
     this.memo = const Value.absent(),
     this.location = const Value.absent(),
+    this.url = const Value.absent(),
+    this.weather = const Value.absent(),
     this.startAt = const Value.absent(),
     this.endAt = const Value.absent(),
     this.allDay = const Value.absent(),
@@ -886,12 +1049,14 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     this.recurrenceInterval = const Value.absent(),
     this.recurrenceUntil = const Value.absent(),
     this.recurrenceCount = const Value.absent(),
+    this.recurrenceExcludedDates = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.showDday = const Value.absent(),
+    this.sensitive = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   EventRecordsCompanion.insert({
@@ -899,6 +1064,8 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     required String title,
     this.memo = const Value.absent(),
     this.location = const Value.absent(),
+    this.url = const Value.absent(),
+    this.weather = const Value.absent(),
     required DateTime startAt,
     required DateTime endAt,
     this.allDay = const Value.absent(),
@@ -909,12 +1076,14 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     this.recurrenceInterval = const Value.absent(),
     this.recurrenceUntil = const Value.absent(),
     this.recurrenceCount = const Value.absent(),
+    this.recurrenceExcludedDates = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.showDday = const Value.absent(),
+    this.sensitive = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -928,6 +1097,8 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Expression<String>? title,
     Expression<String>? memo,
     Expression<String>? location,
+    Expression<String>? url,
+    Expression<String>? weather,
     Expression<DateTime>? startAt,
     Expression<DateTime>? endAt,
     Expression<bool>? allDay,
@@ -938,12 +1109,14 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Expression<int>? recurrenceInterval,
     Expression<DateTime>? recurrenceUntil,
     Expression<int>? recurrenceCount,
+    Expression<String>? recurrenceExcludedDates,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<String>? deviceId,
     Expression<String>? syncStatus,
     Expression<bool>? showDday,
+    Expression<bool>? sensitive,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -951,6 +1124,8 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       if (title != null) 'title': title,
       if (memo != null) 'memo': memo,
       if (location != null) 'location': location,
+      if (url != null) 'url': url,
+      if (weather != null) 'weather': weather,
       if (startAt != null) 'start_at': startAt,
       if (endAt != null) 'end_at': endAt,
       if (allDay != null) 'all_day': allDay,
@@ -963,12 +1138,15 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       if (recurrenceInterval != null) 'recurrence_interval': recurrenceInterval,
       if (recurrenceUntil != null) 'recurrence_until': recurrenceUntil,
       if (recurrenceCount != null) 'recurrence_count': recurrenceCount,
+      if (recurrenceExcludedDates != null)
+        'recurrence_excluded_dates': recurrenceExcludedDates,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (deviceId != null) 'device_id': deviceId,
       if (syncStatus != null) 'sync_status': syncStatus,
       if (showDday != null) 'show_dday': showDday,
+      if (sensitive != null) 'sensitive': sensitive,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -978,6 +1156,8 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Value<String>? title,
     Value<String?>? memo,
     Value<String?>? location,
+    Value<String?>? url,
+    Value<String?>? weather,
     Value<DateTime>? startAt,
     Value<DateTime>? endAt,
     Value<bool>? allDay,
@@ -988,12 +1168,14 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Value<int>? recurrenceInterval,
     Value<DateTime?>? recurrenceUntil,
     Value<int?>? recurrenceCount,
+    Value<String>? recurrenceExcludedDates,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<String>? deviceId,
     Value<String>? syncStatus,
     Value<bool>? showDday,
+    Value<bool>? sensitive,
     Value<int>? rowid,
   }) {
     return EventRecordsCompanion(
@@ -1001,6 +1183,8 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       title: title ?? this.title,
       memo: memo ?? this.memo,
       location: location ?? this.location,
+      url: url ?? this.url,
+      weather: weather ?? this.weather,
       startAt: startAt ?? this.startAt,
       endAt: endAt ?? this.endAt,
       allDay: allDay ?? this.allDay,
@@ -1012,12 +1196,15 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
       recurrenceUntil: recurrenceUntil ?? this.recurrenceUntil,
       recurrenceCount: recurrenceCount ?? this.recurrenceCount,
+      recurrenceExcludedDates:
+          recurrenceExcludedDates ?? this.recurrenceExcludedDates,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       deviceId: deviceId ?? this.deviceId,
       syncStatus: syncStatus ?? this.syncStatus,
       showDday: showDday ?? this.showDday,
+      sensitive: sensitive ?? this.sensitive,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1036,6 +1223,12 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     }
     if (location.present) {
       map['location'] = Variable<String>(location.value);
+    }
+    if (url.present) {
+      map['url'] = Variable<String>(url.value);
+    }
+    if (weather.present) {
+      map['weather'] = Variable<String>(weather.value);
     }
     if (startAt.present) {
       map['start_at'] = Variable<DateTime>(startAt.value);
@@ -1069,6 +1262,11 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     if (recurrenceCount.present) {
       map['recurrence_count'] = Variable<int>(recurrenceCount.value);
     }
+    if (recurrenceExcludedDates.present) {
+      map['recurrence_excluded_dates'] = Variable<String>(
+        recurrenceExcludedDates.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1087,6 +1285,9 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     if (showDday.present) {
       map['show_dday'] = Variable<bool>(showDday.value);
     }
+    if (sensitive.present) {
+      map['sensitive'] = Variable<bool>(sensitive.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1100,6 +1301,8 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
           ..write('title: $title, ')
           ..write('memo: $memo, ')
           ..write('location: $location, ')
+          ..write('url: $url, ')
+          ..write('weather: $weather, ')
           ..write('startAt: $startAt, ')
           ..write('endAt: $endAt, ')
           ..write('allDay: $allDay, ')
@@ -1110,12 +1313,14 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
           ..write('recurrenceInterval: $recurrenceInterval, ')
           ..write('recurrenceUntil: $recurrenceUntil, ')
           ..write('recurrenceCount: $recurrenceCount, ')
+          ..write('recurrenceExcludedDates: $recurrenceExcludedDates, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('deviceId: $deviceId, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('showDday: $showDday, ')
+          ..write('sensitive: $sensitive, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1139,6 +1344,8 @@ typedef $$EventRecordsTableCreateCompanionBuilder =
       required String title,
       Value<String?> memo,
       Value<String?> location,
+      Value<String?> url,
+      Value<String?> weather,
       required DateTime startAt,
       required DateTime endAt,
       Value<bool> allDay,
@@ -1149,12 +1356,14 @@ typedef $$EventRecordsTableCreateCompanionBuilder =
       Value<int> recurrenceInterval,
       Value<DateTime?> recurrenceUntil,
       Value<int?> recurrenceCount,
+      Value<String> recurrenceExcludedDates,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
       Value<String> deviceId,
       Value<String> syncStatus,
       Value<bool> showDday,
+      Value<bool> sensitive,
       Value<int> rowid,
     });
 typedef $$EventRecordsTableUpdateCompanionBuilder =
@@ -1163,6 +1372,8 @@ typedef $$EventRecordsTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String?> memo,
       Value<String?> location,
+      Value<String?> url,
+      Value<String?> weather,
       Value<DateTime> startAt,
       Value<DateTime> endAt,
       Value<bool> allDay,
@@ -1173,12 +1384,14 @@ typedef $$EventRecordsTableUpdateCompanionBuilder =
       Value<int> recurrenceInterval,
       Value<DateTime?> recurrenceUntil,
       Value<int?> recurrenceCount,
+      Value<String> recurrenceExcludedDates,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<String> deviceId,
       Value<String> syncStatus,
       Value<bool> showDday,
+      Value<bool> sensitive,
       Value<int> rowid,
     });
 
@@ -1208,6 +1421,16 @@ class $$EventRecordsTableFilterComposer
 
   ColumnFilters<String> get location => $composableBuilder(
     column: $table.location,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get weather => $composableBuilder(
+    column: $table.weather,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1261,6 +1484,11 @@ class $$EventRecordsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get recurrenceExcludedDates => $composableBuilder(
+    column: $table.recurrenceExcludedDates,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
@@ -1288,6 +1516,11 @@ class $$EventRecordsTableFilterComposer
 
   ColumnFilters<bool> get showDday => $composableBuilder(
     column: $table.showDday,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get sensitive => $composableBuilder(
+    column: $table.sensitive,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1318,6 +1551,16 @@ class $$EventRecordsTableOrderingComposer
 
   ColumnOrderings<String> get location => $composableBuilder(
     column: $table.location,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get weather => $composableBuilder(
+    column: $table.weather,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -1371,6 +1614,11 @@ class $$EventRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get recurrenceExcludedDates => $composableBuilder(
+    column: $table.recurrenceExcludedDates,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -1400,6 +1648,11 @@ class $$EventRecordsTableOrderingComposer
     column: $table.showDday,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get sensitive => $composableBuilder(
+    column: $table.sensitive,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$EventRecordsTableAnnotationComposer
@@ -1422,6 +1675,12 @@ class $$EventRecordsTableAnnotationComposer
 
   GeneratedColumn<String> get location =>
       $composableBuilder(column: $table.location, builder: (column) => column);
+
+  GeneratedColumn<String> get url =>
+      $composableBuilder(column: $table.url, builder: (column) => column);
+
+  GeneratedColumn<String> get weather =>
+      $composableBuilder(column: $table.weather, builder: (column) => column);
 
   GeneratedColumn<DateTime> get startAt =>
       $composableBuilder(column: $table.startAt, builder: (column) => column);
@@ -1465,6 +1724,11 @@ class $$EventRecordsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get recurrenceExcludedDates => $composableBuilder(
+    column: $table.recurrenceExcludedDates,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -1484,6 +1748,9 @@ class $$EventRecordsTableAnnotationComposer
 
   GeneratedColumn<bool> get showDday =>
       $composableBuilder(column: $table.showDday, builder: (column) => column);
+
+  GeneratedColumn<bool> get sensitive =>
+      $composableBuilder(column: $table.sensitive, builder: (column) => column);
 }
 
 class $$EventRecordsTableTableManager
@@ -1521,6 +1788,8 @@ class $$EventRecordsTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String?> memo = const Value.absent(),
                 Value<String?> location = const Value.absent(),
+                Value<String?> url = const Value.absent(),
+                Value<String?> weather = const Value.absent(),
                 Value<DateTime> startAt = const Value.absent(),
                 Value<DateTime> endAt = const Value.absent(),
                 Value<bool> allDay = const Value.absent(),
@@ -1531,18 +1800,22 @@ class $$EventRecordsTableTableManager
                 Value<int> recurrenceInterval = const Value.absent(),
                 Value<DateTime?> recurrenceUntil = const Value.absent(),
                 Value<int?> recurrenceCount = const Value.absent(),
+                Value<String> recurrenceExcludedDates = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> deviceId = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<bool> showDday = const Value.absent(),
+                Value<bool> sensitive = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EventRecordsCompanion(
                 id: id,
                 title: title,
                 memo: memo,
                 location: location,
+                url: url,
+                weather: weather,
                 startAt: startAt,
                 endAt: endAt,
                 allDay: allDay,
@@ -1553,12 +1826,14 @@ class $$EventRecordsTableTableManager
                 recurrenceInterval: recurrenceInterval,
                 recurrenceUntil: recurrenceUntil,
                 recurrenceCount: recurrenceCount,
+                recurrenceExcludedDates: recurrenceExcludedDates,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 deviceId: deviceId,
                 syncStatus: syncStatus,
                 showDday: showDday,
+                sensitive: sensitive,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -1567,6 +1842,8 @@ class $$EventRecordsTableTableManager
                 required String title,
                 Value<String?> memo = const Value.absent(),
                 Value<String?> location = const Value.absent(),
+                Value<String?> url = const Value.absent(),
+                Value<String?> weather = const Value.absent(),
                 required DateTime startAt,
                 required DateTime endAt,
                 Value<bool> allDay = const Value.absent(),
@@ -1577,18 +1854,22 @@ class $$EventRecordsTableTableManager
                 Value<int> recurrenceInterval = const Value.absent(),
                 Value<DateTime?> recurrenceUntil = const Value.absent(),
                 Value<int?> recurrenceCount = const Value.absent(),
+                Value<String> recurrenceExcludedDates = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> deviceId = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<bool> showDday = const Value.absent(),
+                Value<bool> sensitive = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EventRecordsCompanion.insert(
                 id: id,
                 title: title,
                 memo: memo,
                 location: location,
+                url: url,
+                weather: weather,
                 startAt: startAt,
                 endAt: endAt,
                 allDay: allDay,
@@ -1599,12 +1880,14 @@ class $$EventRecordsTableTableManager
                 recurrenceInterval: recurrenceInterval,
                 recurrenceUntil: recurrenceUntil,
                 recurrenceCount: recurrenceCount,
+                recurrenceExcludedDates: recurrenceExcludedDates,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 deviceId: deviceId,
                 syncStatus: syncStatus,
                 showDday: showDday,
+                sensitive: sensitive,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

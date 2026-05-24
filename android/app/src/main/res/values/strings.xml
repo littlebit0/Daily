@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Daily</string>
+    <string name="widget_month_description">Daily 월간 미니 캘린더</string>
+    <string name="widget_today_description">Daily 오늘 일정</string>
+    <string name="widget_dday_description">Daily D-day 일정</string>
+</resources>

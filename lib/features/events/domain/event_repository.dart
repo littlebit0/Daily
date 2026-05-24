@@ -8,6 +8,8 @@ abstract interface class EventRepository {
 
   Future<List<CalendarEvent>> search(String query);
 
+  Future<CalendarEvent?> findById(String id);
+
   Future<List<CalendarEvent>> pendingSyncEvents();
 
   Future<List<CalendarEvent>> allEventsForSync();

@@ -1,4 +1,5 @@
 import 'package:daily/features/calendar/widgets/calendar_month_grid.dart';
+import 'package:daily/core/settings/app_settings.dart';
 import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_category.dart';
 import 'package:flutter/material.dart';
@@ -33,6 +34,8 @@ void main() {
               events: [event],
               weekStartsOnMonday: true,
               showLunarDates: true,
+              density: CalendarDensity.standard,
+              hideSensitiveEvents: false,
               onDateSelected: (_) {},
             ),
           ),

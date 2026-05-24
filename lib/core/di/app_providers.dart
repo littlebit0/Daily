@@ -130,6 +130,12 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
   return DateTime(now.year, now.month, now.day);
 });
 
+final calendarViewModeProvider = StateProvider<CalendarViewMode>((ref) {
+  return ref.read(appSettingsProvider).defaultCalendarView;
+});
+
+final calendarSearchQueryProvider = StateProvider<String>((ref) => '');
+
 final eventsInRangeProvider =
     StreamProvider.family<List<CalendarEvent>, CalendarRange>((ref, range) {
       final holidays = ref

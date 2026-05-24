@@ -5,6 +5,8 @@ import '../domain/event_category.dart';
 import '../domain/event_draft.dart';
 import '../domain/recurrence_rule.dart';
 
+enum _RecurrenceEndMode { never, until, count }
+
 class EventEditorDialog extends StatefulWidget {
   const EventEditorDialog({
     super.key,
@@ -31,6 +33,8 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _memoController;
   late final TextEditingController _locationController;
+  late final TextEditingController _urlController;
+  late final TextEditingController _weatherController;
   late DateTime _startDate;
   late DateTime _endDate;
   late TimeOfDay _startTime;
@@ -39,7 +43,12 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   late EventCategory _category;
   late int? _reminder;
   late RecurrenceFrequency _frequency;
+  late int _recurrenceInterval;
+  late _RecurrenceEndMode _recurrenceEndMode;
+  late DateTime? _recurrenceUntil;
+  late int? _recurrenceCount;
   late bool _showDday;
+  late bool _sensitive;
 
   @override
   void initState() {
@@ -48,6 +57,8 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     _titleController = TextEditingController(text: event?.title ?? '');
     _memoController = TextEditingController(text: event?.memo ?? '');
     _locationController = TextEditingController(text: event?.location ?? '');
+    _urlController = TextEditingController(text: event?.url ?? '');
+    _weatherController = TextEditingController(text: event?.weather ?? '');
     final sourceDate = event?.startAt ?? widget.initialDate;
     _startDate = DateTime(sourceDate.year, sourceDate.month, sourceDate.day);
     final initialEndDate = widget.initialEndDate ?? widget.initialDate;
@@ -83,7 +94,16 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     );
     _reminder = event?.reminderMinutesBefore ?? widget.defaultReminderMinutes;
     _frequency = event?.recurrence.frequency ?? RecurrenceFrequency.none;
+    _recurrenceInterval = event?.recurrence.interval ?? 1;
+    _recurrenceUntil = event?.recurrence.until;
+    _recurrenceCount = event?.recurrence.count;
+    _recurrenceEndMode = _recurrenceUntil != null
+        ? _RecurrenceEndMode.until
+        : _recurrenceCount != null
+        ? _RecurrenceEndMode.count
+        : _RecurrenceEndMode.never;
     _showDday = event?.showDday ?? false;
+    _sensitive = event?.sensitive ?? false;
   }
 
   @override
@@ -91,6 +111,8 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     _titleController.dispose();
     _memoController.dispose();
     _locationController.dispose();
+    _urlController.dispose();
+    _weatherController.dispose();
     super.dispose();
   }
 
@@ -247,6 +269,66 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                   }
                 },
               ),
+              if (_frequency != RecurrenceFrequency.none) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _LabeledPickerButton(
+                        label: '반복 간격',
+                        icon: Icons.repeat,
+                        value: '$_recurrenceInterval${_frequencyUnitLabel()}마다',
+                        onPressed: _pickRecurrenceInterval,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<_RecurrenceEndMode>(
+                        initialValue: _recurrenceEndMode,
+                        decoration: const InputDecoration(labelText: '반복 종료'),
+                        items: const [
+                          DropdownMenuItem(
+                            value: _RecurrenceEndMode.never,
+                            child: Text('종료 없음'),
+                          ),
+                          DropdownMenuItem(
+                            value: _RecurrenceEndMode.until,
+                            child: Text('날짜까지'),
+                          ),
+                          DropdownMenuItem(
+                            value: _RecurrenceEndMode.count,
+                            child: Text('횟수만큼'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() => _recurrenceEndMode = value);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                if (_recurrenceEndMode == _RecurrenceEndMode.until) ...[
+                  const SizedBox(height: 8),
+                  _LabeledPickerButton(
+                    label: '반복 종료일',
+                    icon: Icons.event_busy_outlined,
+                    value: _formatDate(_recurrenceUntil ?? _endDate),
+                    onPressed: _pickRecurrenceUntil,
+                  ),
+                ],
+                if (_recurrenceEndMode == _RecurrenceEndMode.count) ...[
+                  const SizedBox(height: 8),
+                  _LabeledPickerButton(
+                    label: '반복 횟수',
+                    icon: Icons.format_list_numbered,
+                    value: '${_recurrenceCount ?? 10}회',
+                    onPressed: _pickRecurrenceCount,
+                  ),
+                ],
+              ],
               const SizedBox(height: 12),
               SwitchListTile(
                 value: _showDday,
@@ -255,10 +337,31 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                 subtitle: const Text('달력과 일정 목록에 D-day를 함께 표시합니다.'),
                 contentPadding: EdgeInsets.zero,
               ),
+              SwitchListTile(
+                value: _sensitive,
+                onChanged: (value) => setState(() => _sensitive = value),
+                title: const Text('민감 일정'),
+                subtitle: const Text('설정에 따라 제목을 비공개로 숨길 수 있습니다.'),
+                contentPadding: EdgeInsets.zero,
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: _locationController,
                 decoration: const InputDecoration(labelText: '장소'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _urlController,
+                decoration: const InputDecoration(labelText: 'URL / 링크'),
+                keyboardType: TextInputType.url,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _weatherController,
+                decoration: const InputDecoration(
+                  labelText: '날씨',
+                  hintText: '예: 흐림',
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -320,6 +423,48 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     );
     if (picked != null && picked >= 0) {
       setState(() => _reminder = picked);
+    }
+  }
+
+  Future<void> _pickRecurrenceInterval() async {
+    final picked = await _showNumberDialog(
+      context: context,
+      title: '반복 간격',
+      label: '몇 ${_frequencyUnitLabel()}마다 반복할까요?',
+      initialValue: _recurrenceInterval,
+    );
+    if (picked != null && picked > 0) {
+      setState(() => _recurrenceInterval = picked);
+    }
+  }
+
+  Future<void> _pickRecurrenceUntil() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: _startDate,
+      lastDate: DateTime(2100),
+      initialDate: _recurrenceUntil ?? _endDate,
+    );
+    if (picked != null) {
+      setState(() {
+        _recurrenceUntil = DateTime(picked.year, picked.month, picked.day);
+        _recurrenceEndMode = _RecurrenceEndMode.until;
+      });
+    }
+  }
+
+  Future<void> _pickRecurrenceCount() async {
+    final picked = await _showNumberDialog(
+      context: context,
+      title: '반복 횟수',
+      label: '몇 회 반복할까요?',
+      initialValue: _recurrenceCount ?? 10,
+    );
+    if (picked != null && picked > 0) {
+      setState(() {
+        _recurrenceCount = picked;
+        _recurrenceEndMode = _RecurrenceEndMode.count;
+      });
     }
   }
 
@@ -417,14 +562,36 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
       location: _locationController.text.trim().isEmpty
           ? null
           : _locationController.text.trim(),
+      url: _urlController.text.trim().isEmpty
+          ? null
+          : _urlController.text.trim(),
+      weather: _weatherController.text.trim().isEmpty
+          ? null
+          : _weatherController.text.trim(),
       startAt: startAt,
       endAt: endAt,
       allDay: _allDay,
       category: _category,
       colorValue: _category.colorValue,
       reminderMinutesBefore: _reminder,
-      recurrence: RecurrenceRule(frequency: _frequency),
+      recurrence: RecurrenceRule(
+        frequency: _frequency,
+        interval: _frequency == RecurrenceFrequency.none
+            ? 1
+            : _recurrenceInterval,
+        until:
+            _frequency == RecurrenceFrequency.none ||
+                _recurrenceEndMode != _RecurrenceEndMode.until
+            ? null
+            : _recurrenceUntil,
+        count:
+            _frequency == RecurrenceFrequency.none ||
+                _recurrenceEndMode != _RecurrenceEndMode.count
+            ? null
+            : _recurrenceCount,
+      ),
       showDday: _showDday,
+      sensitive: _sensitive,
     );
     Navigator.of(context).pop(draft);
   }
@@ -438,6 +605,16 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
 
   String _formatDate(DateTime date) {
     return '${date.year}년 ${date.month}월 ${date.day}일';
+  }
+
+  String _frequencyUnitLabel() {
+    return switch (_frequency) {
+      RecurrenceFrequency.daily => '일',
+      RecurrenceFrequency.weekly => '주',
+      RecurrenceFrequency.monthly => '개월',
+      RecurrenceFrequency.yearly => '년',
+      RecurrenceFrequency.none => '번',
+    };
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/sync/google_drive_sync_service.dart';
 import '../../events/domain/event_category.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -199,6 +200,87 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onChanged: (value) =>
                     _save(settings.copyWith(showLunarDates: value)),
               ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('기본 보기'),
+                subtitle: const Text('앱을 열었을 때 먼저 보여줄 달력 보기'),
+                trailing: DropdownButton<CalendarViewMode>(
+                  value: settings.defaultCalendarView,
+                  items: CalendarViewMode.values
+                      .map(
+                        (mode) => DropdownMenuItem(
+                          value: mode,
+                          child: Text(mode.label),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      _save(settings.copyWith(defaultCalendarView: value));
+                      ref.read(calendarViewModeProvider.notifier).state = value;
+                    }
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('월간 일정 표시 밀도'),
+                subtitle: const Text('날짜 칸 안에 표시할 일정 수를 조절합니다.'),
+                trailing: DropdownButton<CalendarDensity>(
+                  value: settings.calendarDensity,
+                  items: CalendarDensity.values
+                      .map(
+                        (density) => DropdownMenuItem(
+                          value: density,
+                          child: Text(density.label),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      _save(settings.copyWith(calendarDensity: value));
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          _SettingsSection(
+            title: '개인정보',
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: settings.hideSensitiveEvents,
+                title: const Text('민감 일정 제목 숨김'),
+                subtitle: const Text('달력과 상세 화면에서 민감 일정을 비공개로 표시합니다.'),
+                onChanged: (value) =>
+                    _save(settings.copyWith(hideSensitiveEvents: value)),
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: settings.hideSensitiveNotifications,
+                title: const Text('알림에서 민감 일정 숨김'),
+                subtitle: const Text('민감 일정 알림 제목을 비공개로 표시합니다.'),
+                onChanged: (value) async {
+                  await _save(
+                    settings.copyWith(hideSensitiveNotifications: value),
+                  );
+                  await _rescheduleNotifications();
+                },
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: settings.appLockEnabled,
+                title: const Text('앱 잠금'),
+                subtitle: const Text('앱 실행 시 PIN을 확인합니다.'),
+                onChanged: (value) => value
+                    ? _enableAppLock(settings)
+                    : _disableAppLock(settings),
+              ),
             ],
           ),
           _SettingsSection(
@@ -295,6 +377,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsSection(
             title: '계정',
             children: [
+              _SyncStatusTile(
+                notifier: ref
+                    .watch(googleDriveSyncServiceProvider)
+                    .statusNotifier,
+              ),
+              const Divider(height: 1),
               _GoogleDriveSyncSettings(
                 email: _driveEmail,
                 busy: _syncBusy,
@@ -330,6 +418,40 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       setState(() => _backupMessage = '복원 완료');
     } on Object catch (error) {
       setState(() => _backupMessage = '$error');
+    }
+  }
+
+  Future<void> _enableAppLock(AppSettings settings) async {
+    final pin = await _showPinDialog(
+      context: context,
+      title: '앱 잠금 PIN 설정',
+      label: '4자리 이상 PIN',
+    );
+    if (pin == null) {
+      return;
+    }
+    if (pin.length < 4) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('PIN은 4자리 이상이어야 합니다.')));
+      }
+      return;
+    }
+    await ref.read(settingsRepositoryProvider).saveAppLockPin(pin);
+    await _save(settings.copyWith(appLockEnabled: true));
+  }
+
+  Future<void> _disableAppLock(AppSettings settings) async {
+    await ref.read(settingsRepositoryProvider).deleteAppLockPin();
+    await _save(settings.copyWith(appLockEnabled: false));
+  }
+
+  Future<void> _rescheduleNotifications() async {
+    final events = await ref.read(eventRepositoryProvider).allEventsForSync();
+    for (final event in events.where((event) => event.deletedAt == null)) {
+      await ref.read(notificationServiceProvider).cancelEventReminder(event.id);
+      await ref.read(notificationServiceProvider).scheduleEventReminder(event);
     }
   }
 
@@ -813,6 +935,36 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
   }
 }
 
+class _SyncStatusTile extends StatelessWidget {
+  const _SyncStatusTile({required this.notifier});
+
+  final ValueNotifier<GoogleDriveSyncStatus> notifier;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<GoogleDriveSyncStatus>(
+      valueListenable: notifier,
+      builder: (context, status, _) {
+        final lastSyncedAt = status.lastSyncedAt;
+        final error = status.error;
+        final message = status.message;
+        final syncing = status.syncing;
+        final subtitle = [
+          if (lastSyncedAt != null) '마지막 성공: ${_formatDateTime(lastSyncedAt)}',
+          if (message.isNotEmpty) message,
+          if (error != null && error.isNotEmpty) error,
+        ].join('\n');
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(syncing ? Icons.sync : Icons.cloud_done_outlined),
+          title: const Text('동기화 상태'),
+          subtitle: Text(subtitle.isEmpty ? '아직 동기화 기록이 없습니다.' : subtitle),
+        );
+      },
+    );
+  }
+}
+
 Future<EventCategory?> _showCategoryDialog(BuildContext context) async {
   final controller = TextEditingController();
   var selectedColor = _SettingsPageState._categoryColors.first;
@@ -913,6 +1065,39 @@ Future<int?> _showNumberDialog({
   return result;
 }
 
+Future<String?> _showPinDialog({
+  required BuildContext context,
+  required String title,
+  required String label,
+}) async {
+  final controller = TextEditingController();
+  final result = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        obscureText: true,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(labelText: label),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+          child: const Text('적용'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  return result;
+}
+
 String _minutesLabel(int minutes) {
   if (minutes == 0) {
     return '정시';
@@ -938,4 +1123,10 @@ String _ddayLabel(int offset) {
 
 String _timeLabel(int hour, int minute) {
   return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+}
+
+String _formatDateTime(DateTime value) {
+  return '${value.month}월 ${value.day}일 '
+      '${value.hour.toString().padLeft(2, '0')}:'
+      '${value.minute.toString().padLeft(2, '0')}';
 }

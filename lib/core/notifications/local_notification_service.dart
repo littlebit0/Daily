@@ -84,6 +84,9 @@ class LocalNotificationService implements NotificationService {
 
     final settings = _settingsRepository.load();
     final reminderMinutes = event.reminderMinutesBefore;
+    final title = settings.hideSensitiveNotifications && event.sensitive
+        ? '비공개 일정'
+        : event.title;
     if (reminderMinutes != null) {
       final scheduled = _baseReminderTime(
         event,
@@ -91,7 +94,7 @@ class LocalNotificationService implements NotificationService {
       ).subtract(Duration(minutes: reminderMinutes));
       await _scheduleIfFuture(
         id: _eventNotificationId(event.id),
-        title: event.title,
+        title: title,
         body: reminderMinutes == 0
             ? '일정이 시작됩니다.'
             : '일정 시작 ${_minutesLabel(reminderMinutes)}입니다.',
@@ -113,7 +116,7 @@ class LocalNotificationService implements NotificationService {
       ).add(Duration(days: offset));
       await _scheduleIfFuture(
         id: _eventDdayNotificationId(event.id, offset),
-        title: '${_ddayLabel(offset)} ${event.title}',
+        title: '${_ddayLabel(offset)} $title',
         body: 'D-day 일정 알림입니다.',
         scheduled: scheduled,
         payload: '${event.id}:dday:$offset',

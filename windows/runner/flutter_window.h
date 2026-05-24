@@ -6,6 +6,7 @@
 #include <shellapi.h>
 
 #include <memory>
+#include <string>
 
 #include "win32_window.h"
 
@@ -28,7 +29,12 @@ class FlutterWindow : public Win32Window {
   void RemoveTrayIcon();
   void RestoreFromTray();
   void ShowTrayMenu();
+  void ShowMiniCalendar();
   void ExitFromTray();
+  std::wstring BuildMiniCalendarText();
+  int FirstWeekday(int year, int month);
+  int DaysInMonth(int year, int month);
+  bool IsLeapYear(int year);
 
   // The project to run.
   flutter::DartProject project_;

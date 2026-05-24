@@ -1,6 +1,9 @@
 #include "flutter_window.h"
 
+#include <ctime>
+#include <iomanip>
 #include <optional>
+#include <sstream>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
@@ -11,6 +14,7 @@ constexpr UINT kTrayIconId = 1;
 constexpr UINT kTrayIconMessage = WM_APP + 1;
 constexpr UINT kTrayOpenCommand = 40001;
 constexpr UINT kTrayExitCommand = 40002;
+constexpr UINT kTrayMiniCalendarCommand = 40003;
 
 }  // namespace
 
@@ -76,6 +80,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       switch (LOWORD(wparam)) {
         case kTrayOpenCommand:
           RestoreFromTray();
+          return 0;
+        case kTrayMiniCalendarCommand:
+          ShowMiniCalendar();
           return 0;
         case kTrayExitCommand:
           ExitFromTray();
@@ -176,6 +183,7 @@ void FlutterWindow::ShowTrayMenu() {
   }
 
   AppendMenu(menu, MF_STRING, kTrayOpenCommand, L"Open Daily");
+  AppendMenu(menu, MF_STRING, kTrayMiniCalendarCommand, L"Mini Calendar");
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenu(menu, MF_STRING, kTrayExitCommand, L"Exit");
 
@@ -197,4 +205,71 @@ void FlutterWindow::ExitFromTray() {
   exit_requested_ = true;
   RemoveTrayIcon();
   DestroyWindow(hwnd);
+}
+
+void FlutterWindow::ShowMiniCalendar() {
+  HWND hwnd = GetHandle();
+  if (!hwnd) {
+    return;
+  }
+
+  MessageBox(hwnd, BuildMiniCalendarText().c_str(), L"Daily Mini Calendar",
+             MB_OK | MB_ICONINFORMATION);
+}
+
+std::wstring FlutterWindow::BuildMiniCalendarText() {
+  std::time_t now_time = std::time(nullptr);
+  std::tm now = {};
+  localtime_s(&now, &now_time);
+
+  const int year = now.tm_year + 1900;
+  const int month = now.tm_mon + 1;
+  const int today = now.tm_mday;
+  const int first_weekday = FirstWeekday(year, month);
+  const int days_in_month = DaysInMonth(year, month);
+
+  std::wstringstream stream;
+  stream << year << L"." << std::setw(2) << std::setfill(L'0') << month
+         << L"\n\n";
+  stream << L"Sun Mon Tue Wed Thu Fri Sat\n";
+
+  for (int i = 0; i < first_weekday; ++i) {
+    stream << L"    ";
+  }
+
+  for (int day = 1; day <= days_in_month; ++day) {
+    if (day == today) {
+      stream << L"[" << std::setw(2) << std::setfill(L' ') << day << L"]";
+    } else {
+      stream << L" " << std::setw(2) << std::setfill(L' ') << day << L" ";
+    }
+    if ((first_weekday + day) % 7 == 0) {
+      stream << L"\n";
+    }
+  }
+
+  stream << L"\n\nOpen Daily to view and add schedules.";
+  return stream.str();
+}
+
+int FlutterWindow::FirstWeekday(int year, int month) {
+  std::tm first = {};
+  first.tm_year = year - 1900;
+  first.tm_mon = month - 1;
+  first.tm_mday = 1;
+  std::mktime(&first);
+  return first.tm_wday;
+}
+
+int FlutterWindow::DaysInMonth(int year, int month) {
+  static const int days[] = {31, 28, 31, 30, 31, 30,
+                             31, 31, 30, 31, 30, 31};
+  if (month == 2 && IsLeapYear(year)) {
+    return 29;
+  }
+  return days[month - 1];
+}
+
+bool FlutterWindow::IsLeapYear(int year) {
+  return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_category.dart';
@@ -45,6 +46,10 @@ class GoogleDriveSyncService implements SyncService {
   var _started = false;
   var _syncAgainRequested = false;
   var _nextPromptIfNecessary = false;
+
+  final statusNotifier = ValueNotifier<GoogleDriveSyncStatus>(
+    const GoogleDriveSyncStatus(),
+  );
 
   @override
   Future<void> start() async {
@@ -123,6 +128,7 @@ class GoogleDriveSyncService implements SyncService {
     _changeSyncTimer?.cancel();
     _autoSyncTimer?.cancel();
     unawaited(_accountSubscription?.cancel());
+    statusNotifier.dispose();
     if (_ownsHttpClient) {
       _httpClient.close();
     }
@@ -147,46 +153,71 @@ class GoogleDriveSyncService implements SyncService {
   }
 
   Future<void> _sync({required bool promptIfNecessary}) async {
-    final headers = await _authService.authorizationHeaders(
-      promptIfNecessary: promptIfNecessary,
+    statusNotifier.value = statusNotifier.value.copyWith(
+      syncing: true,
+      message: '동기화 중',
+      clearError: true,
     );
-    if (headers == null) {
-      return;
-    }
-
-    final localEvents = await _eventRepository.allEventsForSync();
-    final localSettings = _settingsRepository.load();
-    final remoteFile = await _findSyncFile(headers);
-    final remoteSnapshot = remoteFile == null
-        ? const _SyncSnapshot(events: <CalendarEvent>[])
-        : await _downloadSnapshot(headers, remoteFile.id);
-    final remoteSettings = remoteSnapshot.settings;
-    if (remoteSettings != null && _shouldAdoptRemoteSettings(localSettings)) {
-      await _settingsRepository.save(
-        remoteSettings.copyWith(
-          onboardingCompleted: localSettings.onboardingCompleted,
-        ),
+    try {
+      final headers = await _authService.authorizationHeaders(
+        promptIfNecessary: promptIfNecessary,
       );
-    }
-    final merged = _merge(localEvents, remoteSnapshot.events);
-
-    for (final event in merged) {
-      final synced = event.copyWith(syncStatus: 'synced');
-      await _eventRepository.save(synced);
-      await _notificationService.cancelEventReminder(synced.id);
-      if (synced.deletedAt == null) {
-        await _notificationService.scheduleEventReminder(synced);
+      if (headers == null) {
+        statusNotifier.value = statusNotifier.value.copyWith(
+          syncing: false,
+          message: 'Google 로그인이 필요합니다.',
+        );
+        return;
       }
-    }
 
-    final jsonBody = _encodeSnapshot(
-      merged.map((event) => event.copyWith(syncStatus: 'synced')).toList(),
-      _settingsRepository.load(),
-    );
-    if (remoteFile == null) {
-      await _createSyncFile(headers, jsonBody);
-    } else {
-      await _updateSyncFile(headers, remoteFile.id, jsonBody);
+      final localEvents = await _eventRepository.allEventsForSync();
+      final localSettings = _settingsRepository.load();
+      final remoteFile = await _findSyncFile(headers);
+      final remoteSnapshot = remoteFile == null
+          ? const _SyncSnapshot(events: <CalendarEvent>[])
+          : await _downloadSnapshot(headers, remoteFile.id);
+      final remoteSettings = remoteSnapshot.settings;
+      if (remoteSettings != null && _shouldAdoptRemoteSettings(localSettings)) {
+        await _settingsRepository.save(
+          remoteSettings.copyWith(
+            onboardingCompleted: localSettings.onboardingCompleted,
+            appLockEnabled: localSettings.appLockEnabled,
+          ),
+        );
+      }
+      final merged = _merge(localEvents, remoteSnapshot.events);
+
+      for (final event in merged) {
+        final synced = event.copyWith(syncStatus: 'synced');
+        await _eventRepository.save(synced);
+        await _notificationService.cancelEventReminder(synced.id);
+        if (synced.deletedAt == null) {
+          await _notificationService.scheduleEventReminder(synced);
+        }
+      }
+
+      final jsonBody = _encodeSnapshot(
+        merged.map((event) => event.copyWith(syncStatus: 'synced')).toList(),
+        _settingsRepository.load(),
+      );
+      if (remoteFile == null) {
+        await _createSyncFile(headers, jsonBody);
+      } else {
+        await _updateSyncFile(headers, remoteFile.id, jsonBody);
+      }
+      statusNotifier.value = statusNotifier.value.copyWith(
+        syncing: false,
+        lastSyncedAt: DateTime.now(),
+        message: '동기화 완료',
+        clearError: true,
+      );
+    } on Object catch (error) {
+      statusNotifier.value = statusNotifier.value.copyWith(
+        syncing: false,
+        message: '동기화 실패',
+        error: '$error',
+      );
+      rethrow;
     }
   }
 
@@ -349,6 +380,8 @@ class GoogleDriveSyncService implements SyncService {
       'title': event.title,
       'memo': event.memo,
       'location': event.location,
+      'url': event.url,
+      'weather': event.weather,
       'startAt': event.startAt.toUtc().toIso8601String(),
       'endAt': event.endAt.toUtc().toIso8601String(),
       'allDay': event.allDay,
@@ -361,11 +394,16 @@ class GoogleDriveSyncService implements SyncService {
       'recurrenceInterval': event.recurrence.interval,
       'recurrenceUntil': event.recurrence.until?.toUtc().toIso8601String(),
       'recurrenceCount': event.recurrence.count,
+      'recurrenceExcludedDates': event.recurrence.excludedDates
+          .map((date) => DateTime(date.year, date.month, date.day))
+          .map((date) => date.toUtc().toIso8601String())
+          .toList(),
       'createdAt': event.createdAt.toUtc().toIso8601String(),
       'updatedAt': event.updatedAt.toUtc().toIso8601String(),
       'deletedAt': event.deletedAt?.toUtc().toIso8601String(),
       'deviceId': event.deviceId,
       'showDday': event.showDday,
+      'sensitive': event.sensitive,
     };
   }
 
@@ -390,6 +428,8 @@ class GoogleDriveSyncService implements SyncService {
       title: json['title'] as String? ?? 'New event',
       memo: json['memo'] as String?,
       location: json['location'] as String?,
+      url: json['url'] as String?,
+      weather: json['weather'] as String?,
       startAt: startAt,
       endAt: endAt,
       allDay: json['allDay'] as bool? ?? false,
@@ -403,6 +443,7 @@ class GoogleDriveSyncService implements SyncService {
         interval: json['recurrenceInterval'] as int? ?? 1,
         until: _readDate(json['recurrenceUntil']),
         count: json['recurrenceCount'] as int?,
+        excludedDates: _dateListValue(json['recurrenceExcludedDates']),
       ),
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -410,6 +451,7 @@ class GoogleDriveSyncService implements SyncService {
       deviceId: json['deviceId'] as String? ?? '',
       syncStatus: 'synced',
       showDday: json['showDday'] as bool? ?? false,
+      sensitive: json['sensitive'] as bool? ?? false,
     );
   }
 
@@ -418,6 +460,19 @@ class GoogleDriveSyncService implements SyncService {
       return null;
     }
     return DateTime.tryParse(value)?.toLocal();
+  }
+
+  List<DateTime> _dateListValue(Object? value) {
+    if (value is! List) {
+      return const [];
+    }
+    return value
+        .whereType<String>()
+        .map(DateTime.tryParse)
+        .whereType<DateTime>()
+        .map((date) => date.toLocal())
+        .map((date) => DateTime(date.year, date.month, date.day))
+        .toList();
   }
 
   EventCategory _categoryFromJson(Map<String, Object?> json, int? colorValue) {
@@ -452,6 +507,13 @@ class GoogleDriveSyncService implements SyncService {
           .map((category) => category.toJson())
           .toList(),
       'dDayReminderOffsets': settings.dDayReminderOffsets,
+      'calendarDensity': settings.calendarDensity.name,
+      'defaultCalendarView': settings.defaultCalendarView.name,
+      'hiddenCategoryIds': settings.hiddenCategoryIds,
+      'calendarShowHolidays': settings.calendarShowHolidays,
+      'calendarDdayOnly': settings.calendarDdayOnly,
+      'hideSensitiveEvents': settings.hideSensitiveEvents,
+      'hideSensitiveNotifications': settings.hideSensitiveNotifications,
     };
   }
 
@@ -476,6 +538,18 @@ class GoogleDriveSyncService implements SyncService {
         -1,
         0,
       ]),
+      calendarDensity: CalendarDensity.fromName(
+        json['calendarDensity'] as String?,
+      ),
+      defaultCalendarView: CalendarViewMode.fromName(
+        json['defaultCalendarView'] as String?,
+      ),
+      hiddenCategoryIds: _stringListValue(json['hiddenCategoryIds']),
+      calendarShowHolidays: json['calendarShowHolidays'] as bool? ?? true,
+      calendarDdayOnly: json['calendarDdayOnly'] as bool? ?? false,
+      hideSensitiveEvents: json['hideSensitiveEvents'] as bool? ?? false,
+      hideSensitiveNotifications:
+          json['hideSensitiveNotifications'] as bool? ?? false,
     );
   }
 
@@ -504,6 +578,13 @@ class GoogleDriveSyncService implements SyncService {
     return items.isEmpty ? fallback : (items..sort());
   }
 
+  List<String> _stringListValue(Object? value) {
+    if (value is! List) {
+      return const [];
+    }
+    return value.whereType<String>().toList();
+  }
+
   int _intValue(Object? value, int fallback) {
     return value is int ? value : fallback;
   }
@@ -523,7 +604,14 @@ class GoogleDriveSyncService implements SyncService {
         defaultCategoryIds.length == 2 &&
         defaultCategoryIds.contains(EventCategory.basic.id) &&
         defaultCategoryIds.contains(EventCategory.holiday.id) &&
-        _sameIntList(local.dDayReminderOffsets, const [-7, -3, -1, 0]);
+        _sameIntList(local.dDayReminderOffsets, const [-7, -3, -1, 0]) &&
+        local.calendarDensity == CalendarDensity.standard &&
+        local.defaultCalendarView == CalendarViewMode.week &&
+        local.hiddenCategoryIds.isEmpty &&
+        local.calendarShowHolidays &&
+        !local.calendarDdayOnly &&
+        !local.hideSensitiveEvents &&
+        !local.hideSensitiveNotifications;
   }
 
   bool _sameIntList(List<int> a, List<int> b) {
@@ -548,6 +636,35 @@ class GoogleDriveSyncException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class GoogleDriveSyncStatus {
+  const GoogleDriveSyncStatus({
+    this.syncing = false,
+    this.lastSyncedAt,
+    this.message = '',
+    this.error,
+  });
+
+  final bool syncing;
+  final DateTime? lastSyncedAt;
+  final String message;
+  final String? error;
+
+  GoogleDriveSyncStatus copyWith({
+    bool? syncing,
+    DateTime? lastSyncedAt,
+    String? message,
+    String? error,
+    bool clearError = false,
+  }) {
+    return GoogleDriveSyncStatus(
+      syncing: syncing ?? this.syncing,
+      lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+      message: message ?? this.message,
+      error: clearError ? null : error ?? this.error,
+    );
+  }
 }
 
 class _DriveFile {

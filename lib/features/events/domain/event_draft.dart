@@ -9,17 +9,22 @@ class EventDraft {
     required this.endAt,
     this.memo,
     this.location,
+    this.url,
+    this.weather,
     this.allDay = false,
     this.category = EventCategory.other,
     this.colorValue,
     this.reminderMinutesBefore = 60,
     this.recurrence = const RecurrenceRule(),
     this.showDday = false,
+    this.sensitive = false,
   });
 
   final String title;
   final String? memo;
   final String? location;
+  final String? url;
+  final String? weather;
   final DateTime startAt;
   final DateTime endAt;
   final bool allDay;
@@ -28,6 +33,7 @@ class EventDraft {
   final int? reminderMinutesBefore;
   final RecurrenceRule recurrence;
   final bool showDday;
+  final bool sensitive;
 
   CalendarEvent toEvent({
     required String id,
@@ -40,6 +46,8 @@ class EventDraft {
       title: title,
       memo: memo,
       location: location,
+      url: url,
+      weather: weather,
       startAt: startAt,
       endAt: endAt,
       allDay: allDay,
@@ -52,6 +60,7 @@ class EventDraft {
       deviceId: deviceId,
       syncStatus: 'pending',
       showDday: showDday,
+      sensitive: sensitive,
     );
   }
 
@@ -59,6 +68,8 @@ class EventDraft {
     String? title,
     String? memo,
     String? location,
+    String? url,
+    String? weather,
     DateTime? startAt,
     DateTime? endAt,
     bool? allDay,
@@ -67,14 +78,19 @@ class EventDraft {
     int? reminderMinutesBefore,
     RecurrenceRule? recurrence,
     bool? showDday,
+    bool? sensitive,
     bool clearMemo = false,
     bool clearLocation = false,
+    bool clearUrl = false,
+    bool clearWeather = false,
     bool clearReminder = false,
   }) {
     return EventDraft(
       title: title ?? this.title,
       memo: clearMemo ? null : memo ?? this.memo,
       location: clearLocation ? null : location ?? this.location,
+      url: clearUrl ? null : url ?? this.url,
+      weather: clearWeather ? null : weather ?? this.weather,
       startAt: startAt ?? this.startAt,
       endAt: endAt ?? this.endAt,
       allDay: allDay ?? this.allDay,
@@ -85,6 +101,7 @@ class EventDraft {
           : reminderMinutesBefore ?? this.reminderMinutesBefore,
       recurrence: recurrence ?? this.recurrence,
       showDday: showDday ?? this.showDday,
+      sensitive: sensitive ?? this.sensitive,
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'app_database.dart';
 import '../domain/calendar_event.dart';
 import '../domain/event_category.dart';
@@ -15,6 +17,8 @@ extension EventRecordMapper on EventRecord {
       title: title,
       memo: memo,
       location: location,
+      url: url,
+      weather: weather,
       startAt: baseStart,
       endAt: baseStart.add(duration),
       allDay: allDay,
@@ -26,6 +30,7 @@ extension EventRecordMapper on EventRecord {
         interval: recurrenceInterval,
         until: recurrenceUntil,
         count: recurrenceCount,
+        excludedDates: _excludedDatesFromJson(recurrenceExcludedDates),
       ),
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -33,6 +38,24 @@ extension EventRecordMapper on EventRecord {
       deviceId: deviceId,
       syncStatus: syncStatus,
       showDday: showDday,
+      sensitive: sensitive,
     );
+  }
+
+  List<DateTime> _excludedDatesFromJson(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        return const [];
+      }
+      return decoded
+          .whereType<String>()
+          .map(DateTime.tryParse)
+          .whereType<DateTime>()
+          .map((date) => DateTime(date.year, date.month, date.day))
+          .toList();
+    } on Object {
+      return const [];
+    }
   }
 }

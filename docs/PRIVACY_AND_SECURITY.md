@@ -7,11 +7,14 @@ before public distribution.
 ## Data Stored Locally
 
 - Calendar events: title, dates, times, all-day flag, recurrence, category,
-  memo, location, reminders, D-day display flag, sync metadata, and soft-delete
-  timestamps.
+  memo, location, URL, optional weather note, reminders, D-day display flag,
+  sensitive-event flag, sync metadata, and soft-delete timestamps.
 - App settings: reminder defaults, week start day, lunar-date display, category
-  definitions, D-day reminder offsets, onboarding completion, and AI feature
+  definitions, D-day reminder offsets, onboarding completion, default calendar
+  view, calendar filters, sensitive-event display preferences, and AI feature
   toggles.
+- App lock PIN, when enabled, is stored locally through platform secure storage
+  and is not included in the Google Drive sync snapshot.
 - Google account email is only kept in memory by the sign-in session; it is not
   stored in the local event database.
 - Gemini API key, if used later, is stored through platform secure storage.
@@ -24,6 +27,7 @@ before public distribution.
 - The app stores a JSON snapshot named `daily-sync-v1.json` in the user's
   private app data folder.
 - The snapshot currently contains events and non-secret app settings.
+- The snapshot does not include the local app lock PIN.
 - The app does not request access to the user's visible Drive files.
 - The snapshot is not yet end-to-end encrypted. Treat that as a blocker before
   storing highly sensitive content.
@@ -33,10 +37,10 @@ before public distribution.
 Use this wording as the basis for the OAuth consent screen and store listing:
 
 ```text
-Daily stores your calendar events and app settings on your device. If you
-connect Google Drive sync, Daily saves one private backup file in your Google
-Drive app data folder so your devices can restore and sync your data. Daily
-does not read, list, or modify your visible Google Drive files.
+Daily stores your calendar events and app settings on your device. If you sign
+in with Google, Daily saves one private backup file in your Google Drive app
+data folder so your devices can restore and sync your data. Daily does not
+read, list, or modify your visible Google Drive files.
 ```
 
 Required public links before production OAuth release:
@@ -61,7 +65,7 @@ Users must be able to:
 ## Security Hardening Still Needed
 
 - Add optional encryption for the Google Drive snapshot.
-- Add last-sync status and conflict details in Settings.
+- Add optional biometric unlock where each platform supports it cleanly.
 - Re-test with a fresh Google account after publishing the OAuth app to
   production.
 

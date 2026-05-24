@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/calendar/korean_lunar_calendar.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../events/domain/calendar_event.dart';
 
 class CalendarMonthGrid extends StatefulWidget {
@@ -16,6 +17,8 @@ class CalendarMonthGrid extends StatefulWidget {
     required this.events,
     required this.weekStartsOnMonday,
     required this.showLunarDates,
+    required this.density,
+    required this.hideSensitiveEvents,
     required this.onDateSelected,
     this.onDateRangeSelected,
   });
@@ -25,6 +28,8 @@ class CalendarMonthGrid extends StatefulWidget {
   final List<CalendarEvent> events;
   final bool weekStartsOnMonday;
   final bool showLunarDates;
+  final CalendarDensity density;
+  final bool hideSensitiveEvents;
   final ValueChanged<DateTime> onDateSelected;
   final Future<void> Function(DateTime start, DateTime end)?
   onDateRangeSelected;
@@ -46,7 +51,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
       (weekIndex) => days.skip(weekIndex * 7).take(7).toList(),
     );
     final compact = MediaQuery.sizeOf(context).width < 720;
-    final maxFlags = compact ? 3 : 8;
+    final maxFlags = _maxFlagsForDensity(widget.density, compact: compact);
     final holidayDays = _holidayDays(widget.events);
 
     return Padding(
@@ -146,6 +151,8 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                                   holidayDays: holidayDays,
                                   showLunarDates: widget.showLunarDates,
                                   showEventTimes: !compact,
+                                  hideSensitiveEvents:
+                                      widget.hideSensitiveEvents,
                                   compact: compact,
                                   onDateSelected: widget.onDateSelected,
                                 ),
@@ -279,6 +286,14 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
         a.month == b.month &&
         a.day == b.day;
   }
+
+  int _maxFlagsForDensity(CalendarDensity density, {required bool compact}) {
+    return switch (density) {
+      CalendarDensity.relaxed => compact ? 2 : 5,
+      CalendarDensity.standard => compact ? 3 : 8,
+      CalendarDensity.dense => compact ? 5 : 12,
+    };
+  }
 }
 
 class _WeekdayHeader extends StatelessWidget {
@@ -336,6 +351,7 @@ class _WeekRow extends StatelessWidget {
     required this.holidayDays,
     required this.showLunarDates,
     required this.showEventTimes,
+    required this.hideSensitiveEvents,
     required this.compact,
     required this.onDateSelected,
   });
@@ -350,6 +366,7 @@ class _WeekRow extends StatelessWidget {
   final Set<DateTime> holidayDays;
   final bool showLunarDates;
   final bool showEventTimes;
+  final bool hideSensitiveEvents;
   final bool compact;
   final ValueChanged<DateTime> onDateSelected;
 
@@ -423,6 +440,7 @@ class _WeekRow extends StatelessWidget {
                             Duration(days: segment.startCol),
                           ),
                           showTime: showEventTimes,
+                          hideSensitive: hideSensitiveEvents,
                           compact: compact,
                         ),
                       ),
@@ -674,12 +692,14 @@ class _EventSpanFlag extends StatelessWidget {
     required this.event,
     required this.segmentStart,
     required this.showTime,
+    required this.hideSensitive,
     required this.compact,
   });
 
   final CalendarEvent event;
   final DateTime segmentStart;
   final bool showTime;
+  final bool hideSensitive;
   final bool compact;
 
   @override
@@ -694,6 +714,7 @@ class _EventSpanFlag extends StatelessWidget {
         event.startAt.day == segmentStart.day;
     final prefix = event.showDday && !compact ? '${_formatDday(event)}  ' : '';
     final suffix = showStartTime ? '  ${formatter.format(event.startAt)}' : '';
+    final title = hideSensitive && event.sensitive ? '비공개 일정' : event.title;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -707,7 +728,7 @@ class _EventSpanFlag extends StatelessWidget {
         child: Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            '$prefix${event.title}$suffix',
+            '$prefix$title$suffix',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
