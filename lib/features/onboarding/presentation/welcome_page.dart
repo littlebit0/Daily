@@ -91,7 +91,9 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
       _message = 'Google 로그인 창을 여는 중입니다.';
     });
     try {
-      final account = await ref.read(googleDriveAuthServiceProvider).signIn();
+      final account = await ref
+          .read(googleDriveAuthServiceProvider)
+          .signIn(forceAccountSelection: true);
       if (account == null) {
         if (mounted) {
           setState(() => _message = 'Google 로그인이 취소되었습니다.');

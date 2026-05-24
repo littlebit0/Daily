@@ -394,7 +394,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _syncMessage = '';
     });
     try {
-      final account = await ref.read(googleDriveAuthServiceProvider).signIn();
+      final account = await ref
+          .read(googleDriveAuthServiceProvider)
+          .signIn(forceAccountSelection: true);
       await ref
           .read(googleDriveSyncServiceProvider)
           .syncNow(promptIfNecessary: true);

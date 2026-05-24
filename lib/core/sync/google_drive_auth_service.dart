@@ -89,7 +89,9 @@ class GoogleDriveAuthService {
     return _initializeFuture ??= _initialize();
   }
 
-  Future<GoogleDriveAccount?> signIn() async {
+  Future<GoogleDriveAccount?> signIn({
+    bool forceAccountSelection = false,
+  }) async {
     await initialize();
     if (_usesDesktopOAuth) {
       return _signInWithDesktopOAuth();
@@ -101,16 +103,26 @@ class GoogleDriveAuthService {
       throw UnsupportedError('현재 플랫폼에서는 Google 로그인을 지원하지 않습니다.');
     }
 
-    final existing = _currentUser;
-    if (existing != null) {
-      await existing.authorizationClient.authorizeScopes(scopes);
-      return _toDriveAccount(existing);
-    }
+    try {
+      if (forceAccountSelection) {
+        await GoogleSignIn.instance.signOut();
+        _setCurrentUser(null);
+      }
 
-    final user = await GoogleSignIn.instance.authenticate(scopeHint: scopes);
-    await user.authorizationClient.authorizeScopes(scopes);
-    _setCurrentUser(user);
-    return _toDriveAccount(user);
+      final existing = _currentUser;
+      if (existing != null) {
+        await existing.authorizationClient.authorizeScopes(scopes);
+        return _toDriveAccount(existing);
+      }
+
+      final user = await GoogleSignIn.instance.authenticate(scopeHint: scopes);
+      await user.authorizationClient.authorizeScopes(scopes);
+      _setCurrentUser(user);
+      return _toDriveAccount(user);
+    } on GoogleSignInException catch (error) {
+      _setCurrentUser(null);
+      throw GoogleDriveAuthException(_googleSignInMessage(error));
+    }
   }
 
   Future<void> signOut() async {
@@ -526,6 +538,33 @@ class GoogleDriveAuthService {
       return null;
     }
     return GoogleDriveAccount(email: user.email, displayName: user.displayName);
+  }
+
+  String _googleSignInMessage(GoogleSignInException error) {
+    final description = error.description;
+    final details = error.details;
+    final detailText = [
+      if (description != null && description.trim().isNotEmpty)
+        description.trim(),
+      if (details != null) '$details',
+    ].join(' / ');
+
+    return switch (error.code) {
+      GoogleSignInExceptionCode.canceled => 'Google 로그인이 취소되었습니다.',
+      GoogleSignInExceptionCode.clientConfigurationError =>
+        'Google 로그인 클라이언트 설정이 올바르지 않습니다. '
+            'Android 패키지명과 앱 서명 SHA-1이 Google Cloud OAuth 클라이언트에 등록되어 있는지 확인해 주세요.'
+            '${detailText.isEmpty ? '' : ' ($detailText)'}',
+      GoogleSignInExceptionCode.providerConfigurationError =>
+        '기기의 Google Play 서비스 또는 Google 계정 설정 문제로 로그인할 수 없습니다.'
+            '${detailText.isEmpty ? '' : ' ($detailText)'}',
+      GoogleSignInExceptionCode.uiUnavailable =>
+        'Google 로그인 화면을 열 수 없습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.'
+            '${detailText.isEmpty ? '' : ' ($detailText)'}',
+      _ =>
+        'Google 로그인 실패: ${error.code.name}'
+            '${detailText.isEmpty ? '' : ' ($detailText)'}',
+    };
   }
 }
 
