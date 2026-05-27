@@ -35,7 +35,19 @@ class GoogleDriveAuthService {
   static const _serverClientId = String.fromEnvironment(
     'GOOGLE_SIGN_IN_SERVER_CLIENT_ID',
     defaultValue:
-        '234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com',
+        '424765276744-j32k4bdck7lr4ba0lg5s99u91c4849bp.apps.googleusercontent.com',
+  );
+  static const _appleClientId = String.fromEnvironment(
+    'GOOGLE_APPLE_CLIENT_ID',
+  );
+  static const _iosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+  static const _macosClientId = String.fromEnvironment(
+    'GOOGLE_MACOS_CLIENT_ID',
+    defaultValue:
+        '424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com',
+  );
+  static const _macosAuthMode = String.fromEnvironment(
+    'GOOGLE_MACOS_AUTH_MODE',
   );
   static const _desktopClientId = String.fromEnvironment(
     'GOOGLE_DESKTOP_CLIENT_ID',
@@ -53,6 +65,7 @@ class GoogleDriveAuthService {
   static const _displayNameKey = '${_storagePrefix}display_name';
   static const _mobileGoogleSignInTimeout = Duration(seconds: 45);
   static const _mobileAuthorizationTimeout = Duration(seconds: 45);
+  static const _mobileAccountClearTimeout = Duration(seconds: 3);
 
   final FlutterSecureStorage _secureStorage;
   final http.Client _httpClient;
@@ -87,6 +100,46 @@ class GoogleDriveAuthService {
     return Platform.environment['GOOGLE_DESKTOP_CLIENT_SECRET']?.trim() ?? '';
   }
 
+  String get _configuredAppleClientId {
+    final platformSpecific = Platform.isIOS
+        ? _iosClientId.trim()
+        : Platform.isMacOS
+        ? _macosClientId.trim()
+        : '';
+    if (platformSpecific.isNotEmpty) {
+      return platformSpecific;
+    }
+    final environmentSpecific =
+        Platform
+            .environment[Platform.isIOS
+                ? 'GOOGLE_IOS_CLIENT_ID'
+                : 'GOOGLE_MACOS_CLIENT_ID']
+            ?.trim() ??
+        '';
+    if (environmentSpecific.isNotEmpty) {
+      return environmentSpecific;
+    }
+    final shared = _appleClientId.trim();
+    if (shared.isNotEmpty) {
+      return shared;
+    }
+    return Platform.environment['GOOGLE_APPLE_CLIENT_ID']?.trim() ?? '';
+  }
+
+  bool get _shouldUseMacosDesktopOAuth {
+    if (!Platform.isMacOS) {
+      return false;
+    }
+    final mode = _macosAuthMode.trim().toLowerCase();
+    final environmentMode =
+        Platform.environment['GOOGLE_MACOS_AUTH_MODE']?.trim().toLowerCase() ??
+        '';
+    if (mode == 'native' || environmentMode == 'native') {
+      return false;
+    }
+    return true;
+  }
+
   Future<void> initialize() {
     return _initializeFuture ??= _initialize();
   }
@@ -106,20 +159,8 @@ class GoogleDriveAuthService {
     }
 
     try {
-      if (forceAccountSelection) {
-        try {
-          await GoogleSignIn.instance.signOut().timeout(
-            _mobileGoogleSignInTimeout,
-          );
-        } on PlatformException catch (error) {
-          if (!_isCredentialClearFailure(error)) {
-            throw GoogleDriveAuthException(_platformAuthMessage(error));
-          }
-        } on TimeoutException {
-          throw const GoogleDriveAuthException(
-            'Google 계정 선택 준비가 시간 초과되었습니다. 다시 시도해 주세요.',
-          );
-        }
+      if (forceAccountSelection && _currentUser != null) {
+        await _clearMobileAccountForSelection();
         _setCurrentUser(null);
       }
 
@@ -212,19 +253,20 @@ class GoogleDriveAuthService {
   }
 
   Future<void> _initialize() async {
-    if (Platform.isWindows) {
+    if (Platform.isWindows || _shouldUseMacosDesktopOAuth) {
       _usesDesktopOAuth = true;
       if (_configuredDesktopClientId.isEmpty) {
         _isAvailable = false;
         _setDesktopAccount(null);
         return;
       }
-      await _restoreDesktopSession();
       return;
     }
 
     try {
+      final appleClientId = _configuredAppleClientId;
       await GoogleSignIn.instance.initialize(
+        clientId: appleClientId.isEmpty ? null : appleClientId,
         serverClientId: _serverClientId.isEmpty ? null : _serverClientId,
       );
     } on MissingPluginException {
@@ -246,6 +288,10 @@ class GoogleDriveAuthService {
       }
     }, onError: (_) => _setCurrentUser(null));
 
+    if (Platform.isIOS || Platform.isMacOS) {
+      return;
+    }
+
     try {
       final attempt = GoogleSignIn.instance.attemptLightweightAuthentication();
       if (attempt != null) {
@@ -257,11 +303,49 @@ class GoogleDriveAuthService {
     }
   }
 
+  Future<void> _clearMobileAccountForSelection() async {
+    try {
+      await GoogleSignIn.instance.signOut().timeout(
+        _mobileAccountClearTimeout,
+        onTimeout: () {},
+      );
+    } on PlatformException {
+      // The following authenticate call can still present account selection.
+    } on TimeoutException {
+      // Ignore slow native account cleanup and continue to the sign-in UI.
+    }
+  }
+
+  String get _appleClientConfigurationMessage {
+    if (Platform.isIOS) {
+      return 'iOS Google 로그인을 사용하려면 GOOGLE_IOS_CLIENT_ID 빌드 인자와 '
+          'iOS reversed client ID URL scheme 설정이 필요합니다. '
+          '지금은 로컬 모드로 사용할 수 있습니다.';
+    }
+    if (Platform.isMacOS) {
+      return 'macOS Google 로그인을 사용하려면 GOOGLE_MACOS_CLIENT_ID 빌드 인자와 '
+          'macOS reversed client ID URL scheme 설정이 필요합니다. '
+          '지금은 로컬 모드로 사용할 수 있습니다.';
+    }
+    return 'Google 로그인 클라이언트 설정이 필요합니다.';
+  }
+
+  String get _macosKeychainConfigurationMessage =>
+      'macOS Google 로그인을 사용하려면 keychain sharing entitlement가 필요합니다. '
+      '새 빌드에서도 같은 오류가 나면 Apple 개발 팀 서명 설정을 확인해 주세요.';
+
+  String get _desktopClientSecretConfigurationMessage =>
+      'macOS 로컬 Google 로그인을 사용하려면 Desktop OAuth client secret이 필요합니다. '
+      'GOOGLE_DESKTOP_CLIENT_SECRET 빌드 인자 또는 환경 변수를 설정한 뒤 다시 빌드해 주세요.';
+
   Future<GoogleDriveAccount?> _signInWithDesktopOAuth() async {
     if (_configuredDesktopClientId.isEmpty) {
       throw UnsupportedError(
         'Google 로그인 설정이 아직 완료되지 않았습니다. 앱 업데이트 후 다시 시도해 주세요.',
       );
+    }
+    if (_configuredDesktopClientSecret.isEmpty) {
+      throw GoogleDriveAuthException(_desktopClientSecretConfigurationMessage);
     }
 
     final codeResponse = await _requestDesktopAuthorizationCode();
@@ -467,15 +551,15 @@ class GoogleDriveAuthService {
     if (_desktopTokens != null || _desktopAccount != null) {
       return;
     }
-    final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+    final refreshToken = await _readDesktopStorage(_refreshTokenKey);
     if (refreshToken == null || refreshToken.isEmpty) {
       _setDesktopAccount(null);
       return;
     }
-    final accessToken = await _secureStorage.read(key: _accessTokenKey);
-    final expiresAtValue = await _secureStorage.read(key: _expiresAtKey);
-    final email = await _secureStorage.read(key: _emailKey);
-    final displayName = await _secureStorage.read(key: _displayNameKey);
+    final accessToken = await _readDesktopStorage(_accessTokenKey);
+    final expiresAtValue = await _readDesktopStorage(_expiresAtKey);
+    final email = await _readDesktopStorage(_emailKey);
+    final displayName = await _readDesktopStorage(_displayNameKey);
     final expiresAt = expiresAtValue == null
         ? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true)
         : DateTime.tryParse(expiresAtValue)?.toUtc() ??
@@ -498,29 +582,54 @@ class GoogleDriveAuthService {
     GoogleDriveAccount account,
   ) async {
     _desktopTokens = tokens;
-    await _secureStorage.write(key: _accessTokenKey, value: tokens.accessToken);
-    await _secureStorage.write(
-      key: _refreshTokenKey,
-      value: tokens.refreshToken,
+    await _writeDesktopStorage(_accessTokenKey, tokens.accessToken);
+    await _writeDesktopStorage(_refreshTokenKey, tokens.refreshToken);
+    await _writeDesktopStorage(
+      _expiresAtKey,
+      tokens.expiresAt.toIso8601String(),
     );
-    await _secureStorage.write(
-      key: _expiresAtKey,
-      value: tokens.expiresAt.toIso8601String(),
-    );
-    await _secureStorage.write(key: _emailKey, value: account.email);
-    await _secureStorage.write(
-      key: _displayNameKey,
-      value: account.displayName,
-    );
+    await _writeDesktopStorage(_emailKey, account.email);
+    await _writeDesktopStorage(_displayNameKey, account.displayName);
+  }
+
+  Future<String?> _readDesktopStorage(String key) async {
+    try {
+      return await _secureStorage.read(key: key);
+    } on PlatformException catch (error) {
+      if (_isMissingSecureStorageEntitlement(error)) {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _writeDesktopStorage(String key, String? value) async {
+    try {
+      await _secureStorage.write(key: key, value: value);
+    } on PlatformException catch (error) {
+      if (!_isMissingSecureStorageEntitlement(error)) {
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> _deleteDesktopStorage(String key) async {
+    try {
+      await _secureStorage.delete(key: key);
+    } on PlatformException catch (error) {
+      if (!_isMissingSecureStorageEntitlement(error)) {
+        rethrow;
+      }
+    }
   }
 
   Future<void> _clearDesktopSession() async {
     _desktopTokens = null;
-    await _secureStorage.delete(key: _accessTokenKey);
-    await _secureStorage.delete(key: _refreshTokenKey);
-    await _secureStorage.delete(key: _expiresAtKey);
-    await _secureStorage.delete(key: _emailKey);
-    await _secureStorage.delete(key: _displayNameKey);
+    await _deleteDesktopStorage(_accessTokenKey);
+    await _deleteDesktopStorage(_refreshTokenKey);
+    await _deleteDesktopStorage(_expiresAtKey);
+    await _deleteDesktopStorage(_emailKey);
+    await _deleteDesktopStorage(_displayNameKey);
     _setDesktopAccount(null);
   }
 
@@ -592,15 +701,22 @@ class GoogleDriveAuthService {
       if (details != null) '$details',
     ].join(' / ');
 
+    final hasKeychainError = detailText.toLowerCase().contains('keychain');
+
     return switch (error.code) {
       GoogleSignInExceptionCode.canceled => 'Google 로그인이 취소되었습니다.',
       GoogleSignInExceptionCode.clientConfigurationError =>
-        'Google 로그인 클라이언트 설정이 올바르지 않습니다. '
-            'Android 패키지명과 앱 서명 SHA-1이 Google Cloud OAuth 클라이언트에 등록되어 있는지 확인해 주세요.'
-            '${detailText.isEmpty ? '' : ' ($detailText)'}',
+        Platform.isIOS || Platform.isMacOS
+            ? _appleClientConfigurationMessage
+            : 'Google 로그인 클라이언트 설정이 올바르지 않습니다. '
+                  'Android 패키지명과 앱 서명 SHA-1이 Google Cloud OAuth 클라이언트에 등록되어 있는지 확인해 주세요.'
+                  '${detailText.isEmpty ? '' : ' ($detailText)'}',
       GoogleSignInExceptionCode.providerConfigurationError =>
-        '기기의 Google Play 서비스 또는 Google 계정 설정 문제로 로그인할 수 없습니다.'
-            '${detailText.isEmpty ? '' : ' ($detailText)'}',
+        Platform.isMacOS && hasKeychainError
+            ? '$_macosKeychainConfigurationMessage'
+                  '${detailText.isEmpty ? '' : ' ($detailText)'}'
+            : '기기의 Google Play 서비스 또는 Google 계정 설정 문제로 로그인할 수 없습니다.'
+                  '${detailText.isEmpty ? '' : ' ($detailText)'}',
       GoogleSignInExceptionCode.uiUnavailable =>
         'Google 로그인 화면을 열 수 없습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.'
             '${detailText.isEmpty ? '' : ' ($detailText)'}',
@@ -616,6 +732,16 @@ class GoogleDriveAuthService {
     return code.contains('clear') || message.contains('clear failed');
   }
 
+  bool _isMissingSecureStorageEntitlement(PlatformException error) {
+    final code = error.code.toLowerCase();
+    final message = error.message?.toLowerCase() ?? '';
+    final details = error.details?.toString().toLowerCase() ?? '';
+    return code.contains('-34018') ||
+        message.contains('-34018') ||
+        message.contains('entitlement') ||
+        details.contains('-34018');
+  }
+
   String _platformAuthMessage(PlatformException error) {
     if (_isCredentialClearFailure(error)) {
       return 'Google 계정 상태를 초기화하지 못했습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.';
@@ -625,6 +751,16 @@ class GoogleDriveAuthService {
       if (error.message != null && error.message!.trim().isNotEmpty)
         error.message!.trim(),
     ].join(' / ');
+    if (Platform.isMacOS && detail.toLowerCase().contains('keychain')) {
+      return '$_macosKeychainConfigurationMessage'
+          '${detail.isEmpty ? '' : ' ($detail)'}';
+    }
+    if ((Platform.isIOS || Platform.isMacOS) &&
+        (detail.contains('No active configuration') ||
+            detail.contains('GIDClientID'))) {
+      return '$_appleClientConfigurationMessage'
+          '${detail.isEmpty ? '' : ' ($detail)'}';
+    }
     return 'Google 로그인 처리 중 문제가 발생했습니다.'
         '${detail.isEmpty ? '' : ' ($detail)'}';
   }

@@ -43,8 +43,8 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Daily는 Google 계정으로 로그인해야 사용할 수 있습니다. '
-                    '로그인하면 계정 백업을 복원하고 이후 변경 사항을 자동으로 동기화합니다.',
+                    'Daily는 바로 로컬에서 사용할 수 있습니다. Google 계정을 연결하면 '
+                    '백업을 복원하고 이후 변경 사항을 자동으로 동기화합니다.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: const Color(0xff5f6875),
@@ -52,6 +52,12 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                   ),
                   const SizedBox(height: 24),
                   FilledButton.icon(
+                    onPressed: _busy ? null : _startLocal,
+                    icon: const Icon(Icons.calendar_today_outlined),
+                    label: const Text('로컬로 시작'),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
                     onPressed: _busy ? null : _connectAndRestore,
                     icon: _busy
                         ? const SizedBox(
@@ -60,7 +66,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.login),
-                    label: const Text('Google로 로그인'),
+                    label: const Text('Google로 로그인 및 복원'),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
@@ -117,6 +123,32 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
       if (mounted) {
         setState(() => _message = error.message ?? '$error');
       }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _message = '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _startLocal() async {
+    setState(() {
+      _busy = true;
+      _message = '';
+    });
+    try {
+      final settings = ref
+          .read(settingsRepositoryProvider)
+          .load()
+          .copyWith(onboardingCompleted: true);
+      await ref.read(settingsRepositoryProvider).save(settings);
+      if (!mounted) {
+        return;
+      }
+      ref.read(appSettingsProvider.notifier).state = settings;
     } on Object catch (error) {
       if (mounted) {
         setState(() => _message = '$error');

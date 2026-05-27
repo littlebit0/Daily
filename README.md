@@ -1,12 +1,12 @@
 # Daily
 
-Daily는 Google 계정 기반 백업/동기화를 사용하는 개인용 캘린더 앱입니다. 앱을 열면 주간 달력이 먼저 보이고, 필요할 때 월간/일간 보기로 전환할 수 있습니다. 날짜 칸 안에는 일정이 색상 플래그 형태로 표시됩니다.
+Daily는 로컬 우선으로 바로 사용할 수 있고, Google 계정을 연결하면 Google Drive AppData 백업/동기화를 사용할 수 있는 개인용 캘린더 앱입니다. 앱을 열면 주간 달력이 먼저 보이고, 필요할 때 월간/일간 보기로 전환할 수 있습니다. 날짜 칸 안에는 일정이 색상 플래그 형태로 표시됩니다.
 
 ## 현재 버전
 
-- 앱 버전: `1.1.0+2`
+- 앱 버전: `1.1.0+1`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 최신 배포: [Daily 1.1.0](https://github.com/littlebit0/Daily/releases/tag/v1.1.0)
+- 최신 배포: [Daily 1.1.0+1](https://github.com/littlebit0/Daily/releases/tag/v1.1.0%2B1)
 
 ## 설치 파일
 
@@ -14,6 +14,8 @@ GitHub Release에서 최신 설치 파일을 받을 수 있습니다.
 
 - Android 직접 설치용 APK: `daily-android-1.1.0.apk`
 - Android Play Console 제출용 AAB: `daily-android-1.1.0.aab`
+- iOS archive: `daily-ios-1.1.0+1.xcarchive.zip`
+- macOS 앱 DMG: `daily-macos-1.1.0+1.dmg`
 - Windows 배포용 ZIP: `daily-windows-1.1.0.zip`
 - Windows 단독 EXE: `daily-windows-1.1.0.exe`
 
@@ -58,7 +60,7 @@ Windows는 `zip` 사용을 권장합니다. Flutter Windows 앱은 실행 파일
 - Windows 트레이 미니 캘린더
 - macOS 마지막 창 닫기 후 앱 유지
 - iOS/macOS 공통 빠른 접근 패널
-- Google 계정 로그인 필수
+- Google 계정 로그인 선택
 - Google Drive AppData 기반 백업/복원/자동 동기화
 
 ## 동기화 방식
@@ -87,14 +89,15 @@ Google Drive AppData 방식은 서버 없이 여러 기기 동기화를 구현�
 
 ## Google OAuth 설정
 
-현재 사용하는 Google Cloud 프로젝트:
+현재 체크인된 Firebase/Google 설정:
 
-- 프로젝트 번호: `234127810480`
+- 프로젝트 번호: `424765276744`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- Web OAuth client: `234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com`
+- Web OAuth client: `424765276744-j32k4bdck7lr4ba0lg5s99u91c4849bp.apps.googleusercontent.com`
 - Windows Desktop OAuth client: `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
+- macOS OAuth client: `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`
 
-Windows 릴리즈 빌드는 Desktop OAuth client secret이 필요할 수 있습니다. secret 값은 Git에 커밋하지 않고 빌드 인자로만 전달합니다.
+Windows 릴리즈 빌드는 Desktop OAuth client secret이 필요할 수 있습니다. macOS Google 로그인은 macOS OAuth client, reversed URL scheme, keychain sharing entitlement가 연결되어 있습니다. iOS Google 로그인은 `com.littlebit0.daily`용 iOS OAuth client ID와 reversed client ID URL scheme이 추가로 필요합니다. secret 값은 Git에 커밋하지 않고 빌드 인자로만 전달합니다.
 
 ```powershell
 .\tool\flutter.ps1 build windows --release `
@@ -105,6 +108,7 @@ Windows 릴리즈 빌드는 Desktop OAuth client secret이 필요할 수 있습�
 Google Drive API가 활성화되어 있어야 로그인 후 백업/복원이 정상 동작합니다.
 
 자세한 설정은 [Google Drive 동기화 설정 문서](docs/GOOGLE_DRIVE_SYNC_SETUP.md)를 참고합니다.
+iOS/macOS 빌드 준비는 [Apple 빌드 설정 문서](docs/APPLE_BUILD_SETUP.md)를 참고합니다.
 
 ## AI 기능 상태
 
@@ -122,8 +126,10 @@ Gemini 연동 구조와 규칙 기반 자연어 일정 파서는 코드에 포�
 
 - Android
 - Windows
+- iOS 시뮬레이터
+- macOS debug 앱
 
-프로젝트 구조는 iOS, iPadOS, macOS 타깃을 포함하고 주요 UX는 공통 Flutter 화면에서 동작합니다. 현재 Windows 개발 환경에서는 Apple 플랫폼 설치 파일을 만들 수 없습니다. iOS/macOS 배포는 macOS, Xcode, Apple Developer 설정이 필요합니다.
+iOS/macOS는 현재 로컬 모드로 실행 확인이 완료되었습니다. macOS는 Google 로그인 설정까지 코드와 plist/entitlement가 연결되어 있고, iOS는 Google Cloud에서 iOS OAuth client와 URL scheme을 추가해야 Drive 동기화까지 사용할 수 있습니다. 실제 기기, TestFlight, App Store, Developer ID 배포는 Apple Developer Team과 서명 인증서/프로비저닝 프로파일 설정이 필요합니다.
 
 ## 개발 명령
 
@@ -163,6 +169,12 @@ Windows 릴리즈 빌드:
 - `.\tool\flutter.ps1 build windows --release`: 통과
 - Android 에뮬레이터 설치 및 실행 확인
 - Windows 릴리즈 실행 확인
+- `./tool/flutter.sh test`: 통과
+- `./tool/flutter.sh analyze`: 통과
+- `./tool/flutter.sh build ios --simulator`: 통과
+- `./tool/flutter.sh build macos --debug`: 통과
+- iPhone 17 iOS 26.5 시뮬레이터 로컬 모드 실행 확인
+- macOS debug 앱 로컬 모드 실행 확인
 
 현재 로컬 개발 환경:
 
@@ -186,6 +198,7 @@ Android release 서명 파일은 로컬에만 보관하고 Git에는 올리지 �
 - [초기 기획안](docs/INITIAL_PLAN.md)
 - [현재 진행상태](docs/PROGRESS_STATUS.md)
 - [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)
+- [Apple 빌드 설정](docs/APPLE_BUILD_SETUP.md)
 - [후속 기능 로드맵](docs/FEATURE_ROADMAP.md)
 - [Notion 작성용 통합 문서](docs/NOTION_DAILY_PROJECT.md)
 - [상세 요구사항](DAILY_REQUIREMENTS.md)
@@ -197,4 +210,5 @@ Android release 서명 파일은 로컬에만 보관하고 Git에는 올리지 �
 - fresh Google 계정으로 로그인/동기화 재검증
 - Android 실제 기기 알림 검증
 - Windows 설치 패키징 방식 고도화
-- macOS 환경에서 iOS/macOS 빌드와 Apple Developer 설정 검증
+- iOS/macOS Google OAuth client와 URL scheme 설정
+- Apple Developer 서명 및 배포 설정 검증

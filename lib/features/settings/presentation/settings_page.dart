@@ -8,6 +8,8 @@ import '../../../core/settings/app_settings.dart';
 import '../../../core/sync/google_drive_sync_service.dart';
 import '../../events/domain/event_category.dart';
 
+enum _GoogleLogoutChoice { continueLocal, syncAndReturnToStart }
+
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -38,13 +40,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     super.initState();
     Future.microtask(() async {
       final key = await ref.read(settingsRepositoryProvider).geminiApiKey();
-      await ref.read(googleDriveAuthServiceProvider).initialize();
-      final driveAccount = ref
-          .read(googleDriveAuthServiceProvider)
-          .currentAccount;
+      String? driveEmail;
+      try {
+        await ref.read(googleDriveAuthServiceProvider).initialize();
+        driveEmail = ref
+            .read(googleDriveAuthServiceProvider)
+            .currentAccount
+            ?.email;
+      } on Object {
+        driveEmail = null;
+      }
       if (mounted) {
         _apiKeyController.text = key ?? '';
-        setState(() => _driveEmail = driveAccount?.email);
+        setState(() => _driveEmail = driveEmail);
       }
     });
   }
@@ -570,23 +578,72 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _logoutGoogleDrive() async {
+    final choice = await showDialog<_GoogleLogoutChoice>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('로그아웃 방식 선택'),
+        content: const Text(
+          'Google 계정 로그아웃 전에 먼저 선택하세요. 기존 일정을 남긴 채 바로 로컬로 전환하거나, 마지막으로 동기화한 뒤 로그아웃하고 시작 화면으로 돌아갈 수 있습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          OutlinedButton(
+            onPressed: () =>
+                Navigator.of(context).pop(_GoogleLogoutChoice.continueLocal),
+            child: const Text('로컬로 전환'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(
+              context,
+            ).pop(_GoogleLogoutChoice.syncAndReturnToStart),
+            child: const Text('동기화 후 시작 화면'),
+          ),
+        ],
+      ),
+    );
+    if (choice == null) {
+      return;
+    }
+
     setState(() {
       _syncBusy = true;
       _syncMessage = '';
     });
     try {
+      if (choice == _GoogleLogoutChoice.syncAndReturnToStart) {
+        await ref
+            .read(googleDriveSyncServiceProvider)
+            .syncNow(promptIfNecessary: true);
+      }
       await ref.read(googleDriveAuthServiceProvider).signOut();
-      final settings = ref
-          .read(appSettingsProvider)
-          .copyWith(onboardingCompleted: false);
-      await ref.read(settingsRepositoryProvider).save(settings);
-      ref.read(appSettingsProvider.notifier).state = settings;
       if (mounted) {
+        if (choice == _GoogleLogoutChoice.syncAndReturnToStart) {
+          final updated = ref
+              .read(appSettingsProvider)
+              .copyWith(onboardingCompleted: false);
+          await ref.read(settingsRepositoryProvider).save(updated);
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _driveEmail = null;
+            _syncMessage = '마지막 동기화 후 로그아웃하고 시작 화면으로 돌아갑니다.';
+          });
+          ref.read(appSettingsProvider.notifier).state = updated;
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          return;
+        }
         setState(() {
           _driveEmail = null;
-          _syncMessage = '로그아웃되었습니다.';
+          _syncMessage = 'Google 동기화를 해제했습니다. 로컬 일정은 그대로 유지됩니다.';
         });
-        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _syncMessage = '$error');
       }
     } finally {
       if (mounted) {
@@ -596,13 +653,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _deleteAccount() async {
+    final authService = ref.read(googleDriveAuthServiceProvider);
+    final hasGoogleAccount =
+        _driveEmail != null || authService.currentAccount != null;
+    final title = hasGoogleAccount ? '회원탈퇴' : '로컬 데이터 초기화';
+    final content = hasGoogleAccount
+        ? '계정 백업과 이 기기의 모든 일정, 설정을 삭제하고 로그인 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.'
+        : '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다. Google 계정 백업은 삭제하지 않습니다.';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('회원탈퇴'),
-        content: const Text(
-          '계정 백업과 이 기기의 모든 일정, 설정을 삭제하고 로그인 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.',
-        ),
+        title: Text(title),
+        content: Text(content),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -611,7 +674,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('탈퇴'),
+            child: Text(hasGoogleAccount ? '탈퇴' : '초기화'),
           ),
         ],
       ),
@@ -632,17 +695,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             .cancelEventReminder(event.id);
       }
       await ref.read(notificationServiceProvider).cancelMorningBriefing();
-      await ref
-          .read(googleDriveSyncServiceProvider)
-          .deleteCloudBackup(promptIfNecessary: true);
+      if (hasGoogleAccount) {
+        await ref
+            .read(googleDriveSyncServiceProvider)
+            .deleteCloudBackup(promptIfNecessary: true);
+      }
       await ref.read(eventRepositoryProvider).clearAll();
       await ref.read(settingsRepositoryProvider).resetAll();
-      await ref.read(googleDriveAuthServiceProvider).signOut();
+      if (hasGoogleAccount) {
+        await authService.signOut();
+      }
       ref.read(appSettingsProvider.notifier).state = const AppSettings();
       if (mounted) {
         setState(() {
           _driveEmail = null;
-          _syncMessage = '회원탈퇴가 완료되었습니다.';
+          _syncMessage = hasGoogleAccount
+              ? '회원탈퇴가 완료되었습니다.'
+              : '로컬 데이터 초기화가 완료되었습니다.';
         });
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
@@ -668,11 +737,11 @@ class _SettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          side: const BorderSide(color: Color(0xffedf0f5)),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xffedf0f5)),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -885,11 +954,11 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.account_circle_outlined),
-          title: Text(connected ? email! : 'Google 계정 로그인이 필요'),
+          title: Text(connected ? email! : '로컬 모드 사용 중'),
           subtitle: Text(
             connected
                 ? '이 Google 계정으로 모든 기기의 일정을 자동 백업하고 복원합니다.'
-                : 'Google 계정으로 로그인해야 Daily를 사용할 수 있습니다.',
+                : 'Google 계정 연결 없이 이 기기에 일정을 저장합니다. 로그인하면 Drive 백업과 동기화를 사용할 수 있습니다.',
           ),
         ),
         Row(
@@ -920,7 +989,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: busy ? null : onDeleteAccount,
           icon: const Icon(Icons.person_remove_outlined),
-          label: const Text('회원탈퇴'),
+          label: Text(connected ? '회원탈퇴' : '로컬 데이터 초기화'),
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.red,
             side: const BorderSide(color: Colors.red),

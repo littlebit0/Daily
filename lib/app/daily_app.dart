@@ -18,13 +18,16 @@ class DailyApp extends ConsumerWidget {
     final settings = ref.watch(appSettingsProvider);
 
     return MaterialApp(
+      key: ValueKey(
+        settings.onboardingCompleted ? 'daily-home' : 'daily-onboarding',
+      ),
       title: 'Daily',
       debugShowCheckedModeBanner: false,
       theme: DailyTheme.light(),
       home: settings.onboardingCompleted
           ? settings.appLockEnabled
-                ? const _AppLockGate(child: _GoogleAccountGate())
-                : const _GoogleAccountGate()
+                ? const _AppLockGate(child: _AppHome())
+                : const _AppHome()
           : const WelcomePage(),
     );
   }
@@ -136,55 +139,39 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
   }
 }
 
-class _GoogleAccountGate extends ConsumerStatefulWidget {
-  const _GoogleAccountGate();
+class _AppHome extends ConsumerStatefulWidget {
+  const _AppHome();
 
   @override
-  ConsumerState<_GoogleAccountGate> createState() => _GoogleAccountGateState();
+  ConsumerState<_AppHome> createState() => _AppHomeState();
 }
 
-class _GoogleAccountGateState extends ConsumerState<_GoogleAccountGate> {
-  late final Future<bool> _accountFuture;
+class _AppHomeState extends ConsumerState<_AppHome> {
   var _servicesStarted = false;
-  var _loginResetQueued = false;
 
   @override
   void initState() {
     super.initState();
-    _accountFuture = _hasGoogleAccount();
+    _startSyncIfConnected();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _accountFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const _StartupLoadingPage();
-        }
+  Widget build(BuildContext context) => const MonthCalendarPage();
 
-        if (snapshot.data == true) {
-          _startPostLoginServices();
-          return const MonthCalendarPage();
-        }
-
-        _queueReturnToLogin();
-        return const WelcomePage();
-      },
-    );
-  }
-
-  Future<bool> _hasGoogleAccount() async {
+  Future<void> _startSyncIfConnected() async {
     try {
       final auth = ref.read(googleDriveAuthServiceProvider);
       await auth.initialize();
       if (auth.currentAccount != null) {
-        return true;
+        _startPostLoginServices();
+        return;
       }
       final headers = await auth.authorizationHeaders();
-      return headers != null;
+      if (headers != null) {
+        _startPostLoginServices();
+      }
     } on Object {
-      return false;
+      // Google Drive sync is optional; local calendar use stays available.
     }
   }
 
@@ -197,43 +184,6 @@ class _GoogleAccountGateState extends ConsumerState<_GoogleAccountGate> {
       Future.microtask(() async {
         await ref.read(syncServiceProvider).start();
       }).catchError((_) {}),
-    );
-  }
-
-  void _queueReturnToLogin() {
-    if (_loginResetQueued) {
-      return;
-    }
-    _loginResetQueued = true;
-    unawaited(
-      Future.microtask(() async {
-        final settings = ref.read(appSettingsProvider);
-        if (!settings.onboardingCompleted) {
-          return;
-        }
-        final updated = settings.copyWith(onboardingCompleted: false);
-        await ref.read(settingsRepositoryProvider).save(updated);
-        ref.read(appSettingsProvider.notifier).state = updated;
-      }),
-    );
-  }
-}
-
-class _StartupLoadingPage extends StatelessWidget {
-  const _StartupLoadingPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(strokeWidth: 3),
-          ),
-        ),
-      ),
     );
   }
 }

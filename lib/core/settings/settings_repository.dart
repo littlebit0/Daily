@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -177,7 +178,7 @@ class SettingsRepository {
   }
 
   Future<void> deleteGeminiApiKey() {
-    return _secureStorage.delete(key: _geminiKey);
+    return _deleteSecureStorageKey(_geminiKey);
   }
 
   Future<void> saveAppLockPin(String pin) {
@@ -185,7 +186,7 @@ class SettingsRepository {
   }
 
   Future<void> deleteAppLockPin() {
-    return _secureStorage.delete(key: _appLockPinHashKey);
+    return _deleteSecureStorageKey(_appLockPinHashKey);
   }
 
   Future<bool> verifyAppLockPin(String pin) async {
@@ -219,6 +220,26 @@ class SettingsRepository {
     await _preferences.remove(_deviceIdKey);
     await deleteGeminiApiKey();
     await deleteAppLockPin();
+  }
+
+  Future<void> _deleteSecureStorageKey(String key) async {
+    try {
+      await _secureStorage.delete(key: key);
+    } on PlatformException catch (error) {
+      if (!_isMissingSecureStorageEntitlement(error)) {
+        rethrow;
+      }
+    }
+  }
+
+  bool _isMissingSecureStorageEntitlement(PlatformException error) {
+    final details = error.details?.toString().toLowerCase() ?? '';
+    final message = error.message?.toLowerCase() ?? '';
+    final code = error.code.toLowerCase();
+    return code.contains('-34018') ||
+        details.contains('-34018') ||
+        message.contains('-34018') ||
+        message.contains('entitlement');
   }
 
   List<EventCategory> _loadCategories() {

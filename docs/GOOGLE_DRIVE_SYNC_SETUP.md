@@ -43,26 +43,33 @@ $env:GOOGLE_DESKTOP_CLIENT_SECRET = "<desktop-client-secret>"
 
 ## Stage 2: Google Cloud/Firebase setup status
 
-OAuth clients currently used by the app:
+OAuth clients currently checked in or referenced by the app:
 
-- Google Cloud project number: `234127810480`
+- Google Cloud project number: `424765276744`
 - Android package name: `com.littlebit0.dailycalendar`
 - OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
-- Android OAuth client:
-  `234127810480-otvrdan5a1q6gbqejulbp4e7tueebr4n.apps.googleusercontent.com`
 - Web OAuth client for Android sign-in:
-  `234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com`
+  `424765276744-j32k4bdck7lr4ba0lg5s99u91c4849bp.apps.googleusercontent.com`
 - Windows Desktop OAuth client:
   `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
+- iOS bundle ID: `com.littlebit0.daily`
+- macOS bundle ID: `com.littlebit0.daily.macos`
+- macOS OAuth client:
+  `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`
 
-Completed before the Android package rename:
+Known configuration gaps:
 
-- Google Drive API enabled for `daily-littlebit0`.
-- Android debug and upload/release SHA values were registered for the previous
-  package name.
-- The checked-in `android/app/google-services.json` still belongs to the
-  previous Android package and should be replaced after creating a Firebase app
-  for `com.littlebit0.dailycalendar`.
+- iOS Google Sign-In still needs an Apple OAuth client for
+  `com.littlebit0.daily` and its reversed client ID URL scheme in
+  `ios/Runner/Info.plist`.
+- macOS Google Sign-In has a checked-in OAuth client and URL scheme. Native
+  Google Sign-In also requires keychain sharing entitlement in signed builds;
+  local debug builds without an Apple development certificate keep that
+  entitlement disabled so the app can still run in local mode.
+- The checked-in `android/app/google-services.json` contains Android OAuth
+  clients for `com.littlebit0.daily`, while the current Gradle `applicationId`
+  is `com.littlebit0.dailycalendar`. Reconcile this before the next Android
+  release.
 
 Still required before public release:
 
@@ -101,8 +108,15 @@ scope for an app's own configuration data:
    through `GOOGLE_DESKTOP_CLIENT_ID`. Some Google Desktop OAuth clients also
    require the generated client secret during token exchange; provide it through
    `GOOGLE_DESKTOP_CLIENT_SECRET` when building the Windows release.
-3. iOS/iPadOS/macOS: add OAuth clients and platform files, then test the same
-   Drive AppData sync flow.
+3. macOS: local mode builds and runs. Native Google Sign-In is wired to the
+   macOS OAuth client and URL scheme, but keychain sharing requires Apple
+   development signing. If native Google Sign-In is not suitable for the
+   signing environment, build with
+   `GOOGLE_MACOS_AUTH_MODE=desktop`,
+   `GOOGLE_DESKTOP_CLIENT_ID`, and `GOOGLE_DESKTOP_CLIENT_SECRET` to use the
+   browser OAuth flow instead.
+4. iOS/iPadOS: local mode builds and runs. Add the iOS Apple OAuth client and
+   URL scheme, then test the same Drive AppData sync flow.
 
 ## Stage 4: Hardening before public release
 
