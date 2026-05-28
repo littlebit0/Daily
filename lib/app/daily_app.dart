@@ -152,6 +152,7 @@ class _AppHomeState extends ConsumerState<_AppHome> {
   @override
   void initState() {
     super.initState();
+    _startLocalNotificationServices();
     _startSyncIfConnected();
   }
 
@@ -183,6 +184,32 @@ class _AppHomeState extends ConsumerState<_AppHome> {
     unawaited(
       Future.microtask(() async {
         await ref.read(syncServiceProvider).start();
+      }).catchError((_) {}),
+    );
+  }
+
+  void _startLocalNotificationServices() {
+    unawaited(
+      Future.microtask(() async {
+        final notificationService = ref.read(notificationServiceProvider);
+        await notificationService.initialize();
+
+        final settings = ref.read(appSettingsProvider);
+        if (settings.morningBriefingEnabled) {
+          await notificationService.scheduleMorningBriefing(
+            hour: settings.morningBriefingHour,
+            minute: settings.morningBriefingMinute,
+          );
+        }
+
+        final events = await ref
+            .read(eventRepositoryProvider)
+            .allEventsForSync();
+        for (final event in events) {
+          if (!event.isDeleted) {
+            await notificationService.scheduleEventReminder(event);
+          }
+        }
       }).catchError((_) {}),
     );
   }

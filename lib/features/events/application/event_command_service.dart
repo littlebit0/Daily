@@ -48,7 +48,10 @@ class EventCommandService {
     );
     await _repository.save(updated);
     await _notificationService.cancelEventReminder(updated.id);
-    await _notificationService.scheduleEventReminder(updated);
+    await _notificationService.scheduleEventReminder(
+      updated,
+      allowImmediate: true,
+    );
     await _syncService.queueEventUpsert(updated);
   }
 

@@ -3,7 +3,7 @@ class KoreaTime {
 
   static const timeZoneName = 'Asia/Seoul';
 
-  DateTime now() => DateTime.now().toUtc().add(const Duration(hours: 9));
+  DateTime now() => DateTime.now();
 
   DateTime date(int year, int month, int day) {
     return DateTime(year, month, day);

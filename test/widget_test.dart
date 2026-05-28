@@ -6,6 +6,7 @@ import 'package:daily/core/sync/google_drive_auth_service.dart';
 import 'package:daily/core/sync/google_drive_sync_service.dart';
 import 'package:daily/core/sync/sync_service.dart';
 import 'package:daily/features/events/domain/calendar_event.dart';
+import 'package:daily/features/events/domain/event_category.dart';
 import 'package:daily/features/events/domain/event_repository.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -101,6 +102,51 @@ void main() {
       container.read(visibleMonthProvider),
       DateTime(startMonth.year, startMonth.month + 1),
     );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Daily reschedules saved event notifications on app start', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final event = CalendarEvent(
+      id: 'event-notify',
+      title: '알림 테스트',
+      startAt: DateTime.now().add(const Duration(hours: 1)),
+      endAt: DateTime.now().add(const Duration(hours: 2)),
+      allDay: false,
+      category: EventCategory.basic,
+      colorValue: EventCategory.basic.colorValue,
+      reminderMinutesBefore: 0,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    final notificationService = _FakeNotification();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(
+            _FakeEventRepository(events: [event]),
+          ),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(account: null),
+          ),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(notificationService.initializeCalls, 1);
+    expect(notificationService.scheduledEventIds, ['event-notify']);
+    expect(notificationService.scheduledImmediateFlags, [false]);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -324,6 +370,10 @@ class _FakeGoogleDriveSyncService extends GoogleDriveSyncService {
 
 class _FakeNotification implements NotificationService {
   var cancelMorningBriefingCalls = 0;
+  var initializeCalls = 0;
+  var showTestNotificationCalls = 0;
+  final scheduledEventIds = <String>[];
+  final scheduledImmediateFlags = <bool>[];
 
   @override
   Future<void> cancelMorningBriefing() async {
@@ -334,16 +384,35 @@ class _FakeNotification implements NotificationService {
   Future<void> cancelEventReminder(String eventId) async {}
 
   @override
-  Future<void> initialize() async {}
+  Future<void> initialize() async {
+    initializeCalls += 1;
+  }
 
   @override
-  Future<void> scheduleEventReminder(CalendarEvent event) async {}
+  Future<void> scheduleEventReminder(
+    CalendarEvent event, {
+    bool allowImmediate = false,
+  }) async {
+    scheduledEventIds.add(event.id);
+    scheduledImmediateFlags.add(allowImmediate);
+  }
 
   @override
   Future<void> scheduleMorningBriefing({
     required int hour,
     required int minute,
   }) async {}
+
+  @override
+  Future<void> showTestNotification() async {
+    showTestNotificationCalls += 1;
+  }
+
+  @override
+  Future<int> pendingNotificationCount() async => scheduledEventIds.length;
+
+  @override
+  Future<String> permissionSummary() async => '테스트 권한 · 예약 0개';
 }
 
 class _FakeSync implements SyncService {
@@ -358,6 +427,10 @@ class _FakeSync implements SyncService {
 }
 
 class _FakeEventRepository implements EventRepository {
+  _FakeEventRepository({List<CalendarEvent> events = const []})
+    : _events = events;
+
+  final List<CalendarEvent> _events;
   var clearAllCalls = 0;
 
   @override
@@ -376,7 +449,7 @@ class _FakeEventRepository implements EventRepository {
   Future<List<CalendarEvent>> pendingSyncEvents() async => const [];
 
   @override
-  Future<List<CalendarEvent>> allEventsForSync() async => const [];
+  Future<List<CalendarEvent>> allEventsForSync() async => _events;
 
   @override
   Future<void> markSynced(String eventId) async {}

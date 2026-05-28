@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../../core/settings/app_settings.dart';
@@ -22,6 +24,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   var _backupMessage = '';
   var _syncMessage = '';
   var _syncBusy = false;
+  var _notificationMessage = '';
+  var _notificationBusy = false;
   String? _driveEmail;
 
   static const _categoryColors = [
@@ -75,6 +79,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsSection(
             title: '알림',
             children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('알림 테스트'),
+                subtitle: Text(
+                  _notificationMessage.isEmpty
+                      ? '즉시 알림을 보내고 예약 상태를 확인합니다.'
+                      : _notificationMessage,
+                ),
+                trailing: FilledButton(
+                  onPressed: _notificationBusy ? null : _testNotification,
+                  child: _notificationBusy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('보내기'),
+                ),
+              ),
+              if (_notificationMessage.contains('차단')) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: _openNotificationSettings,
+                    icon: const Icon(Icons.settings_outlined),
+                    label: const Text('시스템 알림 설정 열기'),
+                  ),
+                ),
+              ],
+              const Divider(height: 1),
               _PresetMinutesTile(
                 title: '기본 일정 알림',
                 value: settings.defaultReminderMinutes,
@@ -460,6 +494,67 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     for (final event in events.where((event) => event.deletedAt == null)) {
       await ref.read(notificationServiceProvider).cancelEventReminder(event.id);
       await ref.read(notificationServiceProvider).scheduleEventReminder(event);
+    }
+  }
+
+  Future<void> _testNotification() async {
+    setState(() {
+      _notificationBusy = true;
+      _notificationMessage = '알림 상태 확인 중입니다.';
+    });
+    try {
+      final notificationService = ref.read(notificationServiceProvider);
+      await notificationService.showTestNotification();
+      final summary = await notificationService.permissionSummary();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notificationMessage = '테스트 알림을 보냈습니다. $summary';
+      });
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _notificationMessage = '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _notificationBusy = false);
+      }
+    }
+  }
+
+  Future<void> _openNotificationSettings() async {
+    final urls = switch (defaultTargetPlatform) {
+      TargetPlatform.iOS => [Uri.parse('app-settings:')],
+      TargetPlatform.macOS => [
+        Uri.parse(
+          'x-apple.systempreferences:com.apple.Notifications-Settings.extension',
+        ),
+        Uri.parse(
+          'x-apple.systempreferences:com.apple.preference.notifications',
+        ),
+      ],
+      TargetPlatform.windows => [Uri.parse('ms-settings:notifications')],
+      _ => <Uri>[],
+    };
+
+    if (urls.isEmpty) {
+      setState(() {
+        _notificationMessage = 'Android에서는 시스템 설정 > 앱 > Daily > 알림에서 허용을 켜세요.';
+      });
+      return;
+    }
+
+    for (final url in urls) {
+      if (await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        return;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _notificationMessage = '시스템 알림 설정을 열 수 없습니다. OS 설정에서 Daily 알림을 허용하세요.';
+      });
     }
   }
 
