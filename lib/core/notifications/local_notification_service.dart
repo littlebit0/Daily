@@ -266,9 +266,6 @@ class LocalNotificationService implements NotificationService {
         '스타일 ${_macAlertStyleLabel(nativeMacPermissions['alertStyle'])}',
       );
       summary.add(
-        '긴급 알림 ${nativeMacPermissions['timeSensitiveEnabled'] == true ? '허용' : '차단'}',
-      );
-      summary.add(
         '사운드 ${nativeMacPermissions['isSoundEnabled'] == true ? '허용' : '차단'}',
       );
       summary.add(

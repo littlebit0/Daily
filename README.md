@@ -4,18 +4,23 @@ Daily는 로컬 우선으로 바로 사용할 수 있고, Google 계정을 연�
 
 ## 현재 버전
 
-- 앱 버전: `1.1.0+1`
+- 앱 버전: `1.1.1+2`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 최신 배포: [Daily 1.1.0+1](https://github.com/littlebit0/Daily/releases/tag/v1.1.0%2B1)
+- 최신 배포: [Daily 1.1.1+2](https://github.com/littlebit0/Daily/releases/tag/v1.1.1%2B2)
 
 ## 설치 파일
 
 GitHub Release에서 최신 설치 파일을 받을 수 있습니다.
 
+- iOS unsigned IPA: `daily-ios-1.1.1+2-unsigned.ipa`
+- macOS 앱 DMG: `daily-macos-1.1.1+2.dmg`
+
+iOS unsigned IPA는 서명되지 않은 검증용 산출물입니다. 실제 iPhone에 설치하려면 연결된 iPhone을 Xcode에 신뢰/등록해 Development provisioning profile을 만들거나, Apple Developer Program의 TestFlight/App Store/Ad Hoc 배포 서명이 필요합니다.
+
+이전 1.1.0 Android/Windows 산출물:
+
 - Android 직접 설치용 APK: `daily-android-1.1.0.apk`
 - Android Play Console 제출용 AAB: `daily-android-1.1.0.aab`
-- iOS archive: `daily-ios-1.1.0+1.xcarchive.zip`
-- macOS 앱 DMG: `daily-macos-1.1.0+1.dmg`
 - Windows 배포용 ZIP: `daily-windows-1.1.0.zip`
 - Windows 단독 EXE: `daily-windows-1.1.0.exe`
 
@@ -25,6 +30,8 @@ Windows는 `zip` 사용을 권장합니다. Flutter Windows 앱은 실행 파일
 
 - APK: `2D613A066840609832836C205645C9D88E6706DC7C31D9EC42AA5488BD9D73E9`
 - AAB: `902C05034389A0F8EEA41F00145A9B69FD619371BE5312F7E27335DCBDAE0143`
+- macOS DMG: `0effbf8366c7408711336868fb759b18aaaf903ada51eceaadb3a91a03f8fd06`
+- iOS unsigned IPA: `071a42ec0c186e3a968d62b0f10a18974695b0ad592a8312c77491eefd5333bf`
 - Windows EXE: `47332EA06B42272CDBD3515211B4252F41AA8ADEEE7E2A598D99BA48809352AC`
 - Windows ZIP: `247AEC22C6DB458672FC8931626D00EF31AB173261B516B8D896A367B0B2A031`
 

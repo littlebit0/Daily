@@ -6,7 +6,7 @@ Daily는 이미 Flutter iOS/macOS 타깃을 포함하고 있습니다. 다만 Ap
 
 - iOS 번들 ID: `com.littlebit0.daily`
 - macOS 번들 ID: `com.littlebit0.daily.macos`
-- 앱 버전: `1.1.0+1`
+- 앱 버전: `1.1.1+2`
 - 최소 iOS 버전: `15.0`
 
 ## 필요한 로컬 도구
@@ -137,6 +137,10 @@ iOS 실제 기기 또는 App Store archive:
 ```
 
 실제 기기, TestFlight, App Store, Developer ID, notarized macOS 배포에는 Xcode에서 Apple Developer Team과 서명 인증서/프로비저닝 프로파일을 맞춰야 합니다.
+
+Personal Team으로 실제 iPhone 개발 설치를 만들려면 iPhone을 Mac에 연결하고, 기기에서 이 컴퓨터를 신뢰한 뒤, Xcode가 해당 UDID를 팀에 등록할 수 있어야 합니다. 기기가 등록되어 있지 않으면 Xcode archive가 `Your team has no devices from which to generate a provisioning profile` 오류로 실패합니다.
+
+Time Sensitive Notifications capability는 Apple Personal Team에서 provisioning할 수 없습니다. Daily의 기본 일정 알림은 이 capability 없이도 표준 Notification Center 알림으로 동작하므로, Personal Team 개발 설치와 일반 빌드 가능성을 위해 릴리스 entitlements에는 포함하지 않습니다.
 
 ## 참고
 

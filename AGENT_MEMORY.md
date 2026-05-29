@@ -12,8 +12,9 @@ keystore passwords to this file.
   `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0`
 - Branch: `main`
 - Latest release work commit before this handoff:
-  `964de71742adfc7dd3ea4babd2d57f3b80585874`
-- Release tag pushed to GitHub: `v1.1.0+1`
+  `pending 1.1.1+2 release commit`
+- Release tag prepared locally:
+  `v1.1.1+2`
 - GitHub SSH authentication was configured and verified for user `littlebit0`.
 - GitHub CLI authentication was completed with `repo` scope in a temporary
   config directory.
@@ -33,6 +34,7 @@ keystore passwords to this file.
   deletion flows.
 - Added/updated Apple build documentation and Swift Package Manager lock files.
 - Built and verified macOS and iOS release artifacts.
+- Prepared Daily `1.1.1+2` bugfix release assets for macOS and iOS.
 
 ## Main Files Changed In Release Work
 
@@ -41,6 +43,7 @@ keystore passwords to this file.
 - `README.md`
 - `analysis_options.yaml`
 - `docs/APPLE_BUILD_SETUP.md`
+- `docs/RELEASE_NOTES_1.1.1.md`
 - `docs/GOOGLE_DRIVE_SYNC_SETUP.md`
 - `ios/Runner.xcodeproj/project.pbxproj`
 - `ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`
@@ -70,40 +73,44 @@ keystore passwords to this file.
 
 - `./tool/flutter.sh analyze` passed.
 - `./tool/flutter.sh test` passed.
-- macOS release build completed.
-- macOS app code-sign verification passed for the local build.
-- macOS DMG verification with `hdiutil verify` passed.
-- iOS release build completed with `--no-codesign`.
+- macOS `1.1.1+2` release build completed.
+- macOS app code-sign verification passed after signing the release app with
+  the local Apple Development identity.
+- macOS `1.1.1+2` DMG verification with `hdiutil verify` passed.
+- iOS `1.1.1+2` release build completed with `--no-codesign`.
 - iOS unsigned IPA ZIP structure check passed.
+- iOS signed archive was attempted with automatic provisioning, but Xcode
+  failed because no iPhone device is currently registered with the Apple team:
+  `Your team has no devices from which to generate a provisioning profile`.
 
 ## Release Artifacts
 
 - macOS DMG:
-  `dist/daily-macos-1.1.0+1.dmg`
+  `dist/daily-macos-1.1.1+2.dmg`
 - iOS unsigned IPA:
-  `dist/daily-ios-1.1.0+1-unsigned.ipa`
+  `dist/daily-ios-1.1.1+2-unsigned.ipa`
 
 SHA-256:
 
 - macOS DMG:
-  `0dcb4a1bdc3315b91c6b3c89c2e507333613d200b3b5f41cf112b783de6d862d`
+  `0effbf8366c7408711336868fb759b18aaaf903ada51eceaadb3a91a03f8fd06`
 - iOS unsigned IPA:
-  `a5668c2401564589f48cbb0edbd97e88b56f048cd75861a7f34a8d29e0345c0d`
+  `071a42ec0c186e3a968d62b0f10a18974695b0ad592a8312c77491eefd5333bf`
 
-Important caveat: the iOS IPA is unsigned. Actual device installation,
-TestFlight, or App Store distribution still requires Apple Developer signing.
+Important caveat: the iOS IPA is unsigned. Actual iPhone installation requires
+either a connected/trusted iPhone so Xcode can create a Development provisioning
+profile, or Apple Developer Program distribution signing via TestFlight, App
+Store, or Ad Hoc provisioning.
 
 ## GitHub Release Status
 
-- A draft GitHub release exists for tag `v1.1.0+1`.
-- Title: `Daily 1.1.0+1`
-- Uploaded assets:
-  - `daily-macos-1.1.0+1.dmg`
-  - `daily-ios-1.1.0+1-unsigned.ipa`
-- The release is still a draft. The user must explicitly confirm before it is
-  published as a public release.
+- A GitHub release should be created for tag `v1.1.1+2`.
+- Title: `Daily 1.1.1+2`
+- Assets prepared locally:
+  - `daily-macos-1.1.1+2.dmg`
+  - `daily-ios-1.1.1+2-unsigned.ipa`
 - Expected public URL after publishing:
-  `https://github.com/littlebit0/Daily/releases/tag/v1.1.0+1`
+  `https://github.com/littlebit0/Daily/releases/tag/v1.1.1+2`
 
 ## Known Local Workspace Notes
 
@@ -213,9 +220,9 @@ removed only after confirming they are not user-created work.
     when the installed app's TeamIdentifier changes. This avoids the old
     ad-hoc app cache continuing to drop notifications after signing is fixed.
   - `macos/Runner/Release.entitlements` and `ios/Runner/Runner.entitlements`
-    include `com.apple.developer.usernotifications.time-sensitive` for
-    production Time Sensitive notifications. macOS debug/profile entitlements do
-    not include this key because unsigned/ad-hoc debug builds cannot use it.
+    no longer include `com.apple.developer.usernotifications.time-sensitive`.
+    Apple Personal Team provisioning does not support that capability, and
+    standard Notification Center reminders do not require it.
   - Android scheduled notifications now fall back to
     `AndroidScheduleMode.inexactAllowWhileIdle` when exact alarm permission is
     unavailable, instead of failing the schedule call.
@@ -250,12 +257,16 @@ removed only after confirming they are not user-created work.
 
 ## Recommended Next Steps
 
-1. If the user confirms, publish the draft GitHub release for `v1.1.0+1`.
-2. Clean or ignore the duplicate generated Flutter files after checking they
+1. Publish the GitHub release for `v1.1.1+2` with the prepared macOS DMG and
+   iOS unsigned IPA assets.
+2. For actual iPhone installation, connect and trust the user's iPhone, then
+   rerun the iOS archive/install flow so Xcode can create a Development
+   provisioning profile for `com.littlebit0.daily`.
+3. Clean or ignore the duplicate generated Flutter files after checking they
    are not needed.
-3. Continue the pending design task: redesign Daily with an Apple-like visual
+4. Continue the pending design task: redesign Daily with an Apple-like visual
    language and apply it consistently across iOS, macOS, Android, and Windows.
-4. After design changes, run `./tool/flutter.sh analyze` and
+5. After design changes, run `./tool/flutter.sh analyze` and
    `./tool/flutter.sh test`.
-5. For release-quality iOS distribution, configure Apple Developer signing and
+6. For release-quality iOS distribution, configure Apple Developer signing and
    create a signed IPA or TestFlight upload.

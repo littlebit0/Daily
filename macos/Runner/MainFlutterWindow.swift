@@ -62,10 +62,7 @@ private final class DailyNativeNotifications {
 
   private static func initialize(_ result: @escaping FlutterResult) {
     DailyNotificationCenterDelegate.install()
-    var options: UNAuthorizationOptions = [.alert, .sound, .badge]
-    if #available(macOS 12.0, *) {
-      options.insert(.timeSensitive)
-    }
+    let options: UNAuthorizationOptions = [.alert, .sound, .badge]
     UNUserNotificationCenter.current().requestAuthorization(options: options) { granted, error in
       finish(result, error: error, value: granted)
     }
@@ -81,7 +78,6 @@ private final class DailyNativeNotifications {
         "notificationCenterEnabled": settings.notificationCenterSetting == .enabled,
         "alertStyle": settings.alertStyle.rawValue,
         "scheduledDeliveryEnabled": scheduledDeliveryEnabled(settings),
-        "timeSensitiveEnabled": timeSensitiveEnabled(settings),
       ]
       finish(result, value: value)
     }
@@ -90,13 +86,6 @@ private final class DailyNativeNotifications {
   private static func scheduledDeliveryEnabled(_ settings: UNNotificationSettings) -> Bool {
     if #available(macOS 12.0, *) {
       return settings.scheduledDeliverySetting == .enabled
-    }
-    return true
-  }
-
-  private static func timeSensitiveEnabled(_ settings: UNNotificationSettings) -> Bool {
-    if #available(macOS 12.0, *) {
-      return settings.timeSensitiveSetting == .enabled
     }
     return true
   }
@@ -174,9 +163,7 @@ private final class DailyNativeNotifications {
     content.sound = .default
     content.userInfo = ["payload": arguments["payload"] as? String ?? ""]
     if #available(macOS 12.0, *) {
-      content.interruptionLevel = settings.timeSensitiveSetting == .enabled
-        ? .timeSensitive
-        : .active
+      content.interruptionLevel = .active
     }
     return UNNotificationRequest(
       identifier: String(id),
