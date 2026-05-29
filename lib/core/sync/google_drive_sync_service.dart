@@ -30,7 +30,7 @@ class GoogleDriveSyncService implements SyncService {
 
   static const _syncFileName = 'daily-sync-v1.json';
   static const _driveHost = 'www.googleapis.com';
-  static const _autoSyncInterval = Duration(seconds: 20);
+  static const _autoSyncInterval = Duration(seconds: 5);
   static const _changeSyncDelay = Duration(milliseconds: 300);
 
   final GoogleDriveAuthService _authService;

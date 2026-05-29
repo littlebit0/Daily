@@ -108,6 +108,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
       }
 
       setState(() => _message = '계정 백업을 확인하는 중입니다.');
+      await ref.read(syncServiceProvider).start();
       await ref
           .read(googleDriveSyncServiceProvider)
           .syncNow(promptIfNecessary: true);

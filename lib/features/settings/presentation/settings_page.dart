@@ -622,6 +622,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final account = await ref
           .read(googleDriveAuthServiceProvider)
           .signIn(forceAccountSelection: true);
+      await ref.read(syncServiceProvider).start();
       await ref
           .read(googleDriveSyncServiceProvider)
           .syncNow(promptIfNecessary: true);

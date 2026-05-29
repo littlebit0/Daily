@@ -104,7 +104,7 @@ Google Drive AppData 방식은 서버 없이 여러 기기 동기화를 구현�
 - Windows Desktop OAuth client: `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
 - macOS OAuth client: `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`
 
-Windows/macOS 브라우저 로그인은 Desktop OAuth client와 PKCE loopback callback을 사용합니다. Desktop OAuth client secret은 Google 토큰 교환에서 선택값이므로, Google Cloud에서 발급된 client가 secret을 요구하는 경우에만 빌드 인자로 전달합니다. macOS Google 로그인은 기본적으로 Desktop OAuth 경로를 사용하고, iOS Google 로그인은 `com.littlebit0.daily`용 iOS OAuth client ID와 reversed client ID URL scheme이 필요합니다. secret 값은 Git에 커밋하지 않고 빌드 인자로만 전달합니다.
+Windows/macOS 브라우저 로그인은 Desktop OAuth client와 PKCE loopback callback을 사용합니다. Desktop OAuth client secret은 Google 토큰 교환에서 선택값이지만, 현재 연결된 Desktop OAuth client는 token exchange에서 secret을 요구하므로 릴리즈 빌드에는 함께 전달합니다. macOS Google 로그인은 기본적으로 Desktop OAuth 경로를 사용하고, iOS Google 로그인은 `com.littlebit0.daily`용 iOS OAuth client ID와 reversed client ID URL scheme이 필요합니다. secret 값은 Git에 커밋하지 않고 빌드 인자로만 전달합니다.
 
 ```powershell
 .\tool\flutter.ps1 build windows --release `

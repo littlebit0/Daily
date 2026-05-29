@@ -277,6 +277,31 @@ removed only after confirming they are not user-created work.
     Google/Firebase iOS OAuth client for bundle `com.littlebit0.daily` and its
     matching `REVERSED_CLIENT_ID` in `ios/Runner/Info.plist`.
 
+- Follow-up on 2026-05-29 after user testing:
+  - User completed macOS browser login and the app showed
+    `Google 토큰 요청 실패: client_secret is missing.`
+  - Root cause: Google's installed-app `client_secret` is optional by protocol,
+    but the current Daily Desktop OAuth client rejects this token exchange
+    without its generated secret.
+  - Rebuilt and reinstalled `~/Applications/Daily.app` with
+    `GOOGLE_DESKTOP_CLIENT_SECRET` injected via a temporary
+    `--dart-define-from-file`; the temp file was deleted after the build. Do
+    not commit the secret.
+  - User reported iPhone real-time sync still did not work. Code root cause:
+    Settings/Onboarding login called `syncNow()` once but did not start
+    `SyncService.start()`, so the periodic remote pull timer was not activated
+    after logging in from a running app.
+  - Fixed Settings and Welcome Google login flows to call
+    `syncServiceProvider.start()` after sign-in, and reduced Google Drive
+    foreground polling from 20 seconds to 5 seconds for near-real-time sync
+    while the app is open.
+  - Rebuilt and installed the fixed iOS `1.1.1 (2)` app onto the connected
+    iPhone and launched it successfully with `devicectl`.
+  - Local verification after this update: `./tool/flutter.sh analyze` passed
+    and `./tool/flutter.sh test` passed. The first parallel test attempt failed
+    only because another Flutter command was holding the startup/ephemeral file
+    lock; rerunning test alone passed.
+
 ## Security Notes
 
 - The user previously pasted Google OAuth client JSON that included a

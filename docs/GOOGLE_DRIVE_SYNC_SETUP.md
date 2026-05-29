@@ -32,8 +32,9 @@ until OAuth clients and scopes are configured.
 - Windows Google Drive sync uses a desktop OAuth browser flow with PKCE and a
   local loopback callback. It can receive a Desktop app OAuth client ID through
   either an environment variable or a build define. The Desktop OAuth client
-  secret is optional for Google's installed app flow; set it only if the
-  specific Google Cloud client rejects token exchange without it:
+  secret is optional for Google's installed app flow. The current Daily Desktop
+  OAuth client rejects token exchange without it, so release builds should pass
+  `GOOGLE_DESKTOP_CLIENT_SECRET` from a local secret store or CI secret:
 
 ```powershell
 $env:GOOGLE_DESKTOP_CLIENT_ID = "<desktop-client-id>"
