@@ -12,12 +12,38 @@ keystore passwords to this file.
   `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0`
 - Branch: `main`
 - Latest release work commit before this handoff:
-  `pending 1.1.1+2 release commit`
+  `pending 1.1.3 iPhone sync release commit`
 - Release tag prepared locally:
-  `v1.1.1+2`
+  `v1.1.3`
 - GitHub SSH authentication was configured and verified for user `littlebit0`.
 - GitHub CLI authentication was completed with `repo` scope in a temporary
   config directory.
+
+## Cross-Platform Sync Rule
+
+- User requirement as of 2026-05-29: Windows, Android, iPhone/iOS, and macOS
+  must all read and write the same Google Drive backup/sync file.
+- Do not treat platform-specific sync silos as acceptable. All production
+  OAuth clients must belong to the same Google Cloud/Firebase project and must
+  resolve to the same Drive AppData namespace, or the sync backend must be
+  redesigned so every platform intentionally targets one shared backup file.
+- Current diagnosis: the installed macOS app was rebuilt with the browser-based
+  Desktop OAuth client beginning with `234127810480`, while the checked-in
+  iOS/Android/Firebase configuration points at project number `424765276744`.
+  Because Drive `appDataFolder` is app-scoped, this can make macOS and iOS see
+  different hidden `daily-sync-v1.json` backups even when the Google account is
+  the same.
+- Mac local reference data at the time of diagnosis lives in:
+  `/Users/kimhwi/Library/Containers/com.littlebit0.daily.macos/Data/Library/Application Support/com.littlebit0.daily.macos/daily.sqlite`.
+  It had three visible synced events: `test`, `ttttt`, and `전역 D-38`.
+- iOS simulator reference data at the time of diagnosis lived in:
+  `/Users/kimhwi/Library/Developer/CoreSimulator/Devices/BF524643-403E-4212-ACB7-621E11279532/data/Containers/Data/Application/56FAAB98-AD81-4B37-9D2B-208E9DF18632/Library/Application Support/daily.sqlite`.
+  It had a different `test` event and a deleted `dwqdwq`, confirming this was
+  not just a UI refresh problem.
+- Next agent must not “fix” iOS sync by copying local SQLite data or adding a
+  platform-only workaround. The durable fix is to align OAuth/client project
+  configuration and, if needed, migrate the existing macOS backup into the
+  unified project-backed Drive AppData file.
 
 ## Completed Work
 
@@ -302,23 +328,52 @@ removed only after confirming they are not user-created work.
     only because another Flutter command was holding the startup/ephemeral file
     lock; rerunning test alone passed.
 
+- Follow-up on 2026-05-29 for iPhone sync first:
+  - User supplied a new Google iOS OAuth plist for bundle
+    `com.littlebit0.daily` under project number `234127810480`.
+  - `ios/Runner/Info.plist` now uses iOS client
+    `234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com`
+    and reversed URL scheme
+    `com.googleusercontent.apps.234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa`.
+  - `ios/Runner/GoogleService-Info.plist` now uses the same iOS client and
+    reversed client ID. The stale `SERVER_CLIENT_ID` from project
+    `424765276744` was removed because `google_sign_in_ios` reads that value
+    automatically and would otherwise mix projects during iOS sign-in.
+  - iOS `GoogleDriveAuthService` now treats
+    `GOOGLE_IOS_SERVER_CLIENT_ID` as optional and does not fall back to the
+    default web/server client on iOS. Interactive mobile login/authorization
+    waits up to 5 minutes; silent auth remains capped at 45 seconds.
+  - Version was bumped to visible release `1.1.3`; build number remains `3`.
+    User explicitly requested release/tag/docs/assets use `1.1.3` style rather
+    than exposing the Flutter build metadata suffix in release names.
+  - Connected iPhone `김휘의 iPhone`
+    (`415EDAF7-A303-50FD-8344-351D7BF59153`) was updated with the
+    development-signed `1.1.3 (3)` build and launched successfully.
+- Release assets prepared:
+    `dist/daily-ios-1.1.3-signed-development.ipa` and
+    `dist/daily-ios-1.1.3-unsigned.ipa`.
+  - This is the immediate iPhone-first fix. Android/Web/Firebase metadata still
+    references project `424765276744`, so the later cross-platform cleanup must
+    align all production OAuth clients to one shared Drive AppData target.
+
 ## Security Notes
 
 - The user previously pasted Google OAuth client JSON that included a
   `client_secret`. Do not commit that secret.
 - Keep GitHub tokens, Apple signing identities, provisioning profiles, Android
   keystores, and OAuth secrets out of the repository.
-- Google/Firebase project number currently referenced by app config and docs:
-  `424765276744`. A separate Desktop OAuth client ID beginning with
-  `234127810480` was provided by the user for browser-based desktop login.
+- Google/Firebase legacy metadata still references project number
+  `424765276744`. The current iPhone-first Drive sync target uses project
+  number `234127810480` for iOS and Desktop OAuth. Do not commit OAuth client
+  secrets.
 
 ## Recommended Next Steps
 
-1. Publish the GitHub release for `v1.1.1+2` with the prepared macOS DMG and
-   iOS unsigned IPA assets.
-2. For actual iPhone installation, connect and trust the user's iPhone, then
-   rerun the iOS archive/install flow so Xcode can create a Development
-   provisioning profile for `com.littlebit0.daily`.
+1. Verify the iPhone-first sync fix with `./tool/flutter.sh analyze`,
+   `./tool/flutter.sh test`, an iOS simulator run, and a connected iPhone
+   install.
+2. After user confirms iPhone sync works, commit, push, tag, and publish the
+   next GitHub release with fresh artifacts.
 3. Clean or ignore the duplicate generated Flutter files after checking they
    are not needed.
 4. Continue the pending design task: redesign Daily with an Apple-like visual

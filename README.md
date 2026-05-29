@@ -4,16 +4,16 @@ Daily는 로컬 우선으로 바로 사용할 수 있고, Google 계정을 연�
 
 ## 현재 버전
 
-- 앱 버전: `1.1.1+2`
+- 앱 버전: `1.1.3`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 최신 배포: [Daily 1.1.1+2](https://github.com/littlebit0/Daily/releases/tag/v1.1.1%2B2)
+- 최신 배포: [Daily 1.1.3](https://github.com/littlebit0/Daily/releases/tag/v1.1.3)
 
 ## 설치 파일
 
 GitHub Release에서 최신 설치 파일을 받을 수 있습니다.
 
-- iOS unsigned IPA: `daily-ios-1.1.1+2-unsigned.ipa`
-- macOS 앱 DMG: `daily-macos-1.1.1+2.dmg`
+- iOS development-signed IPA: `daily-ios-1.1.3-signed-development.ipa`
+- iOS unsigned IPA: `daily-ios-1.1.3-unsigned.ipa`
 
 iOS unsigned IPA는 서명되지 않은 검증용 산출물입니다. 실제 iPhone에 설치하려면 연결된 iPhone을 Xcode에 신뢰/등록해 Development provisioning profile을 만들거나, Apple Developer Program의 TestFlight/App Store/Ad Hoc 배포 서명이 필요합니다.
 
@@ -30,8 +30,8 @@ Windows는 `zip` 사용을 권장합니다. Flutter Windows 앱은 실행 파일
 
 - APK: `2D613A066840609832836C205645C9D88E6706DC7C31D9EC42AA5488BD9D73E9`
 - AAB: `902C05034389A0F8EEA41F00145A9B69FD619371BE5312F7E27335DCBDAE0143`
-- macOS DMG: `0effbf8366c7408711336868fb759b18aaaf903ada51eceaadb3a91a03f8fd06`
-- iOS unsigned IPA: `071a42ec0c186e3a968d62b0f10a18974695b0ad592a8312c77491eefd5333bf`
+- iOS development-signed IPA: `c621eb46a4022451382f6916cc5bdb58b55a56c4512966851fbd6a4fb942003b`
+- iOS unsigned IPA: `ae90274b1073ba4d6d2eb6e7d4133e2c2e2019e9117c4f7e4a2a1c97c3ec11b4`
 - Windows EXE: `47332EA06B42272CDBD3515211B4252F41AA8ADEEE7E2A598D99BA48809352AC`
 - Windows ZIP: `247AEC22C6DB458672FC8931626D00EF31AB173261B516B8D896A367B0B2A031`
 
@@ -96,15 +96,17 @@ Google Drive AppData 방식은 서버 없이 여러 기기 동기화를 구현�
 
 ## Google OAuth 설정
 
-현재 체크인된 Firebase/Google 설정:
+현재 OAuth/동기화 설정:
 
-- 프로젝트 번호: `424765276744`
+- Google Drive AppData 공통 동기화 목표 프로젝트 번호: `234127810480`
+- 기존 Firebase/Android/Web 메타데이터 프로젝트 번호: `424765276744`
 - Android 패키지명: `com.littlebit0.dailycalendar`
 - Web OAuth client: `424765276744-j32k4bdck7lr4ba0lg5s99u91c4849bp.apps.googleusercontent.com`
 - Windows Desktop OAuth client: `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
+- iOS OAuth client: `234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com`
 - macOS OAuth client: `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`
 
-Windows/macOS 브라우저 로그인은 Desktop OAuth client와 PKCE loopback callback을 사용합니다. Desktop OAuth client secret은 Google 토큰 교환에서 선택값이지만, 현재 연결된 Desktop OAuth client는 token exchange에서 secret을 요구하므로 릴리즈 빌드에는 함께 전달합니다. macOS Google 로그인은 기본적으로 Desktop OAuth 경로를 사용하고, iOS Google 로그인은 `com.littlebit0.daily`용 iOS OAuth client ID와 reversed client ID URL scheme이 필요합니다. secret 값은 Git에 커밋하지 않고 빌드 인자로만 전달합니다.
+Windows/macOS 브라우저 로그인은 Desktop OAuth client와 PKCE loopback callback을 사용합니다. Desktop OAuth client secret은 Google 토큰 교환에서 선택값이지만, 현재 연결된 Desktop OAuth client는 token exchange에서 secret을 요구하므로 릴리즈 빌드에는 함께 전달합니다. macOS Google 로그인은 기본적으로 Desktop OAuth 경로를 사용하고, iOS Google 로그인은 `com.littlebit0.daily`용 iOS OAuth client ID와 reversed client ID URL scheme을 체크인된 plist에서 읽습니다. iOS에는 별도 server client ID를 전달하지 않습니다. secret 값은 Git에 커밋하지 않고 빌드 인자로만 전달합니다.
 
 ```powershell
 .\tool\flutter.ps1 build windows --release `
@@ -137,7 +139,7 @@ Gemini 연동 구조와 규칙 기반 자연어 일정 파서는 코드에 포�
 - iOS 시뮬레이터
 - macOS debug 앱
 
-iOS/macOS는 현재 로컬 모드로 실행 확인이 완료되었습니다. macOS는 Google 로그인 설정까지 코드와 plist/entitlement가 연결되어 있고, iOS는 Google Cloud에서 iOS OAuth client와 URL scheme을 추가해야 Drive 동기화까지 사용할 수 있습니다. 실제 기기, TestFlight, App Store, Developer ID 배포는 Apple Developer Team과 서명 인증서/프로비저닝 프로파일 설정이 필요합니다.
+iOS/macOS는 현재 로컬 모드로 실행 확인이 완료되었습니다. macOS는 기본적으로 Desktop OAuth 경로를 사용하고, iOS는 `com.littlebit0.daily`용 iOS OAuth client와 URL scheme이 연결되어 있습니다. 실제 기기, TestFlight, App Store, Developer ID 배포는 Apple Developer Team과 서명 인증서/프로비저닝 프로파일 설정이 필요합니다.
 
 ## 개발 명령
 

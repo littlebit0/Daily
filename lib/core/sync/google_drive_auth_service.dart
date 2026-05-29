@@ -37,6 +37,9 @@ class GoogleDriveAuthService {
     defaultValue:
         '424765276744-j32k4bdck7lr4ba0lg5s99u91c4849bp.apps.googleusercontent.com',
   );
+  static const _iosServerClientId = String.fromEnvironment(
+    'GOOGLE_IOS_SERVER_CLIENT_ID',
+  );
   static const _appleClientId = String.fromEnvironment(
     'GOOGLE_APPLE_CLIENT_ID',
   );
@@ -63,8 +66,8 @@ class GoogleDriveAuthService {
   static const _expiresAtKey = '${_storagePrefix}expires_at';
   static const _emailKey = '${_storagePrefix}email';
   static const _displayNameKey = '${_storagePrefix}display_name';
-  static const _mobileGoogleSignInTimeout = Duration(seconds: 45);
-  static const _mobileAuthorizationTimeout = Duration(seconds: 45);
+  static const _mobileInteractiveAuthTimeout = Duration(minutes: 5);
+  static const _mobileSilentAuthorizationTimeout = Duration(seconds: 45);
   static const _mobileLightweightAuthTimeout = Duration(seconds: 8);
   static const _mobileAccountClearTimeout = Duration(seconds: 3);
 
@@ -127,6 +130,17 @@ class GoogleDriveAuthService {
     return Platform.environment['GOOGLE_APPLE_CLIENT_ID']?.trim() ?? '';
   }
 
+  String get _configuredGoogleSignInServerClientId {
+    if (Platform.isIOS) {
+      final iosSpecific = _iosServerClientId.trim();
+      if (iosSpecific.isNotEmpty) {
+        return iosSpecific;
+      }
+      return Platform.environment['GOOGLE_IOS_SERVER_CLIENT_ID']?.trim() ?? '';
+    }
+    return _serverClientId.trim();
+  }
+
   bool get _shouldUseMacosDesktopOAuth {
     if (!Platform.isMacOS) {
       return false;
@@ -169,16 +183,16 @@ class GoogleDriveAuthService {
       if (existing != null) {
         await existing.authorizationClient
             .authorizeScopes(scopes)
-            .timeout(_mobileAuthorizationTimeout);
+            .timeout(_mobileInteractiveAuthTimeout);
         return _toDriveAccount(existing);
       }
 
       final user = await GoogleSignIn.instance
           .authenticate(scopeHint: scopes)
-          .timeout(_mobileGoogleSignInTimeout);
+          .timeout(_mobileInteractiveAuthTimeout);
       await user.authorizationClient
           .authorizeScopes(scopes)
-          .timeout(_mobileAuthorizationTimeout);
+          .timeout(_mobileInteractiveAuthTimeout);
       _setCurrentUser(user);
       return _toDriveAccount(user);
     } on GoogleSignInException catch (error) {
@@ -190,7 +204,7 @@ class GoogleDriveAuthService {
     } on TimeoutException {
       _setCurrentUser(null);
       throw const GoogleDriveAuthException(
-        'Google 로그인 응답이 없어 중단했습니다. 로그인 창을 닫았다면 다시 로그인 버튼을 눌러 주세요.',
+        'Google 로그인 또는 권한 승인 응답이 없어 중단했습니다. 로그인 창을 닫았다면 다시 로그인 버튼을 눌러 주세요.',
       );
     }
   }
@@ -206,7 +220,9 @@ class GoogleDriveAuthService {
       return;
     }
     try {
-      await GoogleSignIn.instance.signOut().timeout(_mobileGoogleSignInTimeout);
+      await GoogleSignIn.instance.signOut().timeout(
+        _mobileSilentAuthorizationTimeout,
+      );
     } on PlatformException catch (error) {
       if (!_isCredentialClearFailure(error)) {
         rethrow;
@@ -237,9 +253,12 @@ class GoogleDriveAuthService {
       }
     }
     try {
+      final timeout = promptIfNecessary
+          ? _mobileInteractiveAuthTimeout
+          : _mobileSilentAuthorizationTimeout;
       return await user?.authorizationClient
           .authorizationHeaders(scopes, promptIfNecessary: promptIfNecessary)
-          .timeout(_mobileAuthorizationTimeout);
+          .timeout(timeout);
     } on PlatformException catch (error) {
       throw GoogleDriveAuthException(_platformAuthMessage(error));
     } on TimeoutException {
@@ -262,9 +281,10 @@ class GoogleDriveAuthService {
 
     try {
       final appleClientId = _configuredAppleClientId;
+      final serverClientId = _configuredGoogleSignInServerClientId;
       await GoogleSignIn.instance.initialize(
         clientId: appleClientId.isEmpty ? null : appleClientId,
-        serverClientId: _serverClientId.isEmpty ? null : _serverClientId,
+        serverClientId: serverClientId.isEmpty ? null : serverClientId,
       );
     } on MissingPluginException {
       _isAvailable = false;
@@ -320,13 +340,13 @@ class GoogleDriveAuthService {
 
   String get _appleClientConfigurationMessage {
     if (Platform.isIOS) {
-      return 'iOS Google 로그인을 사용하려면 GOOGLE_IOS_CLIENT_ID 빌드 인자와 '
-          'iOS reversed client ID URL scheme 설정이 필요합니다. '
+      return 'iOS Google 로그인을 사용하려면 GIDClientID plist 설정 또는 '
+          'GOOGLE_IOS_CLIENT_ID 빌드 인자와 reversed client ID URL scheme이 필요합니다. '
           '지금은 로컬 모드로 사용할 수 있습니다.';
     }
     if (Platform.isMacOS) {
-      return 'macOS Google 로그인을 사용하려면 GOOGLE_MACOS_CLIENT_ID 빌드 인자와 '
-          'macOS reversed client ID URL scheme 설정이 필요합니다. '
+      return 'macOS Google 로그인을 사용하려면 GIDClientID plist 설정 또는 '
+          'GOOGLE_MACOS_CLIENT_ID 빌드 인자와 reversed client ID URL scheme이 필요합니다. '
           '지금은 로컬 모드로 사용할 수 있습니다.';
     }
     return 'Google 로그인 클라이언트 설정이 필요합니다.';

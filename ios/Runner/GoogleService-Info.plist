@@ -11,13 +11,11 @@
 	<key>BUNDLE_ID</key>
 	<string>com.littlebit0.daily</string>
 	<key>CLIENT_ID</key>
-	<string>424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com</string>
+	<string>234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com</string>
 	<key>PROJECT_ID</key>
 	<string>daily-littlebit0</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq</string>
-	<key>SERVER_CLIENT_ID</key>
-	<string>424765276744-j32k4bdck7lr4ba0lg5s99u91c4849bp.apps.googleusercontent.com</string>
+	<string>com.googleusercontent.apps.234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa</string>
 	<key>STORAGE_BUCKET</key>
 	<string>daily-littlebit0.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>

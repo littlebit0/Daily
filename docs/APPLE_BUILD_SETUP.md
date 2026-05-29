@@ -46,7 +46,13 @@ Google Cloud에서 다음 OAuth client를 확인하거나 생성합니다.
 - macOS client: 번들 ID `com.littlebit0.daily.macos`
 - 기존 Web client는 `GOOGLE_SIGN_IN_SERVER_CLIENT_ID`로 계속 사용 가능
 
-macOS는 현재 `macos/Runner/GoogleService-Info.plist`와 `macos/Runner/Info.plist`에 아래 client가 연결되어 있습니다.
+iOS는 현재 `ios/Runner/GoogleService-Info.plist`와 `ios/Runner/Info.plist`에 아래 client가 연결되어 있습니다.
+
+- Client ID: `234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com`
+- Reversed client ID: `com.googleusercontent.apps.234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa`
+- Server client ID: 없음. iOS에는 다른 프로젝트의 `SERVER_CLIENT_ID`를 넣지 않습니다.
+
+macOS 네이티브 GoogleSignIn 경로는 현재 `macos/Runner/GoogleService-Info.plist`와 `macos/Runner/Info.plist`에 아래 client가 연결되어 있습니다. 기본 macOS 로그인은 아래 네이티브 client가 아니라 Desktop OAuth 브라우저 경로를 사용합니다.
 
 - Client ID: `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`
 - Reversed client ID: `com.googleusercontent.apps.424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq`
@@ -61,8 +67,7 @@ iOS와 macOS의 `GoogleService-Info.plist` 및 `Info.plist`에는 현재 Google 
   --dart-define=GOOGLE_SIGN_IN_SERVER_CLIENT_ID="<web-client-id>"
 
 ./tool/flutter.sh run -d ios \
-  --dart-define=GOOGLE_IOS_CLIENT_ID="<ios-client-id>" \
-  --dart-define=GOOGLE_SIGN_IN_SERVER_CLIENT_ID="<web-client-id>"
+  --dart-define=GOOGLE_IOS_CLIENT_ID="<ios-client-id>"
 ```
 
 Apple OAuth client에는 reversed client ID도 함께 생성됩니다. Google 로그인 콜백을 받으려면 아래 파일에 URL scheme을 추가해야 합니다.
@@ -121,8 +126,7 @@ iOS 시뮬레이터 빌드:
 
 ```sh
 ./tool/flutter.sh build ios --simulator \
-  --dart-define=GOOGLE_IOS_CLIENT_ID="<ios-client-id>" \
-  --dart-define=GOOGLE_SIGN_IN_SERVER_CLIENT_ID="<web-client-id>"
+  --dart-define=GOOGLE_IOS_CLIENT_ID="<ios-client-id>"
 ```
 
 macOS 릴리즈 앱:
@@ -137,8 +141,7 @@ iOS 실제 기기 또는 App Store archive:
 
 ```sh
 ./tool/flutter.sh build ios --release \
-  --dart-define=GOOGLE_IOS_CLIENT_ID="<ios-client-id>" \
-  --dart-define=GOOGLE_SIGN_IN_SERVER_CLIENT_ID="<web-client-id>"
+  --dart-define=GOOGLE_IOS_CLIENT_ID="<ios-client-id>"
 ```
 
 실제 기기, TestFlight, App Store, Developer ID, notarized macOS 배포에는 Xcode에서 Apple Developer Team과 서명 인증서/프로비저닝 프로파일을 맞춰야 합니다.

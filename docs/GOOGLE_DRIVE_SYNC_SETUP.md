@@ -50,7 +50,10 @@ $env:GOOGLE_DESKTOP_CLIENT_ID = "<desktop-client-id>"
 
 OAuth clients currently checked in or referenced by the app:
 
-- Google Cloud project number: `424765276744`
+- Google Drive AppData target project for iOS/Desktop sync:
+  `234127810480`
+- Legacy Firebase/Android/Web metadata project currently still checked in:
+  `424765276744`
 - Android package name: `com.littlebit0.dailycalendar`
 - OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
 - Web OAuth client for Android sign-in:
@@ -58,19 +61,27 @@ OAuth clients currently checked in or referenced by the app:
 - Windows Desktop OAuth client:
   `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
 - iOS bundle ID: `com.littlebit0.daily`
+- iOS OAuth client:
+  `234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com`
+- iOS reversed client ID:
+  `com.googleusercontent.apps.234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa`
 - macOS bundle ID: `com.littlebit0.daily.macos`
 - macOS OAuth client:
   `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`
 
 Known configuration gaps:
 
-- iOS Google Sign-In still needs an Apple OAuth client for
-  `com.littlebit0.daily` and its reversed client ID URL scheme in
-  `ios/Runner/Info.plist`.
+- iOS Google Sign-In now has a checked-in iOS OAuth client for
+  `com.littlebit0.daily`; keep `GIDServerClientID`/`SERVER_CLIENT_ID` absent
+  unless a same-project iOS-specific server client is deliberately added.
 - macOS Google Sign-In has a checked-in OAuth client and URL scheme. Native
   Google Sign-In also requires keychain sharing entitlement in signed builds;
   local debug builds without an Apple development certificate keep that
   entitlement disabled so the app can still run in local mode.
+- Android/Web still reference the legacy `424765276744` project. Before the
+  next Android/Windows cross-platform sync release, reconcile all production
+  OAuth clients so Windows, Android, iPhone/iOS, and macOS read/write the same
+  Drive AppData backup file.
 - The checked-in `android/app/google-services.json` contains Android OAuth
   clients for `com.littlebit0.daily`, while the current Gradle `applicationId`
   is `com.littlebit0.dailycalendar`. Reconcile this before the next Android
@@ -121,8 +132,9 @@ scope for an app's own configuration data:
    `GOOGLE_MACOS_AUTH_MODE=desktop` and `GOOGLE_DESKTOP_CLIENT_ID` to use the
    browser OAuth flow instead. Add `GOOGLE_DESKTOP_CLIENT_SECRET` only when the
    Google Cloud Desktop client requires it.
-4. iOS/iPadOS: local mode builds and runs. Add the iOS Apple OAuth client and
-   URL scheme, then test the same Drive AppData sync flow.
+4. iOS/iPadOS: local mode builds and runs. The iOS OAuth client and URL scheme
+   are checked in; test the same Drive AppData sync flow on simulator and a
+   connected iPhone after installing the latest build.
 
 ## Stage 4: Hardening before public release
 
