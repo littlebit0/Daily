@@ -104,12 +104,13 @@ Google Drive AppData 방식은 서버 없이 여러 기기 동기화를 구현�
 - Windows Desktop OAuth client: `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
 - macOS OAuth client: `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`
 
-Windows 릴리즈 빌드는 Desktop OAuth client secret이 필요할 수 있습니다. macOS Google 로그인은 macOS OAuth client, reversed URL scheme, keychain sharing entitlement가 연결되어 있습니다. iOS Google 로그인은 `com.littlebit0.daily`용 iOS OAuth client ID와 reversed client ID URL scheme이 추가로 필요합니다. secret 값은 Git에 커밋하지 않고 빌드 인자로만 전달합니다.
+Windows/macOS 브라우저 로그인은 Desktop OAuth client와 PKCE loopback callback을 사용합니다. Desktop OAuth client secret은 Google 토큰 교환에서 선택값이므로, Google Cloud에서 발급된 client가 secret을 요구하는 경우에만 빌드 인자로 전달합니다. macOS Google 로그인은 기본적으로 Desktop OAuth 경로를 사용하고, iOS Google 로그인은 `com.littlebit0.daily`용 iOS OAuth client ID와 reversed client ID URL scheme이 필요합니다. secret 값은 Git에 커밋하지 않고 빌드 인자로만 전달합니다.
 
 ```powershell
 .\tool\flutter.ps1 build windows --release `
-  --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>" `
-  --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="<desktop-client-secret>"
+  --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>"
+# Optional, only when the Google OAuth client requires it:
+# --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="<desktop-client-secret>"
 ```
 
 Google Drive API가 활성화되어 있어야 로그인 후 백업/복원이 정상 동작합니다.
@@ -159,8 +160,9 @@ Windows 릴리즈 빌드:
 
 ```powershell
 .\tool\flutter.ps1 build windows --release `
-  --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>" `
-  --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="<desktop-client-secret>"
+  --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>"
+# Optional, only when the Google OAuth client requires it:
+# --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="<desktop-client-secret>"
 ```
 
 `tool/flutter.ps1`은 프로젝트 상위 폴더의 `flutter-sdk`, `PubCache`, `GradleCache`, `AndroidSdk`, `Temp`를 우선 사용합니다. 현재 로컬 환경에서는 `E:\From_D_Drive` 아래 도구 폴더를 사용합니다.

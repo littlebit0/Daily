@@ -31,14 +31,18 @@ until OAuth clients and scopes are configured.
 
 - Windows Google Drive sync uses a desktop OAuth browser flow with PKCE and a
   local loopback callback. It can receive a Desktop app OAuth client ID through
-  either an environment variable or a build define:
+  either an environment variable or a build define. The Desktop OAuth client
+  secret is optional for Google's installed app flow; set it only if the
+  specific Google Cloud client rejects token exchange without it:
 
 ```powershell
 $env:GOOGLE_DESKTOP_CLIENT_ID = "<desktop-client-id>"
-$env:GOOGLE_DESKTOP_CLIENT_SECRET = "<desktop-client-secret>"
 .\tool\flutter.ps1 run -d windows
 
-.\tool\flutter.ps1 build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="<desktop-client-secret>"
+.\tool\flutter.ps1 build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>"
+# Optional:
+# $env:GOOGLE_DESKTOP_CLIENT_SECRET = "<desktop-client-secret>"
+# .\tool\flutter.ps1 build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="<desktop-client-secret>"
 ```
 
 ## Stage 2: Google Cloud/Firebase setup status
@@ -105,16 +109,17 @@ scope for an app's own configuration data:
 1. Android: first runtime target. The current app code is wired for this.
 2. Windows: the app now uses desktop OAuth instead of the unsupported native
    Google Sign-In plugin path. A Desktop app OAuth client ID must be supplied
-   through `GOOGLE_DESKTOP_CLIENT_ID`. Some Google Desktop OAuth clients also
-   require the generated client secret during token exchange; provide it through
-   `GOOGLE_DESKTOP_CLIENT_SECRET` when building the Windows release.
+   through `GOOGLE_DESKTOP_CLIENT_ID`. The generated client secret is optional
+   for the installed app token exchange; provide it through
+   `GOOGLE_DESKTOP_CLIENT_SECRET` only if that particular OAuth client requires
+   it.
 3. macOS: local mode builds and runs. Native Google Sign-In is wired to the
    macOS OAuth client and URL scheme, but keychain sharing requires Apple
    development signing. If native Google Sign-In is not suitable for the
    signing environment, build with
-   `GOOGLE_MACOS_AUTH_MODE=desktop`,
-   `GOOGLE_DESKTOP_CLIENT_ID`, and `GOOGLE_DESKTOP_CLIENT_SECRET` to use the
-   browser OAuth flow instead.
+   `GOOGLE_MACOS_AUTH_MODE=desktop` and `GOOGLE_DESKTOP_CLIENT_ID` to use the
+   browser OAuth flow instead. Add `GOOGLE_DESKTOP_CLIENT_SECRET` only when the
+   Google Cloud Desktop client requires it.
 4. iOS/iPadOS: local mode builds and runs. Add the iOS Apple OAuth client and
    URL scheme, then test the same Drive AppData sync flow.
 

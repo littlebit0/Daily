@@ -246,14 +246,46 @@ removed only after confirming they are not user-created work.
     macOS.
   - Temporary `lateprobe`/`lateprobe2` test rows were removed from the local DB.
 
+- Follow-up on 2026-05-29 evening:
+  - User reported macOS Google login was blocked again and suspected iPhone
+    account-management sync issues.
+  - Current installed macOS app at `~/Applications/Daily.app` was still
+    `1.1.0 (1)`, while the repo build was `1.1.1 (2)`. The old app showed the
+    Desktop OAuth client secret configuration error in Settings > Account.
+  - `GoogleDriveAuthService` no longer blocks Desktop OAuth when
+    `GOOGLE_DESKTOP_CLIENT_SECRET` is absent. Google's installed-app token
+    exchange treats `client_secret` as optional when PKCE is used; the app still
+    sends it if a build/runtime value is supplied.
+  - iOS now attempts lightweight Google authentication during auth-service
+    initialization instead of skipping iOS. This restores a previously signed-in
+    iPhone account on app startup so Settings > Account and automatic Drive sync
+    do not incorrectly look like local mode after restart.
+  - Added an 8-second timeout around lightweight mobile auth restoration so the
+    settings/sync path cannot hang indefinitely waiting for native sign-in state.
+  - Rebuilt and replaced `~/Applications/Daily.app` with the fixed macOS
+    `1.1.1 (2)` build. GUI check confirmed the Account section now shows the
+    normal `Google로 로그인` button and no Desktop OAuth secret error. The actual
+    Google login browser flow was not completed because the user requested to be
+    asked before login.
+  - Rebuilt and installed the fixed iOS `1.1.1 (2)` app onto the connected
+    iPhone. Launch from `devicectl` failed only because the iPhone was locked.
+  - Local verification after this update: `./tool/flutter.sh analyze` passed
+    and `./tool/flutter.sh test` passed.
+  - Remaining iOS OAuth configuration issue: the checked-in iOS plist values
+    still point to the same OAuth client used for bundle
+    `com.littlebit0.daily.macos`. A production iPhone sync fix still needs a
+    Google/Firebase iOS OAuth client for bundle `com.littlebit0.daily` and its
+    matching `REVERSED_CLIENT_ID` in `ios/Runner/Info.plist`.
+
 ## Security Notes
 
 - The user previously pasted Google OAuth client JSON that included a
   `client_secret`. Do not commit that secret.
 - Keep GitHub tokens, Apple signing identities, provisioning profiles, Android
   keystores, and OAuth secrets out of the repository.
-- Google project number currently referenced by project docs:
-  `234127810480`.
+- Google/Firebase project number currently referenced by app config and docs:
+  `424765276744`. A separate Desktop OAuth client ID beginning with
+  `234127810480` was provided by the user for browser-based desktop login.
 
 ## Recommended Next Steps
 

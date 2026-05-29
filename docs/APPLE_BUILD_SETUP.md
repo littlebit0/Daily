@@ -99,9 +99,14 @@ macOS 기본 로그인 경로는 브라우저 기반 Desktop OAuth입니다. 이
 </array>
 ```
 
-브라우저 기반 OAuth를 명시적으로 쓰고 싶다면 Desktop OAuth client ID와 secret을 전달합니다.
+브라우저 기반 OAuth를 명시적으로 쓰고 싶다면 Desktop OAuth client ID를 전달합니다. Desktop OAuth client secret은 Google 설치형 앱 흐름에서 선택값이므로, 해당 OAuth client가 token exchange에서 요구할 때만 함께 전달합니다.
 
 ```sh
+./tool/flutter.sh run -d macos \
+  --dart-define=GOOGLE_MACOS_AUTH_MODE=desktop \
+  --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>"
+
+# Optional:
 ./tool/flutter.sh run -d macos \
   --dart-define=GOOGLE_MACOS_AUTH_MODE=desktop \
   --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>" \

@@ -65,6 +65,7 @@ class GoogleDriveAuthService {
   static const _displayNameKey = '${_storagePrefix}display_name';
   static const _mobileGoogleSignInTimeout = Duration(seconds: 45);
   static const _mobileAuthorizationTimeout = Duration(seconds: 45);
+  static const _mobileLightweightAuthTimeout = Duration(seconds: 8);
   static const _mobileAccountClearTimeout = Duration(seconds: 3);
 
   final FlutterSecureStorage _secureStorage;
@@ -229,12 +230,8 @@ class GoogleDriveAuthService {
     var user = _currentUser;
     if (user == null) {
       try {
-        final attempt = GoogleSignIn.instance
-            .attemptLightweightAuthentication();
-        if (attempt != null) {
-          user = await attempt;
-          _setCurrentUser(user);
-        }
+        user = await _attemptLightweightAuthentication();
+        _setCurrentUser(user);
       } on Object {
         _setCurrentUser(null);
       }
@@ -288,19 +285,24 @@ class GoogleDriveAuthService {
       }
     }, onError: (_) => _setCurrentUser(null));
 
-    if (Platform.isIOS || Platform.isMacOS) {
+    if (Platform.isMacOS) {
       return;
     }
 
     try {
-      final attempt = GoogleSignIn.instance.attemptLightweightAuthentication();
-      if (attempt != null) {
-        final user = await attempt;
-        _setCurrentUser(user);
-      }
+      final user = await _attemptLightweightAuthentication();
+      _setCurrentUser(user);
     } on Object {
       _setCurrentUser(null);
     }
+  }
+
+  Future<GoogleSignInAccount?> _attemptLightweightAuthentication() async {
+    final attempt = GoogleSignIn.instance.attemptLightweightAuthentication();
+    if (attempt == null) {
+      return null;
+    }
+    return attempt.timeout(_mobileLightweightAuthTimeout);
   }
 
   Future<void> _clearMobileAccountForSelection() async {
@@ -334,18 +336,11 @@ class GoogleDriveAuthService {
       'macOS Google 로그인을 사용하려면 keychain sharing entitlement가 필요합니다. '
       '새 빌드에서도 같은 오류가 나면 Apple 개발 팀 서명 설정을 확인해 주세요.';
 
-  String get _desktopClientSecretConfigurationMessage =>
-      'macOS 로컬 Google 로그인을 사용하려면 Desktop OAuth client secret이 필요합니다. '
-      'GOOGLE_DESKTOP_CLIENT_SECRET 빌드 인자 또는 환경 변수를 설정한 뒤 다시 빌드해 주세요.';
-
   Future<GoogleDriveAccount?> _signInWithDesktopOAuth() async {
     if (_configuredDesktopClientId.isEmpty) {
       throw UnsupportedError(
         'Google 로그인 설정이 아직 완료되지 않았습니다. 앱 업데이트 후 다시 시도해 주세요.',
       );
-    }
-    if (_configuredDesktopClientSecret.isEmpty) {
-      throw GoogleDriveAuthException(_desktopClientSecretConfigurationMessage);
     }
 
     final codeResponse = await _requestDesktopAuthorizationCode();
