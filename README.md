@@ -1,225 +1,249 @@
 # Daily
 
-Daily는 로컬 우선으로 바로 사용할 수 있고, Google 계정을 연결하면 Google Drive AppData 백업/동기화를 사용할 수 있는 개인용 캘린더 앱입니다. 앱을 열면 주간 달력이 먼저 보이고, 필요할 때 월간/일간 보기로 전환할 수 있습니다. 날짜 칸 안에는 일정이 색상 플래그 형태로 표시됩니다.
+Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로컬 SQLite를 우선 저장소로 사용하고, Google 계정을 연결하면 Google Drive AppData를 통해 Android, Windows, iOS, macOS 사이에서 일정과 앱 설정을 동기화합니다.
+
+앱을 열면 주간 달력이 먼저 보이고, 필요할 때 월간/일간 보기로 전환할 수 있습니다. 날짜 칸 안에는 일정이 색상 플래그로 표시되며, 반복 일정, D-day, 음력, 공휴일, 로컬 알림, 민감 일정 숨김까지 개인 일정 관리에 필요한 흐름을 한 앱 안에서 처리합니다.
 
 ## 현재 버전
 
 - 앱 버전: `2.0.0`
 - Android 패키지명: `com.littlebit0.dailycalendar`
 - 최신 배포: [Daily 2.0.0](https://github.com/littlebit0/Daily/releases/tag/v2.0.0)
+- 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
 
-## 설치 파일
+## 배포 파일
 
 GitHub Release에서 최신 설치 파일을 받을 수 있습니다.
 
 - Android 직접 설치용 APK: `daily-android-2.0.0.apk`
 - Android Play Console 제출용 AAB: `daily-android-2.0.0.aab`
-- Windows 배포용 ZIP: `daily-windows-2.0.0.zip`
-- Windows 실행 파일: `daily.exe`
+- Windows 권장 배포 파일: `daily-windows-2.0.0.zip`
+- Windows 실행 파일 단독 복사본: `daily-windows-2.0.0.exe`
 
-iOS unsigned IPA는 서명되지 않은 검증용 산출물입니다. 실제 iPhone에 설치하려면 연결된 iPhone을 Xcode에 신뢰/등록해 Development provisioning profile을 만들거나, Apple Developer Program의 TestFlight/App Store/Ad Hoc 배포 서명이 필요합니다.
+Windows는 ZIP 사용을 권장합니다. Flutter Windows 앱은 실행 파일 외에도 DLL과 `data` 폴더가 필요하므로 일반 배포에는 `daily-windows-2.0.0.zip`을 사용해야 합니다.
 
-이전 1.1.0 Android/Windows 산출물:
+SHA-256:
 
-- Android 직접 설치용 APK: `daily-android-1.1.0.apk`
-- Android Play Console 제출용 AAB: `daily-android-1.1.0.aab`
-- Windows 배포용 ZIP: `daily-windows-1.1.0.zip`
-- Windows 단독 EXE: `daily-windows-1.1.0.exe`
+- `daily-android-2.0.0.apk`: `5af8f84c9fa8569b7ec9ff0de6bf7417134314f8c744a5dbcba0cf8aebbec37b`
+- `daily-android-2.0.0.aab`: `bfef9d5c53a2548ea86d7aa3393ddc3ec1f9644be687bae0aa27bbac78c364ed`
+- `daily-windows-2.0.0.zip`: `74de6334baa182344a202aeb5bd24890ec44e44164f6fd6e5d8f8092f8684aef`
+- `daily-windows-2.0.0.exe`: `fdec22e38f2e6c95d5da06003b67869eec3fac1c98bcb06e70ed0fb968a8e6ff`
 
-Windows는 `zip` 사용을 권장합니다. Flutter Windows 앱은 실행 파일 외에 `data` 폴더와 DLL 파일이 함께 필요하므로 일반 배포에는 `daily-windows-1.1.0.zip`을 사용해야 합니다.
+## 지원 플랫폼
 
-최신 로컬 산출물 해시:
+- Android
+- Windows
+- iOS
+- macOS
 
-- APK: `5af8f84c9fa8569b7ec9ff0de6bf7417134314f8c744a5dbcba0cf8aebbec37b`
-- AAB: `bfef9d5c53a2548ea86d7aa3393ddc3ec1f9644be687bae0aa27bbac78c364ed`
-- Windows ZIP: `74de6334baa182344a202aeb5bd24890ec44e44164f6fd6e5d8f8092f8684aef`
-- Windows EXE: `fdec22e38f2e6c95d5da06003b67869eec3fac1c98bcb06e70ed0fb968a8e6ff`
+Android와 Windows 산출물은 2.0.0 릴리스에 포함되어 있습니다. iOS/macOS는 같은 Flutter 기능 세트와 동기화 구조를 기준으로 개발했으며, 실제 App Store/TestFlight/Developer ID 배포에는 Apple Developer 서명과 provisioning 설정이 필요합니다.
 
 ## 핵심 기능
 
 - 주간/월간/일간 달력 보기 전환
-- 기본 주간 보기와 월간 보기 토글
-- 날짜별 일정 플래그 표시
-- 연속 일정은 여러 날짜를 가로지르는 하나의 긴 플래그로 표시
-- 모바일에서는 일정 배너 폭을 최대한 확보해 제목 가독성 우선
-- 월간 달력 표시 밀도 조절
-- 일정 검색과 달력 필터
+- 월간 달력 스와이프 이동과 자연스러운 페이지 전환
+- 날짜별 일정 색상 플래그 표시
+- 연속 일정의 다중 날짜 플래그 표시
 - 날짜 드래그 범위 선택 후 일정 추가
   - Windows: 마우스 드래그
   - Android: 길게 누른 뒤 드래그
-- 월 달력 스와이프 이동 및 페이지 전환 애니메이션
-- 상단 연월 선택으로 빠른 연도/월 이동
 - 날짜 상세 패널과 모바일 하단 시트
-- 일정 추가/수정/삭제
-- 삭제 전 확인 팝업
-- 일정별 D-day 표시 옵션
+- 일정 추가, 수정, 삭제, 삭제 확인
 - 반복 일정 모델과 반복 일정 수정/삭제 범위 선택
-- 일정별 URL, 날씨 메모, 민감 일정 표시
-- 대한민국 공휴일 자동 표시
-- 토요일 파란색, 일요일/공휴일 빨간색 표시
-- 음력 날짜 표시 옵션
+- 일정 검색과 달력 필터
+- 일정 URL, 위치, 날씨 메모, 민감 일정 표시
+- 일정별 D-day 표시와 D-day 알림
+- 대한민국 공휴일, 대체공휴일, 토/일/공휴일 색상 표시
+- 음력 날짜 표시
 - 주 시작 요일 설정
 - 사용자 분류 추가/삭제
-- 로컬 알림과 아침 브리핑 알림
-- 앱 잠금 PIN과 민감 일정 숨김 옵션
+- 로컬 알림, 하루 종일 일정 알림, 아침 브리핑 알림
+- 앱 잠금 PIN과 민감 일정 숨김
 - Android 월간/오늘/D-day 위젯 진입점
-- Windows 창 닫기 시 백그라운드/트레이 유지
+- Windows 창 닫기 후 백그라운드/트레이 유지
 - Windows 트레이 미니 캘린더
 - macOS 마지막 창 닫기 후 앱 유지
-- iOS/macOS 공통 빠른 접근 패널
-- Google 계정 로그인 선택
-- Google Drive AppData 기반 백업/복원/자동 동기화
+- iOS/macOS 빠른 접근 패널
+- Google 계정 로그인
+- Google Drive AppData 기반 백업, 복원, 자동 동기화
 
-## 동기화 방식
+## 동기화 구조
 
-Daily는 자체 서버를 사용하지 않고 Google Drive `appDataFolder`에 앱 전용 동기화 파일을 저장합니다.
+Daily는 자체 서버를 운영하지 않고 Google Drive `appDataFolder`에 앱 전용 JSON 파일을 저장합니다.
 
-- 저장 파일: `daily-sync-v2-event-{eventId}.json`, `daily-sync-v2-settings.json`
-- 저장 위치: 사용자의 Google Drive AppData 영역
-- OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
-- 동기화 대상:
-  - 일정
-  - 삭제 tombstone
-  - 분류
-  - 알림 기본값
-  - 주 시작 요일
-  - 음력 표시 여부
-  - D-day 알림 설정
-  - 기본 달력 보기
-  - 달력 필터 설정
-  - 일정 URL, 날씨 메모, 민감 일정 여부
-- 로컬 변경 후 짧은 지연 뒤 자동 업로드
-- 앱 실행 중 주기적으로 원격 변경 확인
-- 설정 화면에서 최근 동기화 상태 확인
+2.0.0부터 기존 단일 `daily-sync-v1.json` 방식은 정상 동기화 경로에서 사용하지 않습니다. 현재 동기화는 v2 파일 세트를 사용합니다.
 
-Google Drive AppData 방식은 서버 없이 여러 기기 동기화를 구현하기 위한 구조입니다. 완전한 서버 푸시 방식 실시간 동기화는 아니며, 앱 실행 중 짧은 주기의 자동 동기화로 처리합니다.
+```plain text
+daily-sync-v2-event-{eventId}.json
+- schemaVersion: 2
+- type: event
+- event: 단일 일정 JSON
+- 하루 종일 일정: startDate, endDate 날짜 전용 필드 포함
+
+daily-sync-v2-settings.json
+- schemaVersion: 2
+- type: settings
+- settings: 비밀값을 제외한 앱 설정
+```
+
+동작 방식:
+
+- 일정 생성, 수정, 삭제 시 변경된 일정 파일만 업로드
+- 삭제는 tombstone으로 남겨 다른 기기에 삭제 상태 전파
+- 앱 첫 실행, Google 로그인 직후, 포그라운드 복귀, 수동 동기화 때 v2 일정 파일 목록 병합
+- 로컬/원격 충돌은 일정별 `updatedAt` 또는 `deletedAt` 기준으로 최신 상태 선택
+- 하루 종일 일정은 `startDate`/`endDate`를 우선 사용해 플랫폼별 시간대 변환으로 날짜가 밀리지 않도록 처리
+- 설정은 `daily-sync-v2-settings.json`으로 일정 파일과 분리
+
+이 방식은 전체 백업 파일을 반복 업로드하지 않기 때문에 셀룰러 데이터 사용량과 동시 수정 충돌 가능성을 줄입니다.
 
 ## Google OAuth 설정
 
-현재 OAuth/동기화 설정:
+현재 Google Drive AppData 동기화 기준 프로젝트는 `234127810480`입니다.
 
-- Google Drive AppData 공통 동기화 목표 프로젝트 번호: `234127810480`
-- 기존 Firebase/Android/Web 메타데이터 프로젝트 번호: `424765276744`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- Web OAuth client: `234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com`
+- Android Web OAuth client: `234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com`
 - Windows Desktop OAuth client: `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
 - iOS OAuth client: `234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com`
-- macOS OAuth client: `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`
+- OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
 
-Windows/macOS 브라우저 로그인은 Desktop OAuth client와 PKCE loopback callback을 사용합니다. Desktop OAuth client secret은 Google 토큰 교환에서 선택값이지만, 현재 연결된 Desktop OAuth client는 token exchange에서 secret을 요구하므로 릴리즈 빌드에는 함께 전달합니다. macOS Google 로그인은 기본적으로 Desktop OAuth 경로를 사용하고, iOS Google 로그인은 `com.littlebit0.daily`용 iOS OAuth client ID와 reversed client ID URL scheme을 체크인된 plist에서 읽습니다. iOS에는 별도 server client ID를 전달하지 않습니다. secret 값은 Git에 커밋하지 않고 빌드 인자로만 전달합니다.
+Windows/macOS Desktop OAuth는 PKCE loopback callback을 사용합니다. 현재 Windows Desktop OAuth client는 token exchange에 client secret을 요구하므로 secret은 Git에 커밋하지 않고 로컬 환경 변수 또는 로컬 OAuth JSON 파일로만 공급합니다.
 
-```powershell
-.\tool\flutter.ps1 build windows --release `
-  --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>"
-# Optional, only when the Google OAuth client requires it:
-# --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="<desktop-client-secret>"
+Windows 로컬 OAuth JSON 예시:
+
+```json
+{
+  "installed": {
+    "client_id": "<desktop-client-id>",
+    "client_secret": "<desktop-client-secret>"
+  }
+}
 ```
 
-Google Drive API가 활성화되어 있어야 로그인 후 백업/복원이 정상 동작합니다.
+지원 경로:
 
-자세한 설정은 [Google Drive 동기화 설정 문서](docs/GOOGLE_DRIVE_SYNC_SETUP.md)를 참고합니다.
-iOS/macOS 빌드 준비는 [Apple 빌드 설정 문서](docs/APPLE_BUILD_SETUP.md)를 참고합니다.
+- `%APPDATA%\Daily\google_desktop_oauth.json`
+- `%LOCALAPPDATA%\Daily\google_desktop_oauth.json`
+- `GOOGLE_DESKTOP_OAUTH_CONFIG`
+- `GOOGLE_DESKTOP_CLIENT_SECRET`
 
-## AI 기능 상태
+자세한 설정은 [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)을 참고합니다.
 
-Gemini 연동 구조와 규칙 기반 자연어 일정 파서는 코드에 포함되어 있습니다. 다만 사용자용 설정 화면에서는 AI 기능을 개발 중 상태로 반투명 비활성화 처리해 두었습니다.
+## 프로젝트 구조
 
-현재 기본 입력 흐름:
-
-- 단순한 한국어 일정 문장: 규칙 기반 파서 처리
-- AI 기능: 추후 활성화 예정
-- 로컬 LLM 연동: 예정 항목으로 보류
-
-## 플랫폼 상태
-
-현재 실제 배포 파일이 준비된 플랫폼:
-
-- Android
-- Windows
-- iOS 시뮬레이터
-- macOS debug 앱
-
-iOS/macOS는 현재 로컬 모드로 실행 확인이 완료되었습니다. macOS는 기본적으로 Desktop OAuth 경로를 사용하고, iOS는 `com.littlebit0.daily`용 iOS OAuth client와 URL scheme이 연결되어 있습니다. 실제 기기, TestFlight, App Store, Developer ID 배포는 Apple Developer Team과 서명 인증서/프로비저닝 프로파일 설정이 필요합니다.
+```plain text
+lib/
+- app/                         앱 루트와 lifecycle sync
+- core/calendar/               공휴일, 음력 계산
+- core/notifications/          로컬 알림, D-day, 브리핑 알림
+- core/settings/               앱 설정과 secure storage
+- core/sync/                   Google OAuth, Google Drive v2 sync
+- features/calendar/           주간/월간/일간 달력 UI
+- features/events/             일정 도메인, drift 저장소, 입력/수정 흐름
+- features/onboarding/         첫 실행과 Google 연결
+- features/search/             일정 검색
+- features/settings/           설정, 동기화 상태, 계정/데이터 관리
+```
 
 ## 개발 명령
 
 ```powershell
-cd E:\From_D_Drive\Daily
 .\tool\flutter.ps1 pub get
-.\tool\flutter.ps1 pub run build_runner build
 .\tool\flutter.ps1 analyze
 .\tool\flutter.ps1 test
 ```
 
-Android 릴리즈 빌드:
+Android debug:
+
+```powershell
+.\tool\flutter.ps1 build apk --debug
+```
+
+Android release:
 
 ```powershell
 .\tool\flutter.ps1 build apk --release
 .\tool\flutter.ps1 build appbundle --release
 ```
 
-Windows 릴리즈 빌드:
+Windows debug:
 
 ```powershell
-.\tool\flutter.ps1 build windows --release `
-  --dart-define=GOOGLE_DESKTOP_CLIENT_ID="<desktop-client-id>"
-# Optional, only when the Google OAuth client requires it:
-# --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="<desktop-client-secret>"
+.\tool\flutter.ps1 build windows --debug
 ```
 
-`tool/flutter.ps1`은 프로젝트 상위 폴더의 `flutter-sdk`, `PubCache`, `GradleCache`, `AndroidSdk`, `Temp`를 우선 사용합니다. 현재 로컬 환경에서는 `E:\From_D_Drive` 아래 도구 폴더를 사용합니다.
+Windows release:
+
+```powershell
+.\tool\flutter.ps1 build windows --release
+```
+
+`tool/flutter.ps1`은 프로젝트 상위 폴더의 `flutter-sdk`, `PubCache`, `GradleCache`, `AndroidSdk`, `Temp`를 우선 사용합니다.
 
 ## 검증 상태
 
-최근 확인한 검증:
+2.0.0 기준 확인한 항목:
 
-- `.\tool\flutter.ps1 analyze`: 통과
-- `.\tool\flutter.ps1 test`: 통과
-- `.\tool\flutter.ps1 build apk --release`: 통과
-- `.\tool\flutter.ps1 build appbundle --release`: 통과
-- `.\tool\flutter.ps1 build windows --release`: 통과
-- Android 에뮬레이터 설치 및 실행 확인
-- Windows 릴리즈 실행 확인
-- `./tool/flutter.sh test`: 통과
-- `./tool/flutter.sh analyze`: 통과
-- `./tool/flutter.sh build ios --simulator`: 통과
-- `./tool/flutter.sh build macos --debug`: 통과
-- iPhone 17 iOS 26.5 시뮬레이터 로컬 모드 실행 확인
-- macOS debug 앱 로컬 모드 실행 확인
+- `.\tool\flutter.ps1 analyze --no-pub`: 통과
+- `.\tool\flutter.ps1 test --no-pub`: 통과
+- Google Drive v2 동기화 테스트 통과
+- Android debug APK 빌드, 에뮬레이터 삭제 후 재설치/실행 확인
+- Android release APK 빌드 통과
+- Android release AAB 빌드 통과
+- Android APK badging 확인
+  - package: `com.littlebit0.dailycalendar`
+  - versionName: `2.0.0`
+  - versionCode: `4`
+- Windows debug/release 빌드 통과
+- Windows release 실행 확인
+- GitHub Release 2.0.0 업로드 확인
 
-현재 로컬 개발 환경:
+## 스토어 배포 상태
 
-- Android SDK: `E:\From_D_Drive\AndroidSdk`
-- JDK 17: `C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot`
-- Firebase CLI: `15.17.0`
-- FlutterFire CLI: `1.3.2`
-- Visual Studio Build Tools 2022
+GitHub Release 배포는 완료했습니다.
 
-## 서명 파일
+Android Play Store 배포는 보류 상태입니다. 업로드 파일은 준비되어 있습니다.
 
-Android release 서명 파일은 로컬에만 보관하고 Git에는 올리지 않습니다.
+```plain text
+dist/daily-android-2.0.0.aab
+```
 
-- Keystore: `android\app\upload-keystore.jks`
-- 설정 파일: `android\key.properties`
+Play Console 업로드 후 Play App Signing SHA-1이 기존 OAuth Android client와 다르면 Google Cloud Console에 Android OAuth client를 추가해야 합니다.
 
-이 keystore는 향후 Play Store 업데이트에 필요하므로 별도 안전한 위치에 백업해야 합니다.
+Microsoft Store 배포도 보류 상태입니다. Store 제출용 MSIX를 만들려면 Partner Center의 Product identity 값이 필요합니다.
+
+- Package/Identity/Name
+- Package/Properties/Publisher
+- PublisherDisplayName
+
+## 보안과 로컬 비밀값
+
+다음 파일과 값은 Git에 커밋하지 않습니다.
+
+- Android upload keystore: `android/app/upload-keystore.jks`
+- Android signing config: `android/key.properties`
+- Desktop OAuth client secret
+- Apple signing identity와 provisioning profile
+- GitHub/Google API token
+
+Android keystore는 이후 Play Store 업데이트에 필요하므로 별도 안전한 위치에 백업해야 합니다.
 
 ## 문서
 
-- [초기 기획안](docs/INITIAL_PLAN.md)
-- [현재 진행상태](docs/PROGRESS_STATUS.md)
 - [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)
+- [릴리스 노트 2.0.0](docs/RELEASE_NOTES_2.0.0.md)
+- [현재 진행상태](docs/PROGRESS_STATUS.md)
+- [릴리스 체크리스트](docs/RELEASE_CHECKLIST.md)
 - [Apple 빌드 설정](docs/APPLE_BUILD_SETUP.md)
 - [후속 기능 로드맵](docs/FEATURE_ROADMAP.md)
-- [Notion 작성용 통합 문서](docs/NOTION_DAILY_PROJECT.md)
 - [상세 요구사항](DAILY_REQUIREMENTS.md)
 
 ## 남은 작업
 
-- Play Console 첫 AAB 업로드 후 App signing SHA-1을 OAuth Android client에 추가
-- OAuth 동의 화면, 개인정보 처리방침, 지원 이메일 최종 정리
-- fresh Google 계정으로 로그인/동기화 재검증
+- Play Console 배포와 심사 정보 작성
+- Microsoft Store Partner Center identity 확보 후 Store용 MSIX 생성
+- fresh Google 계정으로 Android/Windows/iOS/macOS 간 v2 동기화 재검증
 - Android 실제 기기 알림 검증
-- Windows 설치 패키징 방식 고도화
-- iOS/macOS Google OAuth client와 URL scheme 설정
-- Apple Developer 서명 및 배포 설정 검증
+- Apple Developer 서명, TestFlight/App Store, macOS Developer ID 배포 설정
+- Google Drive AppData v2 파일 암호화 검토
+- 동시 수정 충돌을 사용자에게 보여주는 conflict UX 추가
