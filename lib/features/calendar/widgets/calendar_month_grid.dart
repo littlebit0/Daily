@@ -370,7 +370,7 @@ class _WeekRow extends StatelessWidget {
   final bool compact;
   final ValueChanged<DateTime> onDateSelected;
 
-  static const _flagTop = 34.0;
+  static const _flagTop = 30.0;
   static const _flagHeight = 20.0;
   static const _flagGap = 3.0;
 
@@ -605,8 +605,8 @@ class _DayCellBackground extends StatelessWidget {
               : null,
         ),
         alignment: Alignment.topLeft,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             _DayNumber(
               day: day,
@@ -614,19 +614,28 @@ class _DayCellBackground extends StatelessWidget {
               today: today,
               holiday: holiday,
             ),
-            if (lunar != null)
-              Text(
-                lunar.shortLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 9,
-                  height: 1.1,
-                  color: inMonth
-                      ? const Color(0xff9aa3af)
-                      : const Color(0xffc7ccd4),
+            if (lunar != null) ...[
+              const SizedBox(width: 3),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    lunar.shortLabel,
+                    maxLines: 1,
+                    softWrap: false,
+                    textScaler: TextScaler.noScaling,
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      height: 1.0,
+                      color: inMonth
+                          ? const Color(0xff9aa3af)
+                          : const Color(0xffc7ccd4),
+                    ),
+                  ),
                 ),
               ),
+            ],
           ],
         ),
       ),

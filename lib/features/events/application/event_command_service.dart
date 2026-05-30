@@ -42,10 +42,9 @@ class EventCommandService {
   }
 
   Future<void> save(CalendarEvent event) async {
-    final updated = event.copyWith(
-      updatedAt: _clock.now(),
-      syncStatus: 'pending',
-    );
+    final updated = event
+        .copyWith(updatedAt: _clock.now(), syncStatus: 'pending')
+        .normalizeAllDayBounds();
     await _repository.save(updated);
     await _notificationService.cancelEventReminder(updated.id);
     await _notificationService.scheduleEventReminder(

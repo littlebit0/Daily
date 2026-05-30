@@ -2,7 +2,7 @@
 
 ## 요약
 
-Daily는 Flutter 기반 개인 캘린더 앱이며 1.1.0 기준으로 Android/Windows 배포 산출물 생성이 가능한 상태다. 정적 분석, 테스트, Android release APK/App Bundle, Windows release 빌드가 통과했다.
+Daily는 Flutter 기반 개인 캘린더 앱이며 2.0.0 기준으로 Google Drive v2 일정별 동기화 전환이 진행된 상태다. Android/Windows 변경은 정적 분석, 테스트, debug 빌드, 에뮬레이터/Windows 실행까지 확인했다.
 
 현재 동기화는 자체 서버 없이 Google Drive AppData를 사용한다. iOS/macOS 최종 빌드는 Windows 환경에서는 검증할 수 없어 macOS 개발 환경에서 별도 확인해야 한다.
 
@@ -46,7 +46,7 @@ Daily는 Flutter 기반 개인 캘린더 앱이며 1.1.0 기준으로 Android/Wi
 
 - Google Cloud 프로젝트 번호: `234127810480`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 동기화 파일: `daily-sync-v1.json`
+- 동기화 파일: `daily-sync-v2-event-{eventId}.json`, `daily-sync-v2-settings.json`
 - 저장 위치: Google Drive `appDataFolder`
 - OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
 - Android Google 로그인 확인 완료

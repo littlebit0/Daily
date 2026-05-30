@@ -247,24 +247,33 @@ class _MonthPageView extends StatefulWidget {
 }
 
 class _MonthPageViewState extends State<_MonthPageView> {
+  static const _initialPage = 12000;
+
   late final PageController _controller;
-  var _resettingPage = false;
+  late final DateTime _anchorMonth;
+  var _currentPage = _initialPage;
+  var _applyingExternalMonth = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = PageController(initialPage: 1);
+    _anchorMonth = DateTime(widget.month.year, widget.month.month);
+    _controller = PageController(initialPage: _initialPage);
   }
 
   @override
   void didUpdateWidget(covariant _MonthPageView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_sameMonth(oldWidget.month, widget.month) || !_controller.hasClients) {
+    if (_sameMonth(_monthForPage(_currentPage), widget.month) ||
+        !_controller.hasClients) {
       return;
     }
-    _resettingPage = true;
-    _controller.jumpToPage(1);
-    _resettingPage = false;
+    final targetPage =
+        _currentPage + _monthDelta(_monthForPage(_currentPage), widget.month);
+    _applyingExternalMonth = true;
+    _currentPage = targetPage;
+    _controller.jumpToPage(targetPage);
+    _applyingExternalMonth = false;
   }
 
   @override
@@ -277,18 +286,16 @@ class _MonthPageViewState extends State<_MonthPageView> {
   Widget build(BuildContext context) {
     return PageView.builder(
       controller: _controller,
-      itemCount: 3,
       onPageChanged: (index) {
-        if (_resettingPage || index == 1) {
+        if (_applyingExternalMonth || index == _currentPage) {
           return;
         }
-        widget.onMonthDelta(index - 1);
+        final delta = index - _currentPage;
+        _currentPage = index;
+        widget.onMonthDelta(delta);
       },
       itemBuilder: (context, index) {
-        final pageMonth = DateTime(
-          widget.month.year,
-          widget.month.month + index - 1,
-        );
+        final pageMonth = _monthForPage(index);
         return _CalendarMonthPage(
           month: pageMonth,
           selectedDate: widget.selectedDate,
@@ -302,6 +309,17 @@ class _MonthPageViewState extends State<_MonthPageView> {
 
   bool _sameMonth(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month;
+  }
+
+  DateTime _monthForPage(int page) {
+    return DateTime(
+      _anchorMonth.year,
+      _anchorMonth.month + page - _initialPage,
+    );
+  }
+
+  int _monthDelta(DateTime from, DateTime to) {
+    return (to.year - from.year) * 12 + to.month - from.month;
   }
 }
 
@@ -402,6 +420,8 @@ class _CalendarMonthPage extends ConsumerWidget {
   }
 }
 
+enum _CalendarHeaderAction { quickAccess, filter, search, settings }
+
 class _CalendarHeader extends ConsumerWidget {
   const _CalendarHeader({
     required this.month,
@@ -422,7 +442,14 @@ class _CalendarHeader extends ConsumerWidget {
     final monthButton = TextButton.icon(
       onPressed: () => _showMonthPicker(context, ref),
       icon: const Icon(Icons.calendar_month_outlined, size: 20),
-      label: Text(label, style: Theme.of(context).textTheme.headlineMedium),
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: compact
+            ? Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 18)
+            : Theme.of(context).textTheme.headlineMedium,
+      ),
       style: TextButton.styleFrom(
         foregroundColor: const Color(0xff111827),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -432,6 +459,13 @@ class _CalendarHeader extends ConsumerWidget {
     final viewSwitch = SegmentedButton<CalendarViewMode>(
       selected: {viewMode},
       showSelectedIcon: false,
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        padding: WidgetStateProperty.all(
+          const EdgeInsets.symmetric(horizontal: 8),
+        ),
+        minimumSize: WidgetStateProperty.all(const Size(34, 34)),
+      ),
       segments: const [
         ButtonSegment(value: CalendarViewMode.week, label: Text('주')),
         ButtonSegment(value: CalendarViewMode.month, label: Text('월')),
@@ -483,25 +517,62 @@ class _CalendarHeader extends ConsumerWidget {
       ),
     ];
 
+    final compactViewSwitch = PopupMenuButton<CalendarViewMode>(
+      tooltip: '보기 변경',
+      initialValue: viewMode,
+      onSelected: (value) {
+        ref.read(calendarViewModeProvider.notifier).state = value;
+      },
+      itemBuilder: (context) => [
+        for (final mode in CalendarViewMode.values)
+          PopupMenuItem(value: mode, child: Text(_viewModeLabel(mode))),
+      ],
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xffc5cad3)),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _viewModeLabel(viewMode),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(width: 2),
+            const Icon(Icons.expand_more, size: 18),
+          ],
+        ),
+      ),
+    );
+    final compactMoreActions = PopupMenuButton<_CalendarHeaderAction>(
+      tooltip: '더보기',
+      icon: const Icon(Icons.more_horiz),
+      onSelected: (value) => _handleHeaderAction(context, ref, value),
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: _CalendarHeaderAction.quickAccess,
+          child: Text('빠른 보기'),
+        ),
+        PopupMenuItem(value: _CalendarHeaderAction.filter, child: Text('필터')),
+        PopupMenuItem(value: _CalendarHeaderAction.search, child: Text('검색')),
+        PopupMenuItem(value: _CalendarHeaderAction.settings, child: Text('설정')),
+      ],
+    );
+
     if (compact) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-        child: Column(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                Expanded(child: monthButton),
-                viewSwitch,
-              ],
-            ),
-            const SizedBox(height: 4),
-            SizedBox(
-              height: 42,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: actions,
-              ),
-            ),
+            Expanded(child: monthButton),
+            actions[0],
+            actions[1],
+            compactViewSwitch,
+            compactMoreActions,
           ],
         ),
       );
@@ -519,6 +590,35 @@ class _CalendarHeader extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _viewModeLabel(CalendarViewMode mode) {
+    return switch (mode) {
+      CalendarViewMode.week => '주',
+      CalendarViewMode.month => '월',
+      CalendarViewMode.day => '일',
+    };
+  }
+
+  void _handleHeaderAction(
+    BuildContext context,
+    WidgetRef ref,
+    _CalendarHeaderAction action,
+  ) {
+    switch (action) {
+      case _CalendarHeaderAction.quickAccess:
+        _showQuickAccessSheet(context, ref);
+      case _CalendarHeaderAction.filter:
+        _showFilterSheet(context, ref);
+      case _CalendarHeaderAction.search:
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const SearchPage()));
+      case _CalendarHeaderAction.settings:
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
+    }
   }
 
   Future<void> _showMonthPicker(BuildContext context, WidgetRef ref) async {

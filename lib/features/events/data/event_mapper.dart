@@ -39,7 +39,7 @@ extension EventRecordMapper on EventRecord {
       syncStatus: syncStatus,
       showDday: showDday,
       sensitive: sensitive,
-    );
+    ).normalizeAllDayBounds();
   }
 
   List<DateTime> _excludedDatesFromJson(String raw) {

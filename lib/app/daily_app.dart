@@ -146,14 +146,38 @@ class _AppHome extends ConsumerStatefulWidget {
   ConsumerState<_AppHome> createState() => _AppHomeState();
 }
 
-class _AppHomeState extends ConsumerState<_AppHome> {
+class _AppHomeState extends ConsumerState<_AppHome>
+    with WidgetsBindingObserver {
   var _servicesStarted = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startLocalNotificationServices();
     _startSyncIfConnected();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _startSyncIfConnected();
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        _syncBeforeBackgroundOrExit();
+        break;
+      case AppLifecycleState.inactive:
+        break;
+    }
   }
 
   @override
@@ -178,12 +202,25 @@ class _AppHomeState extends ConsumerState<_AppHome> {
 
   void _startPostLoginServices() {
     if (_servicesStarted) {
+      unawaited(
+        Future.microtask(() async {
+          await ref.read(googleDriveSyncServiceProvider).syncNow();
+        }).catchError((_) {}),
+      );
       return;
     }
     _servicesStarted = true;
     unawaited(
       Future.microtask(() async {
         await ref.read(syncServiceProvider).start();
+      }).catchError((_) {}),
+    );
+  }
+
+  void _syncBeforeBackgroundOrExit() {
+    unawaited(
+      Future.microtask(() async {
+        await ref.read(googleDriveSyncServiceProvider).syncNow();
       }).catchError((_) {}),
     );
   }

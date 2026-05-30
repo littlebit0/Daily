@@ -14,7 +14,7 @@ before public distribution.
   view, calendar filters, sensitive-event display preferences, and AI feature
   toggles.
 - App lock PIN, when enabled, is stored locally through platform secure storage
-  and is not included in the Google Drive sync snapshot.
+  and is not included in Google Drive sync files.
 - Google account email is only kept in memory by the sign-in session; it is not
   stored in the local event database.
 - Gemini API key, if used later, is stored through platform secure storage.
@@ -24,13 +24,13 @@ before public distribution.
 
 - Sync uses the Google Drive `appDataFolder` scope:
   `https://www.googleapis.com/auth/drive.appdata`.
-- The app stores a JSON snapshot named `daily-sync-v1.json` in the user's
-  private app data folder.
-- The snapshot currently contains events and non-secret app settings.
-- The snapshot does not include the local app lock PIN.
+- The app stores private v2 JSON files in the user's app data folder:
+  `daily-sync-v2-event-{eventId}.json` for each event and
+  `daily-sync-v2-settings.json` for non-secret app settings.
+- Event files and settings files do not include the local app lock PIN.
 - The app does not request access to the user's visible Drive files.
-- The snapshot is not yet end-to-end encrypted. Treat that as a blocker before
-  storing highly sensitive content.
+- Google Drive AppData sync files are not yet end-to-end encrypted. Treat that
+  as a blocker before storing highly sensitive content.
 
 ## User Consent Text Needed Before Public Release
 
@@ -38,7 +38,7 @@ Use this wording as the basis for the OAuth consent screen and store listing:
 
 ```text
 Daily stores your calendar events and app settings on your device. If you sign
-in with Google, Daily saves one private backup file in your Google Drive app
+in with Google, Daily saves private app-data files in your Google Drive app
 data folder so your devices can restore and sync your data. Daily does not
 read, list, or modify your visible Google Drive files.
 ```
@@ -59,12 +59,12 @@ Users must be able to:
 - Use the in-app membership withdrawal action, which deletes the Google Drive
   app-data backup when available, clears local events/settings, signs out, and
   returns to the welcome flow.
-- Delete the app's Google Drive app-data file from their Google account if
+- Delete the app's Google Drive app-data files from their Google account if
   manual removal is needed.
 
 ## Security Hardening Still Needed
 
-- Add optional encryption for the Google Drive snapshot.
+- Add optional encryption for Google Drive AppData sync files.
 - Add optional biometric unlock where each platform supports it cleanly.
 - Re-test with a fresh Google account after publishing the OAuth app to
   production.

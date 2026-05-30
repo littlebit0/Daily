@@ -61,7 +61,7 @@ class EventDraft {
       syncStatus: 'pending',
       showDday: showDday,
       sensitive: sensitive,
-    );
+    ).normalizeAllDayBounds();
   }
 
   EventDraft copyWith({

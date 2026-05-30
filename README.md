@@ -4,16 +4,18 @@ Daily는 로컬 우선으로 바로 사용할 수 있고, Google 계정을 연�
 
 ## 현재 버전
 
-- 앱 버전: `1.1.3`
+- 앱 버전: `2.0.0`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 최신 배포: [Daily 1.1.3](https://github.com/littlebit0/Daily/releases/tag/v1.1.3)
+- 최신 배포: [Daily 2.0.0](https://github.com/littlebit0/Daily/releases/tag/v2.0.0)
 
 ## 설치 파일
 
 GitHub Release에서 최신 설치 파일을 받을 수 있습니다.
 
-- iOS development-signed IPA: `daily-ios-1.1.3-signed-development.ipa`
-- iOS unsigned IPA: `daily-ios-1.1.3-unsigned.ipa`
+- Android 직접 설치용 APK: `daily-android-2.0.0.apk`
+- Android Play Console 제출용 AAB: `daily-android-2.0.0.aab`
+- Windows 배포용 ZIP: `daily-windows-2.0.0.zip`
+- Windows 실행 파일: `daily.exe`
 
 iOS unsigned IPA는 서명되지 않은 검증용 산출물입니다. 실제 iPhone에 설치하려면 연결된 iPhone을 Xcode에 신뢰/등록해 Development provisioning profile을 만들거나, Apple Developer Program의 TestFlight/App Store/Ad Hoc 배포 서명이 필요합니다.
 
@@ -28,12 +30,10 @@ Windows는 `zip` 사용을 권장합니다. Flutter Windows 앱은 실행 파일
 
 최신 로컬 산출물 해시:
 
-- APK: `2D613A066840609832836C205645C9D88E6706DC7C31D9EC42AA5488BD9D73E9`
-- AAB: `902C05034389A0F8EEA41F00145A9B69FD619371BE5312F7E27335DCBDAE0143`
-- iOS development-signed IPA: `c621eb46a4022451382f6916cc5bdb58b55a56c4512966851fbd6a4fb942003b`
-- iOS unsigned IPA: `ae90274b1073ba4d6d2eb6e7d4133e2c2e2019e9117c4f7e4a2a1c97c3ec11b4`
-- Windows EXE: `47332EA06B42272CDBD3515211B4252F41AA8ADEEE7E2A598D99BA48809352AC`
-- Windows ZIP: `247AEC22C6DB458672FC8931626D00EF31AB173261B516B8D896A367B0B2A031`
+- APK: `5af8f84c9fa8569b7ec9ff0de6bf7417134314f8c744a5dbcba0cf8aebbec37b`
+- AAB: `bfef9d5c53a2548ea86d7aa3393ddc3ec1f9644be687bae0aa27bbac78c364ed`
+- Windows ZIP: `74de6334baa182344a202aeb5bd24890ec44e44164f6fd6e5d8f8092f8684aef`
+- Windows EXE: `fdec22e38f2e6c95d5da06003b67869eec3fac1c98bcb06e70ed0fb968a8e6ff`
 
 ## 핵심 기능
 
@@ -74,7 +74,7 @@ Windows는 `zip` 사용을 권장합니다. Flutter Windows 앱은 실행 파일
 
 Daily는 자체 서버를 사용하지 않고 Google Drive `appDataFolder`에 앱 전용 동기화 파일을 저장합니다.
 
-- 저장 파일: `daily-sync-v1.json`
+- 저장 파일: `daily-sync-v2-event-{eventId}.json`, `daily-sync-v2-settings.json`
 - 저장 위치: 사용자의 Google Drive AppData 영역
 - OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
 - 동기화 대상:
@@ -101,7 +101,7 @@ Google Drive AppData 방식은 서버 없이 여러 기기 동기화를 구현�
 - Google Drive AppData 공통 동기화 목표 프로젝트 번호: `234127810480`
 - 기존 Firebase/Android/Web 메타데이터 프로젝트 번호: `424765276744`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- Web OAuth client: `424765276744-j32k4bdck7lr4ba0lg5s99u91c4849bp.apps.googleusercontent.com`
+- Web OAuth client: `234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com`
 - Windows Desktop OAuth client: `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
 - iOS OAuth client: `234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com`
 - macOS OAuth client: `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`

@@ -14,8 +14,8 @@ class KoreanLunarDate {
   final bool isLeapMonth;
 
   String get shortLabel {
-    final prefix = isLeapMonth ? '윤' : '음';
-    return day == 1 ? '$prefix $month.1' : '$prefix $day';
+    final prefix = isLeapMonth ? '윤' : '';
+    return '$prefix$month.$day';
   }
 }
 

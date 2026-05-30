@@ -11,28 +11,33 @@ keystore passwords to this file.
 - Local path used for this work:
   `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0`
 - Branch: `main`
+- Current visible app version in repo:
+  `2.0.0`
+- Current internal build number:
+  `4`
 - Latest release work commit before this handoff:
-  `pending 1.1.3 iPhone sync release commit`
+  `pending 2.0.0 v2 sync release commit`
 - Release tag prepared locally:
-  `v1.1.3`
+  `v2.0.0`
 - GitHub SSH authentication was configured and verified for user `littlebit0`.
 - GitHub CLI authentication was completed with `repo` scope in a temporary
   config directory.
 
 ## Cross-Platform Sync Rule
 
-- User requirement as of 2026-05-29: Windows, Android, iPhone/iOS, and macOS
-  must all read and write the same Google Drive backup/sync file.
+- User requirement as of 2026-05-30: Windows, Android, iPhone/iOS, and macOS
+  must all read and write the same Google Drive AppData v2 file set.
 - Do not treat platform-specific sync silos as acceptable. All production
   OAuth clients must belong to the same Google Cloud/Firebase project and must
-  resolve to the same Drive AppData namespace, or the sync backend must be
-  redesigned so every platform intentionally targets one shared backup file.
+  resolve to the same Drive AppData namespace. The current sync backend uses
+  `daily-sync-v2-event-{eventId}.json` per event and
+  `daily-sync-v2-settings.json` for settings.
 - Current diagnosis: the installed macOS app was rebuilt with the browser-based
   Desktop OAuth client beginning with `234127810480`, while the checked-in
   iOS/Android/Firebase configuration points at project number `424765276744`.
-  Because Drive `appDataFolder` is app-scoped, this can make macOS and iOS see
-  different hidden `daily-sync-v1.json` backups even when the Google account is
-  the same.
+  Because Drive `appDataFolder` is app-scoped, this made macOS and iOS capable
+  of seeing different hidden sync data even when the Google account was the
+  same.
 - Mac local reference data at the time of diagnosis lives in:
   `/Users/kimhwi/Library/Containers/com.littlebit0.daily.macos/Data/Library/Application Support/com.littlebit0.daily.macos/daily.sqlite`.
   It had three visible synced events: `test`, `ttttt`, and `전역 D-38`.
@@ -42,8 +47,7 @@ keystore passwords to this file.
   not just a UI refresh problem.
 - Next agent must not “fix” iOS sync by copying local SQLite data or adding a
   platform-only workaround. The durable fix is to align OAuth/client project
-  configuration and, if needed, migrate the existing macOS backup into the
-  unified project-backed Drive AppData file.
+  configuration and implement the same v2 event-file sync layout.
 
 ## Completed Work
 
@@ -356,6 +360,148 @@ removed only after confirming they are not user-created work.
     references project `424765276744`, so the later cross-platform cleanup must
     align all production OAuth clients to one shared Drive AppData target.
 
+- Follow-up on 2026-05-29 from Windows/Android-focused local Codex:
+  - Windows local path for this pass:
+    `C:\Users\com\Documents\New project\.codex-tools\portfolio_repos\Daily`.
+  - Product behavior must remain the same across Windows, Android, macOS, and
+    iPhone/iOS. This local Codex can work and verify Windows/Android only; do
+    not interpret that as permission to let macOS/iOS drift from the shared
+    Flutter behavior.
+  - Month calendar paging was changed from a 3-page reset/jump model to a
+    long virtual PageView, so swipe gestures no longer replace the visible
+    month halfway through the animation.
+  - Lunar labels now render beside the solar day number and include lunar
+    month/day on every date, not only on lunar day 1.
+  - Google Drive sync no longer polls every 5 seconds while idle. Sync is now
+    event-driven for local create/update/delete changes, runs on first app
+    start/sign-in/resume, and attempts a best-effort sync before background or
+    exit. Local change sync is debounced for 1 second.
+  - As of 2026-05-30, the old whole-backup `daily-sync-v1.json` behavior is
+    abandoned. Android/Windows now use v2 Drive AppData files:
+    `daily-sync-v2-event-{eventId}.json` for each event and
+    `daily-sync-v2-settings.json` for settings. Local event create/update/delete
+    sync touches only the changed event file; deletions are tombstoned in that
+    event file. First start, sign-in, resume, and manual sync may list v2 event
+    files to merge state, but must not read or write a monolithic snapshot.
+    Mac/iPhone agents must implement this exact v2 layout and stop using v1.
+  - A cross-device all-day sync bug was fixed after the user reported iPhone
+    events `6.1 평일외출` and `6.5평일외출` showing as two-day events on Android.
+    Root cause: all-day `startAt`/`endAt` values could arrive from iPhone/iOS as
+    UTC-midnight instants, then Android converted them to local 09:00 times and
+    the month grid treated the exclusive end as touching the next day. The fix
+    normalizes all-day events to local date boundaries in the event domain,
+    event draft creation, command-service save, Drift save/load, and Google
+    Drive sync decode/encode. V2 event files now emit date-only `startDate`/
+    `endDate` fields for all-day events while keeping backward-compatible
+    `startAt`/`endAt`. Google Drive all-day decode now reads the literal ISO
+    date prefix before considering time-zone conversion, so offset-bearing
+    all-day strings stay on the intended calendar date.
+  - `syncServiceProvider` currently points at Google Drive sync. The older
+    `FirestoreSyncService` remains in the tree but is not the active sync
+    backend for Android/Windows. It was not removed because doing so would be
+    a feature-surface decision. If a future Mac/iPhone or shared-code agent
+    re-enables Firestore sync, it must apply the same all-day date-only
+    semantics before using it in production.
+  - The compact calendar header now keeps month/view/actions in one row, uses
+    a single week/month/day view menu, and moves secondary actions into a
+    more menu to recover vertical and horizontal space on Android-sized
+    screens.
+  - Mac/iPhone Codex should verify the same shared Flutter UI changes on
+    macOS/iOS, especially PageView swipe feel, lifecycle sync on background/
+    foreground, and whether mobile header controls fit without overflow.
+  - If macOS/iOS still uses short-interval foreground polling for Google Drive
+    sync, treat that as a Mac/iPhone-side defect. Match the Android/Windows
+    behavior: sync on app start/sign-in/resume, best-effort before background
+    or exit, and after create/update/delete events with a short debounce.
+  - Android/Windows should keep feature parity with the Mac/iPhone builds for
+    calendar navigation, lunar display, lifecycle sync, Google Drive AppData
+    sync semantics, all-day date handling, and compact header controls.
+  - Verification on Windows local Codex after this pass:
+    `.\tool\flutter.ps1 analyze --no-pub` passed,
+    `.\tool\flutter.ps1 test --no-pub` passed with 25 tests,
+    Android debug APK build passed, and Windows debug build produced
+    `build\windows\x64\runner\Debug\daily.exe`. Windows build emitted many
+    linker `LNK4099` warnings for missing Firebase/libcurl PDB debug symbols;
+    the build still succeeded and these warnings are from bundled dependency
+    debug-symbol lookup, not app logic.
+  - Correction after user reported that iPhone is the working source of truth:
+    Android/Windows must use the same Google Drive AppData target as the iPhone
+    build, project number `234127810480`. The temporary Android
+    `applicationId = "com.littlebit0.daily"` made Android authenticate against
+    a different OAuth/AppData identity and made the device look like it had
+    been initialized separately from iPhone data.
+  - Android `applicationId` is now back to `com.littlebit0.dailycalendar`.
+    Google Cloud project `daily-496913` / `234127810480` contains matching
+    Android OAuth clients for that package: `Daily Android Debug` with SHA-1
+    `D0:5F:5F:28:C7:A1:9C:92:8A:F4:80:B0:B5:81:97:19:6F:EC:21:E2` and
+    `Daily Android Release` with SHA-1
+    `2F:0D:16:3A:FB:B9:E8:DE:97:A5:41:04:43:90:0E:AC:6A:51:76:72`.
+  - The Android Google Sign-In server client default now uses the same 234
+    Web client as the iPhone-aligned project:
+    `234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com`.
+    Do not change Android back to project `424765276744`; the checked-in
+    `android/app/google-services.json` is legacy metadata and is not the source
+    of truth for Drive AppData sync.
+  - Windows uses the 234 Desktop OAuth client
+    `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`.
+    Google rejects the token exchange for this Desktop client unless its
+    generated secret is supplied. The app now reads that secret from
+    `GOOGLE_DESKTOP_CLIENT_SECRET`, `GOOGLE_DESKTOP_OAUTH_CONFIG`, or local
+    `%APPDATA%\Daily\google_desktop_oauth.json` /
+    `%LOCALAPPDATA%\Daily\google_desktop_oauth.json`. A new Desktop client
+    secret was added in Google Cloud Console and saved locally at
+    `%APPDATA%\Daily\google_desktop_oauth.json`; never commit or print it.
+  - Verification after the 234-project correction: `.\tool\flutter.ps1 analyze
+    --no-pub` passed, `.\tool\flutter.ps1 test --no-pub` passed with 25 tests,
+    Android debug APK build passed, badging reports package
+    `com.littlebit0.dailycalendar` version `1.1.3` code `3`, the emulator was
+    updated with that APK, and Google sign-in reached the account chooser with
+    calling package `com.littlebit0.dailycalendar`. The automated pass did not
+    choose a personal Google account; the user must choose the same Google
+    account used on the working iPhone build.
+  - On 2026-05-30 the user reported that editing schedules made dates change
+    unexpectedly. Windows local DB inspection at
+    `%APPDATA%\littlebit0\Daily\daily.sqlite` showed the listed iPhone-source
+    all-day events were already stored 1-2 days early while marked `synced`.
+    That meant any edit would attach a new `updatedAt` to the wrong local date
+    and sync it outward. This was existing corrupted sync data, not a reason to
+    change iPhone/macOS. The DB was backed up to
+    `%APPDATA%\littlebit0\Daily\daily.sqlite.backup-before-date-repair-20260530-181224`,
+    then exactly these events were repaired locally and synced back to Drive:
+    `6.1 평일외출`, `6.3 국회의원선거`, `6.5 평일외출`,
+    `6.6 면회외출`, `6.20-6.21 캠핑 약속`, and `6.30 전역🎉`.
+  - Windows debug build was regenerated after this shared Dart change. The
+    first attempt failed because the old `daily.exe` was still running and
+    locked the install output; stopping that process and rebuilding succeeded,
+    producing `build\windows\x64\runner\Debug\daily.exe`.
+  - Follow-up v2-only sync conversion after the user explicitly abandoned the
+    old v1 behavior: `lib/core/sync/google_drive_sync_service.dart` no longer
+    reads or writes the legacy whole snapshot during normal sync. Full sync
+    lists and merges v2 event files; queued event sync finds and uploads only
+    `daily-sync-v2-event-{eventId}.json` for the changed event. Settings sync
+    is separated into `daily-sync-v2-settings.json` and is not touched by a
+    queued event-only sync. `deleteCloudBackup()` still knows the legacy v1
+    name only so a user-requested cloud-data deletion can clean abandoned data.
+  - Verification after the v2-only sync conversion: targeted Google Drive sync
+    tests passed, `.\tool\flutter.ps1 analyze --no-pub` passed,
+    `.\tool\flutter.ps1 test --no-pub` passed with 26 tests, Android debug APK
+    built and was installed over the emulator package
+    `com.littlebit0.dailycalendar`, Windows debug build succeeded, and
+    `build\windows\x64\runner\Debug\daily.exe` plus the Android emulator app
+    were launched from the latest build.
+  - Release coordination rule from the user: after the Mac/iPhone agents port
+    the same v2 sync method, release updates must not upload only Mac/iPhone
+    artifacts. Every 2.0.0-or-newer release must publish Windows and Android
+    artifacts together with Mac/iPhone artifacts so all platforms stay on the
+    same sync schema and OAuth/AppData target.
+  - Daily 2.0.0 release artifacts prepared on Windows/Android:
+    `dist/daily-android-2.0.0.apk`,
+    `dist/daily-android-2.0.0.aab`,
+    `dist/daily-windows-2.0.0.zip`, and
+    `dist/daily-windows-2.0.0.exe`. Android APK badging reports package
+    `com.littlebit0.dailycalendar`, visible version `2.0.0`, and internal
+    build number `4`.
+
 ## Security Notes
 
 - The user previously pasted Google OAuth client JSON that included a
@@ -364,21 +510,29 @@ removed only after confirming they are not user-created work.
   keystores, and OAuth secrets out of the repository.
 - Google/Firebase legacy metadata still references project number
   `424765276744`. The current iPhone-first Drive sync target uses project
-  number `234127810480` for iOS and Desktop OAuth. Do not commit OAuth client
-  secrets.
+  number `234127810480` for iOS, Android, and Windows Desktop OAuth. Do not
+  commit OAuth client secrets.
 
 ## Recommended Next Steps
 
-1. Verify the iPhone-first sync fix with `./tool/flutter.sh analyze`,
-   `./tool/flutter.sh test`, an iOS simulator run, and a connected iPhone
-   install.
-2. After user confirms iPhone sync works, commit, push, tag, and publish the
-   next GitHub release with fresh artifacts.
-3. Clean or ignore the duplicate generated Flutter files after checking they
+1. Mac/iPhone Codex must port the same v2 Google Drive AppData file layout and
+   stop using `daily-sync-v1.json` for normal sync. Use the exact Android/
+   Windows semantics: per-event v2 files, date-only all-day fields, tombstones
+   for deletes, event-only uploads for local event changes, and settings in the
+   separate v2 settings file.
+2. When publishing a release after this v2 sync change, upload Windows and
+   Android artifacts together with Mac/iPhone artifacts. Do not publish a
+   Mac/iPhone-only release for a sync-schema-changing version.
+3. Verify the iPhone/macOS v2 sync change with `./tool/flutter.sh analyze`,
+   `./tool/flutter.sh test`, an iOS simulator run, a connected iPhone install,
+   and a macOS run against the same Google account.
+4. After user confirms cross-platform v2 sync works, commit, push, tag, and
+   publish the next GitHub release with fresh artifacts.
+5. Clean or ignore the duplicate generated Flutter files after checking they
    are not needed.
-4. Continue the pending design task: redesign Daily with an Apple-like visual
+6. Continue the pending design task: redesign Daily with an Apple-like visual
    language and apply it consistently across iOS, macOS, Android, and Windows.
-5. After design changes, run `./tool/flutter.sh analyze` and
+7. After design changes, run `./tool/flutter.sh analyze` and
    `./tool/flutter.sh test`.
-6. For release-quality iOS distribution, configure Apple Developer signing and
+8. For release-quality iOS distribution, configure Apple Developer signing and
    create a signed IPA or TestFlight upload.

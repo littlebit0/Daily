@@ -35,7 +35,7 @@ class GoogleDriveAuthService {
   static const _serverClientId = String.fromEnvironment(
     'GOOGLE_SIGN_IN_SERVER_CLIENT_ID',
     defaultValue:
-        '424765276744-j32k4bdck7lr4ba0lg5s99u91c4849bp.apps.googleusercontent.com',
+        '234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com',
   );
   static const _iosServerClientId = String.fromEnvironment(
     'GOOGLE_IOS_SERVER_CLIENT_ID',
@@ -54,9 +54,9 @@ class GoogleDriveAuthService {
   );
   static const _desktopClientId = String.fromEnvironment(
     'GOOGLE_DESKTOP_CLIENT_ID',
-    defaultValue:
-        '234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com',
   );
+  static const _defaultDesktopClientId =
+      '234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com';
   static const _desktopClientSecret = String.fromEnvironment(
     'GOOGLE_DESKTOP_CLIENT_SECRET',
   );
@@ -93,7 +93,16 @@ class GoogleDriveAuthService {
     if (fromBuild.isNotEmpty) {
       return fromBuild;
     }
-    return Platform.environment['GOOGLE_DESKTOP_CLIENT_ID']?.trim() ?? '';
+    final fromEnvironment =
+        Platform.environment['GOOGLE_DESKTOP_CLIENT_ID']?.trim() ?? '';
+    if (fromEnvironment.isNotEmpty) {
+      return fromEnvironment;
+    }
+    final fromConfig = _desktopOAuthConfigValue('client_id');
+    if (fromConfig.isNotEmpty) {
+      return fromConfig;
+    }
+    return _defaultDesktopClientId;
   }
 
   String get _configuredDesktopClientSecret {
@@ -101,7 +110,79 @@ class GoogleDriveAuthService {
     if (fromBuild.isNotEmpty) {
       return fromBuild;
     }
-    return Platform.environment['GOOGLE_DESKTOP_CLIENT_SECRET']?.trim() ?? '';
+    final fromEnvironment =
+        Platform.environment['GOOGLE_DESKTOP_CLIENT_SECRET']?.trim() ?? '';
+    if (fromEnvironment.isNotEmpty) {
+      return fromEnvironment;
+    }
+    return _desktopOAuthConfigValue('client_secret');
+  }
+
+  String _desktopOAuthConfigValue(String key) {
+    for (final file in _desktopOAuthConfigFiles()) {
+      try {
+        if (!file.existsSync()) {
+          continue;
+        }
+        final decoded = jsonDecode(file.readAsStringSync());
+        if (decoded is! Map<String, dynamic>) {
+          continue;
+        }
+        final value = _oauthJsonValue(decoded, key);
+        if (value.isNotEmpty) {
+          return value;
+        }
+      } on FormatException {
+        continue;
+      } on FileSystemException {
+        continue;
+      }
+    }
+    return '';
+  }
+
+  Iterable<File> _desktopOAuthConfigFiles() sync* {
+    final override = Platform.environment['GOOGLE_DESKTOP_OAUTH_CONFIG']
+        ?.trim();
+    if (override != null && override.isNotEmpty) {
+      yield File(override);
+    }
+
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    for (final root in <String?>[
+      Platform.environment['APPDATA'],
+      Platform.environment['LOCALAPPDATA'],
+    ]) {
+      final normalizedRoot = root?.trim();
+      if (normalizedRoot == null || normalizedRoot.isEmpty) {
+        continue;
+      }
+      yield File(
+        '$normalizedRoot${Platform.pathSeparator}Daily'
+        '${Platform.pathSeparator}google_desktop_oauth.json',
+      );
+    }
+  }
+
+  String _oauthJsonValue(Map<String, dynamic> json, String key) {
+    final direct = json[key];
+    if (direct is String && direct.trim().isNotEmpty) {
+      return direct.trim();
+    }
+    for (final sectionName in const ['installed', 'web']) {
+      final section = json[sectionName];
+      if (section is! Map<String, dynamic>) {
+        continue;
+      }
+      final nested = section[key];
+      if (nested is String && nested.trim().isNotEmpty) {
+        return nested.trim();
+      }
+    }
+    return '';
   }
 
   String get _configuredAppleClientId {
@@ -717,15 +798,24 @@ class GoogleDriveAuthService {
     ].join(' / ');
 
     final hasKeychainError = detailText.toLowerCase().contains('keychain');
+    final isApiConsoleRegistrationError = detailText.contains(
+      'UNREGISTERED_ON_API_CONSOLE',
+    );
+    final androidConfigurationMessage =
+        'Google 로그인 클라이언트 설정이 올바르지 않습니다. '
+        'Android 패키지명과 앱 서명 SHA-1이 Google Cloud OAuth 클라이언트에 등록되어 있는지 확인해 주세요.'
+        '${detailText.isEmpty ? '' : ' ($detailText)'}';
+
+    if (isApiConsoleRegistrationError && !Platform.isIOS && !Platform.isMacOS) {
+      return androidConfigurationMessage;
+    }
 
     return switch (error.code) {
       GoogleSignInExceptionCode.canceled => 'Google 로그인이 취소되었습니다.',
       GoogleSignInExceptionCode.clientConfigurationError =>
         Platform.isIOS || Platform.isMacOS
             ? _appleClientConfigurationMessage
-            : 'Google 로그인 클라이언트 설정이 올바르지 않습니다. '
-                  'Android 패키지명과 앱 서명 SHA-1이 Google Cloud OAuth 클라이언트에 등록되어 있는지 확인해 주세요.'
-                  '${detailText.isEmpty ? '' : ' ($detailText)'}',
+            : androidConfigurationMessage,
       GoogleSignInExceptionCode.providerConfigurationError =>
         Platform.isMacOS && hasKeychainError
             ? '$_macosKeychainConfigurationMessage'

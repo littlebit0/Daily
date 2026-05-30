@@ -1,0 +1,384 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:daily/core/notifications/notification_service.dart';
+import 'package:daily/core/settings/settings_repository.dart';
+import 'package:daily/core/sync/google_drive_auth_service.dart';
+import 'package:daily/core/sync/google_drive_sync_service.dart';
+import 'package:daily/features/events/domain/calendar_event.dart';
+import 'package:daily/features/events/domain/event_category.dart';
+import 'package:daily/features/events/domain/event_repository.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('downloads v2 event files and normalizes all-day date bounds', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final requests = <http.Request>[];
+    final httpClient = MockClient((request) async {
+      requests.add(request);
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        final query = request.url.queryParameters['q'] ?? '';
+        if (query.contains('daily-sync-v2-settings.json')) {
+          return _driveFiles([]);
+        }
+        if (query.contains('daily-sync-v2-event-')) {
+          return _driveFiles([
+            {
+              'id': 'remote-event-1',
+              'name': 'daily-sync-v2-event-iphone-all-day.json',
+            },
+            {
+              'id': 'remote-event-2',
+              'name': 'daily-sync-v2-event-iphone-all-day-offset.json',
+            },
+          ]);
+        }
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/remote-event-1') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: 'iphone-all-day',
+            title: '6.1 평일외출',
+            startAt: '2026-06-01T00:00:00.000Z',
+            endAt: '2026-06-02T00:00:00.000Z',
+          ),
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/remote-event-2') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: 'iphone-all-day-offset',
+            title: '6.5 평일외출',
+            startAt: '2026-06-05T00:00:00.000+14:00',
+            endAt: '2026-06-06T00:00:00.000+14:00',
+          ),
+        );
+      }
+      if (request.method == 'POST' &&
+          request.url.path == '/upload/drive/v3/files') {
+        return _jsonResponse({'id': 'created-file'});
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.syncNow();
+
+    final saved = {for (final event in repository.events) event.id: event};
+    expect(saved['iphone-all-day']!.allDay, isTrue);
+    expect(saved['iphone-all-day']!.startAt, DateTime(2026, 6, 1));
+    expect(saved['iphone-all-day']!.endAt, DateTime(2026, 6, 2));
+    expect(saved['iphone-all-day-offset']!.allDay, isTrue);
+    expect(saved['iphone-all-day-offset']!.startAt, DateTime(2026, 6, 5));
+    expect(saved['iphone-all-day-offset']!.endAt, DateTime(2026, 6, 6));
+    expect(notificationService.scheduled.length, 2);
+    expect(notificationService.scheduled.first.startAt, DateTime(2026, 6, 1));
+    expect(
+      requests.any(
+        (request) => request.url.toString().contains('daily-sync-v1'),
+      ),
+      isFalse,
+    );
+  });
+
+  test(
+    'uploads only the changed v2 event file for queued event updates',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final changed = _event(
+        id: 'queued-event',
+        title: '6.20~21 캠핑 약속',
+        startAt: DateTime(2026, 6, 20),
+        endAt: DateTime(2026, 6, 22),
+        updatedAt: DateTime(2026, 5, 30, 18),
+        syncStatus: 'pending',
+      );
+      await repository.save(changed);
+
+      final uploadedEventBodies = <Map<String, Object?>>[];
+      final requests = <http.Request>[];
+      final httpClient = MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-settings.json')) {
+            fail('queued event sync must not touch the settings file');
+          }
+          if (query.contains('daily-sync-v2-event-queued-event.json')) {
+            return _driveFiles([
+              {
+                'id': 'remote-queued-event',
+                'name': 'daily-sync-v2-event-queued-event.json',
+              },
+            ]);
+          }
+          if (query.contains('name contains')) {
+            fail('queued event sync must not list every event file');
+          }
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/remote-queued-event') {
+          return _jsonResponse(
+            _eventFileJson(
+              id: 'queued-event',
+              title: 'old camping',
+              startAt: '2026-06-18T00:00:00.000',
+              endAt: '2026-06-20T00:00:00.000',
+              updatedAt: '2026-05-29T00:00:00.000Z',
+            ),
+          );
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/upload/drive/v3/files/remote-queued-event') {
+          uploadedEventBodies.add(
+            jsonDecode(request.body) as Map<String, Object?>,
+          );
+          return _jsonResponse({'id': 'remote-queued-event'});
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      await service.queueEventUpsert(changed);
+      await service.syncNow();
+
+      expect(uploadedEventBodies, hasLength(1));
+      final event = uploadedEventBodies.single['event'] as Map<String, Object?>;
+      expect(event['id'], 'queued-event');
+      expect(event['startDate'], '2026-06-20');
+      expect(event['endDate'], '2026-06-22');
+      expect(event['title'], '6.20~21 캠핑 약속');
+      expect((await repository.findById('queued-event'))!.syncStatus, 'synced');
+      expect(
+        requests.any(
+          (request) => request.url.toString().contains('daily-sync-v1'),
+        ),
+        isFalse,
+      );
+    },
+  );
+}
+
+GoogleDriveSyncService _service({
+  required _MemoryEventRepository repository,
+  required _FakeNotificationService notificationService,
+  required SharedPreferences preferences,
+  required http.Client httpClient,
+}) {
+  return GoogleDriveSyncService(
+    authService: _FakeGoogleDriveAuthService(),
+    eventRepository: repository,
+    notificationService: notificationService,
+    settingsRepository: SettingsRepository(preferences: preferences),
+    httpClient: httpClient,
+  );
+}
+
+http.Response _driveFiles(List<Map<String, Object?>> files) {
+  return _jsonResponse({'files': files});
+}
+
+http.Response _jsonResponse(Map<String, Object?> body) {
+  return http.Response.bytes(
+    utf8.encode(jsonEncode(body)),
+    200,
+    headers: {'content-type': 'application/json; charset=utf-8'},
+  );
+}
+
+Map<String, Object?> _eventFileJson({
+  required String id,
+  required String title,
+  required String startAt,
+  required String endAt,
+  String updatedAt = '2026-05-29T00:00:00.000Z',
+}) {
+  return {
+    'schemaVersion': 2,
+    'type': 'event',
+    'event': {
+      'id': id,
+      'title': title,
+      'startAt': startAt,
+      'endAt': endAt,
+      'allDay': true,
+      'category': 'basic',
+      'colorValue': EventCategory.basic.colorValue,
+      'createdAt': '2026-05-29T00:00:00.000Z',
+      'updatedAt': updatedAt,
+    },
+  };
+}
+
+CalendarEvent _event({
+  required String id,
+  required String title,
+  required DateTime startAt,
+  required DateTime endAt,
+  required DateTime updatedAt,
+  String syncStatus = 'synced',
+}) {
+  return CalendarEvent(
+    id: id,
+    title: title,
+    startAt: startAt,
+    endAt: endAt,
+    allDay: true,
+    category: EventCategory.basic,
+    colorValue: EventCategory.basic.colorValue,
+    createdAt: updatedAt,
+    updatedAt: updatedAt,
+    syncStatus: syncStatus,
+  );
+}
+
+class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
+  final _accountChanges = StreamController<GoogleDriveAccount?>.broadcast();
+
+  @override
+  Stream<GoogleDriveAccount?> get accountChanges => _accountChanges.stream;
+
+  @override
+  GoogleDriveAccount? get currentAccount =>
+      const GoogleDriveAccount(email: 'tester@example.com');
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<Map<String, String>?> authorizationHeaders({
+    bool promptIfNecessary = false,
+  }) async {
+    return const {'Authorization': 'Bearer test-token'};
+  }
+}
+
+class _FakeNotificationService implements NotificationService {
+  final scheduled = <CalendarEvent>[];
+
+  @override
+  Future<void> cancelEventReminder(String eventId) async {}
+
+  @override
+  Future<void> cancelMorningBriefing() async {}
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<int> pendingNotificationCount() async => scheduled.length;
+
+  @override
+  Future<String> permissionSummary() async => 'test';
+
+  @override
+  Future<void> scheduleEventReminder(
+    CalendarEvent event, {
+    bool allowImmediate = false,
+  }) async {
+    scheduled.add(event);
+  }
+
+  @override
+  Future<void> scheduleMorningBriefing({
+    required int hour,
+    required int minute,
+  }) async {}
+
+  @override
+  Future<void> showTestNotification() async {}
+}
+
+class _MemoryEventRepository implements EventRepository {
+  final _events = <String, CalendarEvent>{};
+
+  List<CalendarEvent> get events => _events.values.toList();
+
+  @override
+  Future<List<CalendarEvent>> allEventsForSync() async => events;
+
+  @override
+  Future<void> clearAll() async {
+    _events.clear();
+  }
+
+  @override
+  Future<void> delete(String eventId) async {
+    final event = _events[eventId];
+    if (event != null) {
+      _events[eventId] = event.copyWith(
+        deletedAt: DateTime.now(),
+        syncStatus: 'pending_delete',
+      );
+    }
+  }
+
+  @override
+  Future<CalendarEvent?> findById(String id) async => _events[id];
+
+  @override
+  Future<void> hardDelete(String eventId) async {
+    _events.remove(eventId);
+  }
+
+  @override
+  Future<void> markSynced(String eventId) async {
+    final event = _events[eventId];
+    if (event != null) {
+      _events[eventId] = event.copyWith(syncStatus: 'synced');
+    }
+  }
+
+  @override
+  Future<List<CalendarEvent>> pendingSyncEvents() async {
+    return _events.values
+        .where((event) => event.syncStatus != 'synced')
+        .toList();
+  }
+
+  @override
+  Future<void> save(CalendarEvent event) async {
+    _events[event.id] = event.normalizeAllDayBounds();
+  }
+
+  @override
+  Future<List<CalendarEvent>> search(String query) async => const [];
+
+  @override
+  Stream<List<CalendarEvent>> watchEventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) {
+    return Stream.value(events);
+  }
+}

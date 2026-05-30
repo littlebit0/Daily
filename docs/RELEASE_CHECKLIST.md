@@ -11,7 +11,7 @@
   expected to sign in.
 - Test on a clean Android install:
   1. Welcome screen appears.
-  2. Google login restores Drive snapshot.
+  2. Google login restores the Drive v2 event/settings file set.
   3. Notification permission prompt appears.
   4. Create, edit, delete, and sync an event.
   5. Reinstall and confirm restore.

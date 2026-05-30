@@ -60,6 +60,21 @@ class CalendarEvent {
 
   bool get isRecurring => recurrence.isRepeating;
 
+  CalendarEvent normalizeAllDayBounds() {
+    if (!allDay) {
+      return this;
+    }
+    final normalizedStart = DateTime(startAt.year, startAt.month, startAt.day);
+    var normalizedEnd = DateTime(endAt.year, endAt.month, endAt.day);
+    if (!normalizedEnd.isAfter(normalizedStart)) {
+      normalizedEnd = normalizedStart.add(const Duration(days: 1));
+    }
+    if (normalizedStart == startAt && normalizedEnd == endAt) {
+      return this;
+    }
+    return copyWith(startAt: normalizedStart, endAt: normalizedEnd);
+  }
+
   bool overlaps(DateTime rangeStart, DateTime rangeEnd) {
     return startAt.isBefore(rangeEnd) && endAt.isAfter(rangeStart);
   }
