@@ -92,6 +92,11 @@ Current local signing state:
 - No local App Store provisioning profile exists for `com.littlebit0.daily`.
 - Xcode reports that team `Hwi Kim` cannot create iOS App Store provisioning
   profiles from this account/session.
+- A direct `xcodebuild -exportArchive -allowProvisioningUpdates` retry on
+  2026-06-01 also failed with `No provider associated with App Store Connect
+  user`, `No Account for Team "739BC896PZ"`, and no `iOS Distribution`
+  certificate. This means the local Xcode account is not yet connected to a
+  usable App Store Connect provider for distribution uploads.
 
 ## Required Apple Account Actions
 
