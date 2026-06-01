@@ -178,6 +178,142 @@ void main() {
     },
   );
 
+  test('start flushes locally pending v2 event files after restore', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final pending = _event(
+      id: 'restart-pending',
+      title: '6.30 전역',
+      startAt: DateTime(2026, 6, 30),
+      endAt: DateTime(2026, 7, 1),
+      updatedAt: DateTime(2026, 6, 1, 8),
+      syncStatus: 'pending',
+    );
+    await repository.save(pending);
+
+    final uploadedEventBodies = <Map<String, Object?>>[];
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        final query = request.url.queryParameters['q'] ?? '';
+        if (query.contains('daily-sync-v2-settings.json')) {
+          return _driveFiles([]);
+        }
+        if (query.contains(
+          "name = 'daily-sync-v2-event-restart-pending.json'",
+        )) {
+          return _driveFiles([
+            {
+              'id': 'restart-pending-file',
+              'name': 'daily-sync-v2-event-restart-pending.json',
+            },
+          ]);
+        }
+        if (query.contains('daily-sync-v2-event-')) {
+          return _driveFiles([]);
+        }
+      }
+      if (request.method == 'PATCH' &&
+          request.url.path == '/upload/drive/v3/files/restart-pending-file') {
+        uploadedEventBodies.add(
+          jsonDecode(request.body) as Map<String, Object?>,
+        );
+        return _jsonResponse({'id': 'restart-pending-file'});
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.start();
+
+    expect(uploadedEventBodies, hasLength(1));
+    final event = uploadedEventBodies.single['event'] as Map<String, Object?>;
+    expect(event['id'], 'restart-pending');
+    expect(event['startDate'], '2026-06-30');
+    expect(
+      (await repository.findById('restart-pending'))!.syncStatus,
+      'synced',
+    );
+  });
+
+  test('pending change flush cancels the delayed event timer', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final changed = _event(
+      id: 'queued-before-exit',
+      title: '6.6 면회외출',
+      startAt: DateTime(2026, 6, 6),
+      endAt: DateTime(2026, 6, 7),
+      updatedAt: DateTime(2026, 6, 1, 9),
+      syncStatus: 'pending',
+    );
+    await repository.save(changed);
+
+    final uploadedEventBodies = <Map<String, Object?>>[];
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        final query = request.url.queryParameters['q'] ?? '';
+        if (query.contains('daily-sync-v2-settings.json')) {
+          fail('pending event flush must not touch the settings file');
+        }
+        if (query.contains(
+          "name = 'daily-sync-v2-event-queued-before-exit.json'",
+        )) {
+          return _driveFiles([
+            {
+              'id': 'queued-before-exit-file',
+              'name': 'daily-sync-v2-event-queued-before-exit.json',
+            },
+          ]);
+        }
+        if (query.contains('name contains')) {
+          fail('pending event flush must not list every event file');
+        }
+      }
+      if (request.method == 'PATCH' &&
+          request.url.path ==
+              '/upload/drive/v3/files/queued-before-exit-file') {
+        uploadedEventBodies.add(
+          jsonDecode(request.body) as Map<String, Object?>,
+        );
+        return _jsonResponse({'id': 'queued-before-exit-file'});
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+      changeSyncDelay: const Duration(hours: 1),
+    );
+    addTearDown(service.dispose);
+
+    await service.queueEventUpsert(changed);
+    await service.syncPendingChangesNow();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(uploadedEventBodies, hasLength(1));
+    final event = uploadedEventBodies.single['event'] as Map<String, Object?>;
+    expect(event['id'], 'queued-before-exit');
+    expect(event['startDate'], '2026-06-06');
+    expect(
+      (await repository.findById('queued-before-exit'))!.syncStatus,
+      'synced',
+    );
+  });
+
   test('full sync backs up before restore after the configured gap', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -281,6 +417,30 @@ void main() {
     expect(await repository.findById('remote-event'), isNotNull);
     expect((await repository.findById('local-event'))!.syncStatus, 'synced');
   });
+
+  test('startListeningOnly does not run an initial restore', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final requests = <http.Request>[];
+    final httpClient = MockClient((request) async {
+      requests.add(request);
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.startListeningOnly();
+
+    expect(requests, isEmpty);
+  });
 }
 
 GoogleDriveSyncService _service({
@@ -289,6 +449,7 @@ GoogleDriveSyncService _service({
   required SharedPreferences preferences,
   required http.Client httpClient,
   Duration backupRestoreDelay = Duration.zero,
+  Duration changeSyncDelay = Duration.zero,
 }) {
   return GoogleDriveSyncService(
     authService: _FakeGoogleDriveAuthService(),
@@ -297,7 +458,7 @@ GoogleDriveSyncService _service({
     settingsRepository: SettingsRepository(preferences: preferences),
     httpClient: httpClient,
     backupRestoreDelay: backupRestoreDelay,
-    changeSyncDelay: Duration.zero,
+    changeSyncDelay: changeSyncDelay,
   );
 }
 

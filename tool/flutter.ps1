@@ -62,10 +62,11 @@ $tempRoot = Join-Path $toolRoot 'Temp'
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 $env:TEMP = $tempRoot
 $env:TMP = $tempRoot
+$javaTempOption = "-Djava.io.tmpdir=`"$tempRoot`""
 if ([string]::IsNullOrWhiteSpace($env:JAVA_TOOL_OPTIONS)) {
-  $env:JAVA_TOOL_OPTIONS = "-Djava.io.tmpdir=$tempRoot"
+  $env:JAVA_TOOL_OPTIONS = $javaTempOption
 } elseif ($env:JAVA_TOOL_OPTIONS -notmatch 'java\.io\.tmpdir') {
-  $env:JAVA_TOOL_OPTIONS = "-Djava.io.tmpdir=$tempRoot $env:JAVA_TOOL_OPTIONS"
+  $env:JAVA_TOOL_OPTIONS = "$javaTempOption $env:JAVA_TOOL_OPTIONS"
 }
 $env:Path = @(
   (Join-Path $flutterRoot 'bin')

@@ -66,10 +66,13 @@ class GoogleDriveAuthService {
   static const _expiresAtKey = '${_storagePrefix}expires_at';
   static const _emailKey = '${_storagePrefix}email';
   static const _displayNameKey = '${_storagePrefix}display_name';
-  static const _mobileInteractiveAuthTimeout = Duration(minutes: 5);
-  static const _mobileSilentAuthorizationTimeout = Duration(seconds: 45);
-  static const _mobileLightweightAuthTimeout = Duration(seconds: 8);
-  static const _mobileAccountClearTimeout = Duration(seconds: 3);
+  static const _mobileInteractiveAuthTimeout = Duration(seconds: 10);
+  static const _mobileSilentAuthorizationTimeout = Duration(seconds: 10);
+  static const _mobileLightweightAuthTimeout = Duration(seconds: 3);
+  static const _mobileAccountClearTimeout = Duration(seconds: 2);
+  static const _mobileSignOutTimeout = Duration(seconds: 3);
+  static const _desktopInteractiveAuthTimeout = Duration(seconds: 10);
+  static const _desktopNetworkTimeout = Duration(seconds: 10);
 
   final FlutterSecureStorage _secureStorage;
   final http.Client _httpClient;
@@ -245,7 +248,14 @@ class GoogleDriveAuthService {
   }) async {
     await initialize();
     if (_usesDesktopOAuth) {
-      return _signInWithDesktopOAuth();
+      try {
+        return await _signInWithDesktopOAuth();
+      } on TimeoutException {
+        _setDesktopAccount(null);
+        throw const GoogleDriveAuthException(
+          'Google 로그인 응답 시간이 초과되었습니다. 브라우저 창을 닫고 다시 시도해 주세요.',
+        );
+      }
     }
     if (!_isAvailable) {
       throw UnsupportedError('현재 플랫폼에서는 Google 로그인을 지원하지 않습니다.');
@@ -262,17 +272,11 @@ class GoogleDriveAuthService {
 
       final existing = _currentUser;
       if (existing != null) {
-        await existing.authorizationClient
-            .authorizeScopes(scopes)
-            .timeout(_mobileInteractiveAuthTimeout);
         return _toDriveAccount(existing);
       }
 
       final user = await GoogleSignIn.instance
           .authenticate(scopeHint: scopes)
-          .timeout(_mobileInteractiveAuthTimeout);
-      await user.authorizationClient
-          .authorizeScopes(scopes)
           .timeout(_mobileInteractiveAuthTimeout);
       _setCurrentUser(user);
       return _toDriveAccount(user);
@@ -302,7 +306,8 @@ class GoogleDriveAuthService {
     }
     try {
       await GoogleSignIn.instance.signOut().timeout(
-        _mobileSilentAuthorizationTimeout,
+        _mobileSignOutTimeout,
+        onTimeout: () {},
       );
     } on PlatformException catch (error) {
       if (!_isCredentialClearFailure(error)) {
@@ -319,7 +324,15 @@ class GoogleDriveAuthService {
   }) async {
     await initialize();
     if (_usesDesktopOAuth) {
-      return _desktopAuthorizationHeaders(promptIfNecessary: promptIfNecessary);
+      try {
+        return await _desktopAuthorizationHeaders(
+          promptIfNecessary: promptIfNecessary,
+        );
+      } on TimeoutException {
+        throw const GoogleDriveAuthException(
+          'Google 인증 응답 시간이 초과되었습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+        );
+      }
     }
     if (!_isAvailable) {
       return null;
@@ -386,16 +399,7 @@ class GoogleDriveAuthService {
       }
     }, onError: (_) => _setCurrentUser(null));
 
-    if (Platform.isMacOS) {
-      return;
-    }
-
-    try {
-      final user = await _attemptLightweightAuthentication();
-      _setCurrentUser(user);
-    } on Object {
-      _setCurrentUser(null);
-    }
+    _setCurrentUser(null);
   }
 
   Future<GoogleSignInAccount?> _attemptLightweightAuthentication() async {
@@ -505,7 +509,7 @@ class GoogleDriveAuthService {
     try {
       await _openSystemBrowser(authUri);
       final request = await server.first.timeout(
-        const Duration(minutes: 5),
+        _desktopInteractiveAuthTimeout,
         onTimeout: () => throw TimeoutException('Google 로그인이 시간 초과되었습니다.'),
       );
       final params = request.uri.queryParameters;
@@ -545,17 +549,19 @@ class GoogleDriveAuthService {
   Future<_DesktopTokens> _exchangeAuthorizationCode(
     _DesktopCodeResponse codeResponse,
   ) async {
-    final response = await _httpClient.post(
-      Uri.https('oauth2.googleapis.com', '/token'),
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: _withDesktopClientSecret({
-        'client_id': _configuredDesktopClientId,
-        'code': codeResponse.code,
-        'code_verifier': codeResponse.codeVerifier,
-        'grant_type': 'authorization_code',
-        'redirect_uri': codeResponse.redirectUri,
-      }),
-    );
+    final response = await _httpClient
+        .post(
+          Uri.https('oauth2.googleapis.com', '/token'),
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: _withDesktopClientSecret({
+            'client_id': _configuredDesktopClientId,
+            'code': codeResponse.code,
+            'code_verifier': codeResponse.codeVerifier,
+            'grant_type': 'authorization_code',
+            'redirect_uri': codeResponse.redirectUri,
+          }),
+        )
+        .timeout(_desktopNetworkTimeout);
     final decoded = _decodeTokenResponse(response);
     final refreshToken = decoded['refresh_token'] as String?;
     if (refreshToken == null || refreshToken.isEmpty) {
@@ -569,15 +575,17 @@ class GoogleDriveAuthService {
     if (refreshToken == null || refreshToken.isEmpty) {
       throw const GoogleDriveAuthException('저장된 Google 갱신 토큰이 없습니다.');
     }
-    final response = await _httpClient.post(
-      Uri.https('oauth2.googleapis.com', '/token'),
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: _withDesktopClientSecret({
-        'client_id': _configuredDesktopClientId,
-        'refresh_token': refreshToken,
-        'grant_type': 'refresh_token',
-      }),
-    );
+    final response = await _httpClient
+        .post(
+          Uri.https('oauth2.googleapis.com', '/token'),
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: _withDesktopClientSecret({
+            'client_id': _configuredDesktopClientId,
+            'refresh_token': refreshToken,
+            'grant_type': 'refresh_token',
+          }),
+        )
+        .timeout(_desktopNetworkTimeout);
     final decoded = _decodeTokenResponse(response);
     final tokens = _tokensFromJson(decoded, refreshToken: refreshToken);
     final account = _desktopAccount;
@@ -623,10 +631,12 @@ class GoogleDriveAuthService {
   }
 
   Future<GoogleDriveAccount> _fetchDesktopAccount(String accessToken) async {
-    final response = await _httpClient.get(
-      Uri.https('openidconnect.googleapis.com', '/v1/userinfo'),
-      headers: {'Authorization': 'Bearer $accessToken'},
-    );
+    final response = await _httpClient
+        .get(
+          Uri.https('openidconnect.googleapis.com', '/v1/userinfo'),
+          headers: {'Authorization': 'Bearer $accessToken'},
+        )
+        .timeout(_desktopNetworkTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw GoogleDriveAuthException(
         'Google 계정 정보를 가져오지 못했습니다: HTTP ${response.statusCode}',
@@ -721,11 +731,13 @@ class GoogleDriveAuthService {
 
   Future<void> _clearDesktopSession() async {
     _desktopTokens = null;
-    await _deleteDesktopStorage(_accessTokenKey);
-    await _deleteDesktopStorage(_refreshTokenKey);
-    await _deleteDesktopStorage(_expiresAtKey);
-    await _deleteDesktopStorage(_emailKey);
-    await _deleteDesktopStorage(_displayNameKey);
+    await Future.wait([
+      _deleteDesktopStorage(_accessTokenKey),
+      _deleteDesktopStorage(_refreshTokenKey),
+      _deleteDesktopStorage(_expiresAtKey),
+      _deleteDesktopStorage(_emailKey),
+      _deleteDesktopStorage(_displayNameKey),
+    ]);
     _setDesktopAccount(null);
   }
 

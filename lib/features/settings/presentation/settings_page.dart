@@ -20,6 +20,9 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  static const _accountActionTimeout = Duration(seconds: 10);
+  static const _logoutAccountReserve = Duration(seconds: 3);
+
   final _apiKeyController = TextEditingController();
   var _syncMessage = '';
   var _syncBusy = false;
@@ -576,10 +579,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final account = await ref
           .read(googleDriveAuthServiceProvider)
           .signIn(forceAccountSelection: true);
-      await ref.read(syncServiceProvider).start();
-      await ref
-          .read(googleDriveSyncServiceProvider)
-          .syncNow(promptIfNecessary: true);
+      final syncService = ref.read(googleDriveSyncServiceProvider);
+      await syncService.startListeningOnly(flushPendingChanges: false);
+      await syncService.syncPendingChangesNow(
+        promptIfNecessary: true,
+        restoreAfterBackup: true,
+      );
       if (!mounted) {
         return;
       }
@@ -664,9 +669,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     });
     try {
       if (choice == _GoogleLogoutChoice.syncAndReturnToStart) {
-        await ref
-            .read(googleDriveSyncServiceProvider)
-            .syncNow(promptIfNecessary: true);
+        await _tryFlushPendingBeforeLogout(Stopwatch()..start());
       }
       await ref.read(googleDriveAuthServiceProvider).signOut();
       if (mounted) {
@@ -773,6 +776,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (mounted) {
         setState(() => _syncBusy = false);
       }
+    }
+  }
+
+  Future<void> _tryFlushPendingBeforeLogout(Stopwatch stopwatch) async {
+    final syncBudget =
+        _accountActionTimeout - stopwatch.elapsed - _logoutAccountReserve;
+    if (syncBudget <= Duration.zero) {
+      return;
+    }
+    try {
+      await ref
+          .read(googleDriveSyncServiceProvider)
+          .syncPendingChangesNow(promptIfNecessary: false)
+          .timeout(syncBudget);
+    } on Object {
+      // Pending local changes keep their pending state and are retried later.
     }
   }
 }

@@ -6,28 +6,28 @@ Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로�
 
 ## 현재 버전
 
-- 앱 버전: `2.0.1`
+- 앱 버전: `2.0.2`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 최신 배포: [Daily 2.0.1](https://github.com/littlebit0/Daily/releases/tag/v2.0.1)
+- 최신 배포: [Daily 2.0.2](https://github.com/littlebit0/Daily/releases/tag/v2.0.2)
 - 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
 
 ## 배포 파일
 
 GitHub Release에서 최신 설치 파일을 받을 수 있습니다.
 
-- Android 직접 설치용 APK: `daily-android-2.0.0.apk`
-- Android Play Console 제출용 AAB: `daily-android-2.0.0.aab`
-- Windows 권장 배포 파일: `daily-windows-2.0.0.zip`
-- Windows 실행 파일 단독 복사본: `daily-windows-2.0.0.exe`
+- Android 직접 설치용 APK: `daily-android-2.0.2.apk`
+- Windows 권장 배포 파일: `daily-windows-2.0.2.zip`
+- macOS DMG: `daily-macos-2.0.1.dmg` (2.0.2 릴리스에 재업로드된 2.0.1 파일)
+- iOS unsigned IPA: `daily-ios-2.0.1-unsigned.ipa` (2.0.2 릴리스에 재업로드된 2.0.1 파일)
 
-Windows는 ZIP 사용을 권장합니다. Flutter Windows 앱은 실행 파일 외에도 DLL과 `data` 폴더가 필요하므로 일반 배포에는 `daily-windows-2.0.0.zip`을 사용해야 합니다.
+Windows는 ZIP 사용을 권장합니다. Flutter Windows 앱은 실행 파일 외에도 DLL과 `data` 폴더가 필요하므로 일반 배포에는 `daily-windows-2.0.2.zip`을 사용해야 합니다.
 
 SHA-256:
 
-- `daily-android-2.0.0.apk`: `5af8f84c9fa8569b7ec9ff0de6bf7417134314f8c744a5dbcba0cf8aebbec37b`
-- `daily-android-2.0.0.aab`: `bfef9d5c53a2548ea86d7aa3393ddc3ec1f9644be687bae0aa27bbac78c364ed`
-- `daily-windows-2.0.0.zip`: `74de6334baa182344a202aeb5bd24890ec44e44164f6fd6e5d8f8092f8684aef`
-- `daily-windows-2.0.0.exe`: `fdec22e38f2e6c95d5da06003b67869eec3fac1c98bcb06e70ed0fb968a8e6ff`
+- `daily-android-2.0.2.apk`: `20ab8ff2cb78745cf7e5fa11525c7514f032eaf5b4330c45843202075de9504f`
+- `daily-windows-2.0.2.zip`: `27b9077d766143214e39c303df3542baf3d8cc783d1f0b1c40f3e72607da26c2`
+- `daily-macos-2.0.1.dmg`: `7d06768bd04485513f348914a57f140c4ab7c4030bad85b56e9a5629d1ea0bf9`
+- `daily-ios-2.0.1-unsigned.ipa`: `a8d4e47257a12a964f7f7f9b249ad15bee2b418bb7577cbc4e082eb9de06eef4`
 
 ## 지원 플랫폼
 
@@ -36,7 +36,7 @@ SHA-256:
 - iOS
 - macOS
 
-Android와 Windows 산출물은 2.0.0 릴리스에 포함되어 있습니다. iOS/macOS는 같은 Flutter 기능 세트와 동기화 구조를 기준으로 개발했으며, 실제 App Store/TestFlight/Developer ID 배포에는 Apple Developer 서명과 provisioning 설정이 필요합니다.
+Android와 Windows 산출물은 2.0.2 릴리스에 포함되어 있습니다. iOS/macOS는 같은 Flutter 기능 세트와 동기화 구조를 기준으로 개발했으며, 2.0.2 릴리스에는 기존 2.0.1 macOS/iOS 파일을 함께 올렸습니다. 실제 App Store/TestFlight/Developer ID 배포에는 Apple Developer 서명과 provisioning 설정이 필요합니다.
 
 ## 핵심 기능
 

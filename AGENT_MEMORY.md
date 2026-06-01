@@ -12,16 +12,28 @@ keystore passwords to this file.
   `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0`
 - Branch: `main`
 - Current visible app version in repo:
-  `2.0.1`
+  `2.0.2`
 - Current internal build number:
-  `5`
+  no `+` suffix in `pubspec.yaml`; Android 2.0.2 artifacts are built with
+  build number `6` via build command only.
 - Latest release work commit before this handoff:
   `e6be3ba Release Daily 2.0.1 installers`
 - Release tag published:
-  `v2.0.1`
+  `v2.0.2` after the Windows/Android 2.0.2 follow-up release.
 - GitHub SSH authentication was configured and verified for user `littlebit0`.
 - GitHub CLI authentication was completed with `repo` scope in a temporary
   config directory.
+- Windows/Android verification on 2026-06-01 in
+  `C:\Users\com\Documents\New project\.codex-tools\portfolio_repos\Daily`
+  found and fixed two regressions after the macOS-side handoff:
+  pending local event changes could survive restart without being uploaded if
+  the delayed event timer had not fired, and Android local start could open a
+  Google account chooser because mobile lightweight auth ran during app
+  initialization. The fix flushes queued/DB-pending event IDs through v2
+  event-file backup on startup/background and only enters mobile Google auth
+  from explicit Google actions. Verification passed: `flutter analyze --no-pub`,
+  `flutter test --no-pub`, Android debug APK install/run on `Daily_API_35`,
+  and Windows debug build/run.
 
 ## Cross-Platform Sync Rule
 
@@ -501,6 +513,70 @@ removed only after confirming they are not user-created work.
     `dist/daily-windows-2.0.0.exe`. Android APK badging reports package
     `com.littlebit0.dailycalendar`, visible version `2.0.0`, and internal
     build number `4`.
+  - 2026-06-01 login-delay investigation for Android/Windows: the apparent
+    five-minute Google login delay was caused by five-minute interactive auth
+    waits plus the connect flow immediately running both `start()` and
+    `syncNow()`, which could duplicate initial restore/full-sync work before
+    the UI considered login complete. Android sign-in now authenticates the
+    account once and lets the first Drive sync request Drive scope consent,
+    Windows loopback OAuth waits 90 seconds instead of five minutes, token/
+    userinfo and Drive API requests have 30-second request timeouts, and
+    onboarding/settings connect flows use `startListeningOnly()` before one
+    explicit `syncNow(promptIfNecessary: true)` so initial restore is not run
+    twice. A regression test verifies `startListeningOnly()` does not run an
+    initial restore. Mac/iPhone platform folders were not edited; if those
+    platforms have separate native auth/sync code, their agents should mirror
+    the same rule: do not request Drive consent twice during sign-in, do not
+    run duplicated initial sync during connect, and keep bounded network waits.
+  - Verification after the login-delay fix: `.\tool\flutter.ps1 analyze
+    --no-pub` passed, `.\tool\flutter.ps1 test --no-pub` passed with 30 tests,
+    Android debug APK built successfully after fixing `tool/flutter.ps1` to
+    quote `JAVA_TOOL_OPTIONS` temp paths that contain spaces, the debug APK was
+    installed and launched on emulator `emulator-5554` with no fatal logcat
+    crash, Windows debug build produced
+    `build\windows\x64\runner\Debug\daily.exe`, and the Windows executable
+    stayed running during a smoke launch.
+  - Follow-up on the same day: user rejected treating login/logout as complete
+    while heavy sync continued in the background. The Windows/Android fix was
+    revised to optimize the synchronous path instead. Account auth, silent
+    auth, desktop OAuth redirect, desktop token/userinfo requests, and Drive
+    requests are bounded at 10 seconds or less; mobile sign-out is bounded at 3
+    seconds. Login/connect now starts listeners without an automatic initial
+    sync, then performs only pending-change upload plus restore instead of full
+    backup-all plus restore. Event restore downloads are batched with limited
+    concurrency, and pending-event backup resolves all target remote files with
+    one name query instead of one Drive list query per event. Logout no longer
+    runs a full sync; it only attempts pending-change upload within the
+    remaining 10-second budget before clearing account state. No background
+    completion workaround is used for login/logout.
+  - Verification after the revised optimization: `.\tool\flutter.ps1 analyze
+    --no-pub` passed, `.\tool\flutter.ps1 test --no-pub` passed with 30 tests,
+    Android debug APK rebuilt, reinstalled, and launched on `emulator-5554`
+    with app PID observed, and Windows debug build rebuilt and launched with
+    `daily.exe` running.
+  - Mac/iPhone handoff for work done outside the previous macOS-side notes:
+    port the same synchronous-path optimization, not a background completion
+    workaround. Specifically, avoid any login/connect flow that runs both
+    initial listener startup restore and a separate full sync; connect should
+    start listeners, flush only pending local v2 event files, then restore v2
+    remote data. Logout should never run full backup-all/full-restore; it
+    should only make a short pending-change flush attempt, then clear account
+    state. Keep account/auth and Drive API waits bounded to roughly 10 seconds,
+    and keep native sign-out much shorter. Preserve the v2 file model exactly:
+    one settings file, per-event files, date-only all-day fields, tombstones for
+    deletes, and event-only uploads for local event changes. Also port the
+    Android/Windows startup/background behavior: queued and DB-pending event
+    IDs must be flushed so local changes cannot survive restart unsynced, but
+    local startup must not open a Google account chooser automatically. If
+    iOS/macOS have separate native auth wrappers, they must avoid duplicate
+    Drive scope consent requests during sign-in. If they share this Flutter
+    Dart code, verify the shared behavior on iOS simulator/device and macOS.
+  - 2.0.2 release coordination: the repository version was moved to `2.0.2`
+    with no `+` suffix in `pubspec.yaml` per user request. Android artifacts
+    should use build number `6` only at build time. For the `v2.0.2` GitHub
+    release, Windows/Android are rebuilt from this code. The user explicitly
+    allowed reusing the existing 2.0.1 macOS DMG and unsigned iOS IPA because
+    dedicated Mac/iPhone 2.0.2 artifacts do not exist yet.
 
 ## Security Notes
 

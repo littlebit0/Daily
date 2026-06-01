@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -191,6 +192,9 @@ class _AppHomeState extends ConsumerState<_AppHome>
         _startPostLoginServices();
         return;
       }
+      if (!Platform.isWindows && !Platform.isMacOS) {
+        return;
+      }
       final headers = await auth.authorizationHeaders();
       if (headers != null) {
         _startPostLoginServices();
@@ -204,7 +208,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
     if (_servicesStarted) {
       unawaited(
         Future.microtask(() async {
-          await _restoreGoogleDriveSnapshot();
+          await _syncGoogleDriveSnapshot();
         }).catchError((_) {}),
       );
       return;
@@ -221,13 +225,15 @@ class _AppHomeState extends ConsumerState<_AppHome>
   void _syncBeforeBackgroundOrExit() {
     unawaited(
       Future.microtask(() async {
-        await _restoreGoogleDriveSnapshot();
+        await ref.read(googleDriveSyncServiceProvider).syncPendingChangesNow();
       }).catchError((_) {}),
     );
   }
 
-  Future<void> _restoreGoogleDriveSnapshot() async {
-    await ref.read(googleDriveSyncServiceProvider).restoreNow();
+  Future<void> _syncGoogleDriveSnapshot() async {
+    await ref
+        .read(googleDriveSyncServiceProvider)
+        .syncPendingChangesNow(restoreAfterBackup: true);
     _refreshSettingsState();
   }
 

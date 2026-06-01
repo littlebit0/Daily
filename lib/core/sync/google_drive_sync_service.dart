@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
@@ -40,6 +41,8 @@ class GoogleDriveSyncService implements SyncService {
   static const _driveHost = 'www.googleapis.com';
   static const _defaultChangeSyncDelay = Duration(seconds: 1);
   static const _defaultBackupRestoreDelay = Duration(seconds: 3);
+  static const _driveRequestTimeout = Duration(seconds: 10);
+  static const _driveRequestConcurrency = 8;
 
   final GoogleDriveAuthService _authService;
   final EventRepository _eventRepository;
@@ -61,9 +64,26 @@ class GoogleDriveSyncService implements SyncService {
   );
 
   @override
-  Future<void> start() async {
+  Future<void> start() {
+    return _start(runInitialRestore: true);
+  }
+
+  Future<void> startListeningOnly({bool flushPendingChanges = true}) {
+    return _start(
+      runInitialRestore: false,
+      flushPendingChanges: flushPendingChanges,
+    );
+  }
+
+  Future<void> _start({
+    required bool runInitialRestore,
+    bool flushPendingChanges = true,
+  }) async {
     if (_started) {
-      return restoreNow();
+      if (!runInitialRestore && !flushPendingChanges) {
+        return;
+      }
+      return syncPendingChangesNow(restoreAfterBackup: runInitialRestore);
     }
     _started = true;
 
@@ -73,7 +93,12 @@ class GoogleDriveSyncService implements SyncService {
         _requestAutomaticRestore();
       }
     });
-    await restoreNow().catchError((_) {});
+    if (runInitialRestore) {
+      await restoreNow().catchError((_) {});
+    }
+    if (flushPendingChanges) {
+      await syncPendingChangesNow().catchError((_) {});
+    }
   }
 
   @override
@@ -118,6 +143,24 @@ class GoogleDriveSyncService implements SyncService {
     );
   }
 
+  Future<void> syncPendingChangesNow({
+    bool promptIfNecessary = false,
+    bool restoreAfterBackup = false,
+  }) async {
+    _changeSyncTimer?.cancel();
+    final eventIds = Set<String>.from(_queuedEventIds);
+    _queuedEventIds.clear();
+    final pendingEvents = await _eventRepository.pendingSyncEvents();
+    eventIds.addAll(pendingEvents.map((event) => event.id));
+
+    if (eventIds.isNotEmpty) {
+      await backupNow(promptIfNecessary: promptIfNecessary, eventIds: eventIds);
+    }
+    if (restoreAfterBackup) {
+      await restoreNow(promptIfNecessary: promptIfNecessary);
+    }
+  }
+
   Future<void> deleteCloudBackup({bool promptIfNecessary = false}) async {
     _changeSyncTimer?.cancel();
     _queuedEventIds.clear();
@@ -146,10 +189,12 @@ class GoogleDriveSyncService implements SyncService {
     ];
 
     for (final file in files) {
-      final response = await _httpClient.delete(
-        Uri.https(_driveHost, '/drive/v3/files/${file.id}'),
-        headers: headers,
-      );
+      final response = await _httpClient
+          .delete(
+            Uri.https(_driveHost, '/drive/v3/files/${file.id}'),
+            headers: headers,
+          )
+          .timeout(_driveRequestTimeout);
       _throwIfFailed(response);
     }
   }
@@ -343,8 +388,17 @@ class GoogleDriveSyncService implements SyncService {
     final remoteFiles = await _listEventFiles(authHeaders);
     final remoteById = <String, CalendarEvent>{};
 
-    for (final entry in remoteFiles.entries) {
-      final remoteEvent = await _downloadEventFile(authHeaders, entry.value.id);
+    final downloadedEvents = await _mapInBatches(remoteFiles.entries, (
+      entry,
+    ) async {
+      return MapEntry(
+        entry.key,
+        await _downloadEventFile(authHeaders, entry.value.id),
+      );
+    });
+
+    for (final entry in downloadedEvents) {
+      final remoteEvent = entry.value;
       if (remoteEvent == null) {
         continue;
       }
@@ -367,19 +421,63 @@ class GoogleDriveSyncService implements SyncService {
     Map<String, String> authHeaders,
     Set<String> eventIds,
   ) async {
-    for (final eventId in eventIds) {
+    final remoteFileById = await _listEventFilesForIds(authHeaders, eventIds);
+    await _mapInBatches(eventIds, (eventId) async {
       final local = await _eventRepository.findById(eventId);
-      final remoteFile = await _findFileByName(
-        authHeaders,
-        _eventFileName(eventId),
-      );
       if (local == null) {
-        continue;
+        return;
       }
 
-      await _uploadEventFile(authHeaders, local, remoteFile);
+      await _uploadEventFile(authHeaders, local, remoteFileById[eventId]);
       await _saveSyncedEvent(local);
+    });
+  }
+
+  Future<List<T>> _mapInBatches<S, T>(
+    Iterable<S> items,
+    Future<T> Function(S item) mapper,
+  ) async {
+    final source = items.toList();
+    final result = <T>[];
+    for (
+      var index = 0;
+      index < source.length;
+      index += _driveRequestConcurrency
+    ) {
+      final end = min(index + _driveRequestConcurrency, source.length);
+      result.addAll(await Future.wait(source.sublist(index, end).map(mapper)));
     }
+    return result;
+  }
+
+  Future<Map<String, _DriveFile>> _listEventFilesForIds(
+    Map<String, String> authHeaders,
+    Set<String> eventIds,
+  ) async {
+    if (eventIds.isEmpty) {
+      return {};
+    }
+    final nameQuery = eventIds
+        .map(_eventFileName)
+        .map((name) => "name = '${_escapeDriveQueryString(name)}'")
+        .join(' or ');
+    final files = await _listFiles(
+      authHeaders,
+      '($nameQuery) and trashed = false',
+      pageSize: eventIds.length,
+    );
+    final result = <String, _DriveFile>{};
+    for (final file in files) {
+      final eventId = _eventIdFromFileName(file.name);
+      if (eventId != null) {
+        result[eventId] = file;
+      }
+    }
+    return result;
+  }
+
+  String _escapeDriveQueryString(String value) {
+    return value.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
   }
 
   Future<void> _saveSyncedEvent(CalendarEvent event) async {
@@ -479,10 +577,12 @@ class GoogleDriveSyncService implements SyncService {
       if (token != null) {
         queryParameters['pageToken'] = token;
       }
-      final response = await _httpClient.get(
-        Uri.https(_driveHost, '/drive/v3/files', queryParameters),
-        headers: authHeaders,
-      );
+      final response = await _httpClient
+          .get(
+            Uri.https(_driveHost, '/drive/v3/files', queryParameters),
+            headers: authHeaders,
+          )
+          .timeout(_driveRequestTimeout);
       _throwIfFailed(response);
 
       final decoded = jsonDecode(response.body) as Map<String, Object?>;
@@ -505,10 +605,12 @@ class GoogleDriveSyncService implements SyncService {
     Map<String, String> authHeaders,
     String fileId,
   ) async {
-    final response = await _httpClient.get(
-      Uri.https(_driveHost, '/drive/v3/files/$fileId', {'alt': 'media'}),
-      headers: authHeaders,
-    );
+    final response = await _httpClient
+        .get(
+          Uri.https(_driveHost, '/drive/v3/files/$fileId', {'alt': 'media'}),
+          headers: authHeaders,
+        )
+        .timeout(_driveRequestTimeout);
     _throwIfFailed(response);
 
     final decoded = jsonDecode(response.body) as Map<String, Object?>;
@@ -522,10 +624,12 @@ class GoogleDriveSyncService implements SyncService {
     Map<String, String> authHeaders,
     String fileId,
   ) async {
-    final response = await _httpClient.get(
-      Uri.https(_driveHost, '/drive/v3/files/$fileId', {'alt': 'media'}),
-      headers: authHeaders,
-    );
+    final response = await _httpClient
+        .get(
+          Uri.https(_driveHost, '/drive/v3/files/$fileId', {'alt': 'media'}),
+          headers: authHeaders,
+        )
+        .timeout(_driveRequestTimeout);
     _throwIfFailed(response);
 
     final decoded = jsonDecode(response.body) as Map<String, Object?>;
@@ -556,17 +660,19 @@ class GoogleDriveSyncService implements SyncService {
     String? fileId,
   }) async {
     if (fileId != null) {
-      final response = await _httpClient.patch(
-        Uri.https(_driveHost, '/upload/drive/v3/files/$fileId', {
-          'uploadType': 'media',
-          'fields': 'id',
-        }),
-        headers: {
-          ...authHeaders,
-          'Content-Type': 'application/json; charset=UTF-8',
-        },
-        body: utf8.encode(jsonBody),
-      );
+      final response = await _httpClient
+          .patch(
+            Uri.https(_driveHost, '/upload/drive/v3/files/$fileId', {
+              'uploadType': 'media',
+              'fields': 'id',
+            }),
+            headers: {
+              ...authHeaders,
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: utf8.encode(jsonBody),
+          )
+          .timeout(_driveRequestTimeout);
       _throwIfFailed(response);
       return;
     }
@@ -586,17 +692,19 @@ class GoogleDriveSyncService implements SyncService {
       '--$boundary--\r\n',
     );
 
-    final response = await _httpClient.post(
-      Uri.https(_driveHost, '/upload/drive/v3/files', {
-        'uploadType': 'multipart',
-        'fields': 'id',
-      }),
-      headers: {
-        ...authHeaders,
-        'Content-Type': 'multipart/related; boundary=$boundary',
-      },
-      body: body,
-    );
+    final response = await _httpClient
+        .post(
+          Uri.https(_driveHost, '/upload/drive/v3/files', {
+            'uploadType': 'multipart',
+            'fields': 'id',
+          }),
+          headers: {
+            ...authHeaders,
+            'Content-Type': 'multipart/related; boundary=$boundary',
+          },
+          body: body,
+        )
+        .timeout(_driveRequestTimeout);
     _throwIfFailed(response);
   }
 

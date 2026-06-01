@@ -308,7 +308,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(authService.signOutCalls, 1);
-    expect(driveSyncService.syncNowCalls, 1);
+    expect(driveSyncService.syncNowCalls, 0);
+    expect(driveSyncService.syncPendingChangesNowCalls, 1);
     expect(settingsRepository.load().onboardingCompleted, isFalse);
     expect(find.text('Daily 시작하기'), findsOneWidget);
 
@@ -356,10 +357,19 @@ class _FakeGoogleDriveSyncService extends GoogleDriveSyncService {
 
   var deleteCloudBackupCalls = 0;
   var syncNowCalls = 0;
+  var syncPendingChangesNowCalls = 0;
 
   @override
   Future<void> syncNow({bool promptIfNecessary = false}) async {
     syncNowCalls += 1;
+  }
+
+  @override
+  Future<void> syncPendingChangesNow({
+    bool promptIfNecessary = false,
+    bool restoreAfterBackup = false,
+  }) async {
+    syncPendingChangesNowCalls += 1;
   }
 
   @override
