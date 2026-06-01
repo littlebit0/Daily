@@ -12,13 +12,13 @@ keystore passwords to this file.
   `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0`
 - Branch: `main`
 - Current visible app version in repo:
-  `2.0.0`
+  `2.0.1`
 - Current internal build number:
-  `4`
+  `5`
 - Latest release work commit before this handoff:
-  `pending 2.0.0 v2 sync release commit`
-- Release tag prepared locally:
-  `v2.0.0`
+  `e6be3ba Release Daily 2.0.1 installers`
+- Release tag published:
+  `v2.0.1`
 - GitHub SSH authentication was configured and verified for user `littlebit0`.
 - GitHub CLI authentication was completed with `repo` scope in a temporary
   config directory.
@@ -520,6 +520,13 @@ removed only after confirming they are not user-created work.
    Android APK, macOS DMG, unsigned iOS IPA, Windows ZIP, and SHA-256 sums to
    the `v2.0.1` GitHub release when the tag is pushed. iOS remains unsigned in
    CI because Apple Developer signing assets are not stored in the repo.
+   Store submission prep then added a generated Daily app icon set for iOS,
+   macOS, and Android, generated a Daily iOS launch image, and added
+   `docs/STORE_SUBMISSION.md`. The user narrowed the current store-submission
+   scope to Apple App Store only, so Google Play and Microsoft Store work is
+   deferred. Apple archive creation works, but App Store IPA export is blocked
+   until an Apple Distribution certificate and App Store provisioning profiles
+   are available for the team.
 1. Mac/iPhone Codex must port the same v2 Google Drive AppData file layout and
    stop using `daily-sync-v1.json` for normal sync. Use the exact Android/
    Windows semantics: per-event v2 files, date-only all-day fields, tombstones
