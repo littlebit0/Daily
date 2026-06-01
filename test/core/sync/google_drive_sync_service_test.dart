@@ -16,7 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('downloads v2 event files and normalizes all-day date bounds', () async {
+  test('restore sync downloads v2 event files without uploading', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final repository = _MemoryEventRepository();
@@ -64,9 +64,8 @@ void main() {
           ),
         );
       }
-      if (request.method == 'POST' &&
-          request.url.path == '/upload/drive/v3/files') {
-        return _jsonResponse({'id': 'created-file'});
+      if (request.url.path.startsWith('/upload/drive/v3/files')) {
+        fail('restore sync must not upload Google Drive files');
       }
       return http.Response('unexpected ${request.method} ${request.url}', 500);
     });
@@ -79,7 +78,7 @@ void main() {
     );
     addTearDown(service.dispose);
 
-    await service.syncNow();
+    await service.restoreNow();
 
     final saved = {for (final event in repository.events) event.id: event};
     expect(saved['iphone-all-day']!.allDay, isTrue);
@@ -99,7 +98,7 @@ void main() {
   });
 
   test(
-    'uploads only the changed v2 event file for queued event updates',
+    'backup-only event sync uploads only the changed v2 event file',
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
@@ -138,15 +137,7 @@ void main() {
         }
         if (request.method == 'GET' &&
             request.url.path == '/drive/v3/files/remote-queued-event') {
-          return _jsonResponse(
-            _eventFileJson(
-              id: 'queued-event',
-              title: 'old camping',
-              startAt: '2026-06-18T00:00:00.000',
-              endAt: '2026-06-20T00:00:00.000',
-              updatedAt: '2026-05-29T00:00:00.000Z',
-            ),
-          );
+          fail('backup-only event sync must not download the remote event');
         }
         if (request.method == 'PATCH' &&
             request.url.path == '/upload/drive/v3/files/remote-queued-event') {
@@ -169,8 +160,7 @@ void main() {
       );
       addTearDown(service.dispose);
 
-      await service.queueEventUpsert(changed);
-      await service.syncNow();
+      await service.backupNow(eventIds: {changed.id});
 
       expect(uploadedEventBodies, hasLength(1));
       final event = uploadedEventBodies.single['event'] as Map<String, Object?>;
@@ -187,6 +177,110 @@ void main() {
       );
     },
   );
+
+  test('full sync backs up before restore after the configured gap', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final localEvent = _event(
+      id: 'local-event',
+      title: 'local first',
+      startAt: DateTime(2026, 6, 10),
+      endAt: DateTime(2026, 6, 11),
+      updatedAt: DateTime(2026, 6, 1, 9),
+      syncStatus: 'pending',
+    );
+    await repository.save(localEvent);
+
+    final requests = <http.Request>[];
+    final httpClient = MockClient((request) async {
+      requests.add(request);
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        final query = request.url.queryParameters['q'] ?? '';
+        if (query.contains('daily-sync-v2-settings.json')) {
+          return _driveFiles([]);
+        }
+        if (query.contains('daily-sync-v2-event-')) {
+          return _driveFiles([
+            {
+              'id': 'local-file',
+              'name': 'daily-sync-v2-event-local-event.json',
+            },
+            {
+              'id': 'remote-file',
+              'name': 'daily-sync-v2-event-remote-event.json',
+            },
+          ]);
+        }
+      }
+      if (request.method == 'POST' &&
+          request.url.path == '/upload/drive/v3/files') {
+        return _jsonResponse({'id': 'settings-file'});
+      }
+      if (request.method == 'PATCH' &&
+          request.url.path == '/upload/drive/v3/files/local-file') {
+        return _jsonResponse({'id': 'local-file'});
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/local-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: 'local-event',
+            title: 'local first',
+            startAt: '2026-06-10T00:00:00.000',
+            endAt: '2026-06-11T00:00:00.000',
+            updatedAt: '2026-06-01T09:00:00.000Z',
+          ),
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/remote-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: 'remote-event',
+            title: 'remote after',
+            startAt: '2026-06-12T00:00:00.000',
+            endAt: '2026-06-13T00:00:00.000',
+          ),
+        );
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+      backupRestoreDelay: const Duration(milliseconds: 20),
+    );
+    addTearDown(service.dispose);
+
+    final stopwatch = Stopwatch()..start();
+    await service.syncNow();
+    stopwatch.stop();
+
+    final uploadIndex = requests.indexWhere(
+      (request) =>
+          request.method == 'PATCH' &&
+          request.url.path == '/upload/drive/v3/files/local-file',
+    );
+    final restoreDownloadIndex = requests.indexWhere(
+      (request) =>
+          request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/remote-file',
+    );
+    expect(uploadIndex, isNonNegative);
+    expect(restoreDownloadIndex, isNonNegative);
+    expect(uploadIndex, lessThan(restoreDownloadIndex));
+    expect(
+      stopwatch.elapsed,
+      greaterThanOrEqualTo(const Duration(milliseconds: 20)),
+    );
+    expect(await repository.findById('remote-event'), isNotNull);
+    expect((await repository.findById('local-event'))!.syncStatus, 'synced');
+  });
 }
 
 GoogleDriveSyncService _service({
@@ -194,6 +288,7 @@ GoogleDriveSyncService _service({
   required _FakeNotificationService notificationService,
   required SharedPreferences preferences,
   required http.Client httpClient,
+  Duration backupRestoreDelay = Duration.zero,
 }) {
   return GoogleDriveSyncService(
     authService: _FakeGoogleDriveAuthService(),
@@ -201,6 +296,8 @@ GoogleDriveSyncService _service({
     notificationService: notificationService,
     settingsRepository: SettingsRepository(preferences: preferences),
     httpClient: httpClient,
+    backupRestoreDelay: backupRestoreDelay,
+    changeSyncDelay: Duration.zero,
   );
 }
 

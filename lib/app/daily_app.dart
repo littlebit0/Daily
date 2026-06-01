@@ -204,7 +204,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
     if (_servicesStarted) {
       unawaited(
         Future.microtask(() async {
-          await ref.read(googleDriveSyncServiceProvider).syncNow();
+          await _restoreGoogleDriveSnapshot();
         }).catchError((_) {}),
       );
       return;
@@ -213,6 +213,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
     unawaited(
       Future.microtask(() async {
         await ref.read(syncServiceProvider).start();
+        _refreshSettingsState();
       }).catchError((_) {}),
     );
   }
@@ -220,9 +221,23 @@ class _AppHomeState extends ConsumerState<_AppHome>
   void _syncBeforeBackgroundOrExit() {
     unawaited(
       Future.microtask(() async {
-        await ref.read(googleDriveSyncServiceProvider).syncNow();
+        await _restoreGoogleDriveSnapshot();
       }).catchError((_) {}),
     );
+  }
+
+  Future<void> _restoreGoogleDriveSnapshot() async {
+    await ref.read(googleDriveSyncServiceProvider).restoreNow();
+    _refreshSettingsState();
+  }
+
+  void _refreshSettingsState() {
+    if (!mounted) {
+      return;
+    }
+    ref.read(appSettingsProvider.notifier).state = ref
+        .read(settingsRepositoryProvider)
+        .load();
   }
 
   void _startLocalNotificationServices() {

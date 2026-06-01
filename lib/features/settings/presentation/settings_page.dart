@@ -21,7 +21,6 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   final _apiKeyController = TextEditingController();
-  var _backupMessage = '';
   var _syncMessage = '';
   var _syncBusy = false;
   var _notificationMessage = '';
@@ -386,37 +385,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
           _SettingsSection(
-            title: '백업',
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _backup,
-                      icon: const Icon(Icons.cloud_upload_outlined),
-                      label: const Text('지금 백업'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _restore,
-                      icon: const Icon(Icons.restore),
-                      label: const Text('복원'),
-                    ),
-                  ),
-                ],
-              ),
-              if (_backupMessage.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  _backupMessage,
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-              ],
-            ],
-          ),
-          _SettingsSection(
             title: '계정',
             children: [
               _SyncStatusTile(
@@ -445,22 +413,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await ref.read(settingsRepositoryProvider).save(settings);
     ref.read(appSettingsProvider.notifier).state = settings;
     unawaited(
-      ref.read(googleDriveSyncServiceProvider).syncNow().catchError((_) {}),
+      ref.read(googleDriveSyncServiceProvider).backupNow().catchError((_) {}),
     );
-  }
-
-  Future<void> _backup() async {
-    final path = await ref.read(backupServiceProvider).backupNow();
-    setState(() => _backupMessage = '백업 완료: $path');
-  }
-
-  Future<void> _restore() async {
-    try {
-      await ref.read(backupServiceProvider).restoreLatest();
-      setState(() => _backupMessage = '복원 완료');
-    } on Object catch (error) {
-      setState(() => _backupMessage = '$error');
-    }
   }
 
   Future<void> _enableAppLock(AppSettings settings) async {

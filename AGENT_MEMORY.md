@@ -515,6 +515,11 @@ removed only after confirming they are not user-created work.
 
 ## Recommended Next Steps
 
+0. Current release prep moved Daily to `2.0.1+5` and added GitHub Actions
+   workflows for platform installer generation. The release workflow publishes
+   Android APK, macOS DMG, unsigned iOS IPA, Windows ZIP, and SHA-256 sums to
+   the `v2.0.1` GitHub release when the tag is pushed. iOS remains unsigned in
+   CI because Apple Developer signing assets are not stored in the repo.
 1. Mac/iPhone Codex must port the same v2 Google Drive AppData file layout and
    stop using `daily-sync-v1.json` for normal sync. Use the exact Android/
    Windows semantics: per-event v2 files, date-only all-day fields, tombstones

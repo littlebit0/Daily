@@ -21,12 +21,16 @@ class GoogleDriveSyncService implements SyncService {
     required NotificationService notificationService,
     required SettingsRepository settingsRepository,
     http.Client? httpClient,
+    Duration backupRestoreDelay = _defaultBackupRestoreDelay,
+    Duration changeSyncDelay = _defaultChangeSyncDelay,
   }) : _authService = authService,
        _eventRepository = eventRepository,
        _notificationService = notificationService,
        _settingsRepository = settingsRepository,
        _httpClient = httpClient ?? http.Client(),
-       _ownsHttpClient = httpClient == null;
+       _ownsHttpClient = httpClient == null,
+       _backupRestoreDelay = backupRestoreDelay,
+       _changeSyncDelay = changeSyncDelay;
 
   static const _legacySyncFileName = 'daily-sync-v1.json';
   static const _settingsFileName = 'daily-sync-v2-settings.json';
@@ -34,7 +38,8 @@ class GoogleDriveSyncService implements SyncService {
   static const _eventFileSuffix = '.json';
   static const _v2FilePrefix = 'daily-sync-v2-';
   static const _driveHost = 'www.googleapis.com';
-  static const _changeSyncDelay = Duration(seconds: 1);
+  static const _defaultChangeSyncDelay = Duration(seconds: 1);
+  static const _defaultBackupRestoreDelay = Duration(seconds: 3);
 
   final GoogleDriveAuthService _authService;
   final EventRepository _eventRepository;
@@ -42,13 +47,14 @@ class GoogleDriveSyncService implements SyncService {
   final SettingsRepository _settingsRepository;
   final http.Client _httpClient;
   final bool _ownsHttpClient;
+  final Duration _backupRestoreDelay;
+  final Duration _changeSyncDelay;
   Future<void>? _syncInFlight;
   StreamSubscription<GoogleDriveAccount?>? _accountSubscription;
   Timer? _changeSyncTimer;
+  final _pendingSyncRequests = <_PendingSyncRequest>[];
   final _queuedEventIds = <String>{};
   var _started = false;
-  var _syncAgainRequested = false;
-  var _nextPromptIfNecessary = false;
 
   final statusNotifier = ValueNotifier<GoogleDriveSyncStatus>(
     const GoogleDriveSyncStatus(),
@@ -57,17 +63,17 @@ class GoogleDriveSyncService implements SyncService {
   @override
   Future<void> start() async {
     if (_started) {
-      return syncNow();
+      return restoreNow();
     }
     _started = true;
 
     await _authService.initialize();
     _accountSubscription = _authService.accountChanges.listen((account) {
       if (account != null) {
-        _requestAutomaticSync();
+        _requestAutomaticRestore();
       }
     });
-    await syncNow().catchError((_) {});
+    await restoreNow().catchError((_) {});
   }
 
   @override
@@ -85,22 +91,37 @@ class GoogleDriveSyncService implements SyncService {
   }
 
   Future<void> syncNow({bool promptIfNecessary = false}) {
-    _nextPromptIfNecessary = _nextPromptIfNecessary || promptIfNecessary;
-    _syncAgainRequested = true;
+    return _enqueueSync(
+      _SyncRequestKind.backupThenRestore,
+      promptIfNecessary: promptIfNecessary,
+    );
+  }
 
-    final inFlight = _syncInFlight;
-    if (inFlight != null) {
-      return inFlight;
+  Future<void> backupNow({
+    bool promptIfNecessary = false,
+    Set<String>? eventIds,
+  }) {
+    if (eventIds != null && eventIds.isEmpty) {
+      return Future.value();
     }
+    return _enqueueSync(
+      _SyncRequestKind.backupOnly,
+      promptIfNecessary: promptIfNecessary,
+      eventIds: eventIds,
+    );
+  }
 
-    return _syncInFlight = _drainSyncQueue().whenComplete(() {
-      _syncInFlight = null;
-    });
+  Future<void> restoreNow({bool promptIfNecessary = false}) {
+    return _enqueueSync(
+      _SyncRequestKind.restoreOnly,
+      promptIfNecessary: promptIfNecessary,
+    );
   }
 
   Future<void> deleteCloudBackup({bool promptIfNecessary = false}) async {
     _changeSyncTimer?.cancel();
-    _syncAgainRequested = false;
+    _queuedEventIds.clear();
+    _pendingSyncRequests.clear();
     final inFlight = _syncInFlight;
     if (inFlight != null) {
       await inFlight;
@@ -142,43 +163,77 @@ class GoogleDriveSyncService implements SyncService {
     }
   }
 
-  Future<void> _drainSyncQueue() async {
-    while (_syncAgainRequested) {
-      final promptIfNecessary = _nextPromptIfNecessary;
-      final queuedEventIds = _queuedEventIds.isEmpty
-          ? null
-          : Set<String>.from(_queuedEventIds);
-      _queuedEventIds.clear();
-      _syncAgainRequested = false;
-      _nextPromptIfNecessary = false;
-      await _sync(
+  Future<void> _enqueueSync(
+    _SyncRequestKind kind, {
+    required bool promptIfNecessary,
+    Set<String>? eventIds,
+  }) {
+    _pendingSyncRequests.add(
+      _PendingSyncRequest(
+        kind: kind,
         promptIfNecessary: promptIfNecessary,
-        eventIds: queuedEventIds,
-      );
+        eventIds: eventIds == null ? null : Set<String>.unmodifiable(eventIds),
+      ),
+    );
+
+    final inFlight = _syncInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    _startSyncDrain();
+    return _syncInFlight!;
+  }
+
+  void _startSyncDrain() {
+    final future = _drainSyncQueue().whenComplete(() {
+      _syncInFlight = null;
+      if (_pendingSyncRequests.isNotEmpty) {
+        _startSyncDrain();
+      }
+    });
+    _syncInFlight = future;
+  }
+
+  Future<void> _drainSyncQueue() async {
+    while (_pendingSyncRequests.isNotEmpty) {
+      final request = _pendingSyncRequests.removeAt(0);
+      await _runSyncRequest(request);
     }
   }
 
   void _queueChangeSync() {
     _changeSyncTimer?.cancel();
-    _changeSyncTimer = Timer(_changeSyncDelay, _requestAutomaticSync);
+    _changeSyncTimer = Timer(_changeSyncDelay, _requestQueuedEventBackup);
   }
 
-  void _requestAutomaticSync() {
-    unawaited(syncNow().catchError((_) {}));
+  void _requestAutomaticRestore() {
+    unawaited(restoreNow().catchError((_) {}));
   }
 
-  Future<void> _sync({
-    required bool promptIfNecessary,
-    Set<String>? eventIds,
-  }) async {
+  void _requestQueuedEventBackup() {
+    final eventIds = Set<String>.from(_queuedEventIds);
+    _queuedEventIds.clear();
+    if (eventIds.isEmpty) {
+      return;
+    }
+    unawaited(backupNow(eventIds: eventIds).catchError((_) {}));
+  }
+
+  Future<void> _runSyncRequest(_PendingSyncRequest request) async {
+    final message = switch (request.kind) {
+      _SyncRequestKind.backupOnly => '백업 중',
+      _SyncRequestKind.restoreOnly => '복원 중',
+      _SyncRequestKind.backupThenRestore => '동기화 중',
+    };
     statusNotifier.value = statusNotifier.value.copyWith(
       syncing: true,
-      message: '동기화 중',
+      message: message,
       clearError: true,
     );
     try {
       final headers = await _authService.authorizationHeaders(
-        promptIfNecessary: promptIfNecessary,
+        promptIfNecessary: request.promptIfNecessary,
       );
       if (headers == null) {
         statusNotifier.value = statusNotifier.value.copyWith(
@@ -188,12 +243,22 @@ class GoogleDriveSyncService implements SyncService {
         return;
       }
 
-      if (eventIds == null || eventIds.isEmpty) {
-        final localSettings = _settingsRepository.load();
-        await _syncSettings(headers, localSettings);
-        await _syncAllEvents(headers);
-      } else {
-        await _syncQueuedEvents(headers, eventIds);
+      switch (request.kind) {
+        case _SyncRequestKind.backupOnly:
+          await _backup(headers, eventIds: request.eventIds);
+          break;
+        case _SyncRequestKind.restoreOnly:
+          await _restore(headers);
+          break;
+        case _SyncRequestKind.backupThenRestore:
+          await _backup(headers);
+          statusNotifier.value = statusNotifier.value.copyWith(
+            message: '복원 준비 중',
+          );
+          await Future<void>.delayed(_backupRestoreDelay);
+          statusNotifier.value = statusNotifier.value.copyWith(message: '복원 중');
+          await _restore(headers);
+          break;
       }
       statusNotifier.value = statusNotifier.value.copyWith(
         syncing: false,
@@ -211,7 +276,38 @@ class GoogleDriveSyncService implements SyncService {
     }
   }
 
-  Future<void> _syncSettings(
+  Future<void> _backup(
+    Map<String, String> authHeaders, {
+    Set<String>? eventIds,
+  }) async {
+    if (eventIds != null) {
+      await _backupQueuedEvents(authHeaders, eventIds);
+      return;
+    }
+
+    await _backupSettings(authHeaders, _settingsRepository.load());
+    await _backupAllEvents(authHeaders);
+  }
+
+  Future<void> _restore(Map<String, String> authHeaders) async {
+    await _restoreSettings(authHeaders, _settingsRepository.load());
+    await _restoreAllEvents(authHeaders);
+  }
+
+  Future<void> _backupSettings(
+    Map<String, String> authHeaders,
+    AppSettings localSettings,
+  ) async {
+    final settingsFile = await _findFileByName(authHeaders, _settingsFileName);
+    await _uploadJsonFile(
+      authHeaders,
+      fileName: _settingsFileName,
+      fileId: settingsFile?.id,
+      jsonBody: _encodeSettingsFile(localSettings),
+    );
+  }
+
+  Future<void> _restoreSettings(
     Map<String, String> authHeaders,
     AppSettings localSettings,
   ) async {
@@ -221,7 +317,7 @@ class GoogleDriveSyncService implements SyncService {
         authHeaders,
         settingsFile.id,
       );
-      if (remoteSettings != null && _shouldAdoptRemoteSettings(localSettings)) {
+      if (remoteSettings != null) {
         await _settingsRepository.save(
           remoteSettings.copyWith(
             onboardingCompleted: localSettings.onboardingCompleted,
@@ -230,28 +326,28 @@ class GoogleDriveSyncService implements SyncService {
         );
       }
     }
-
-    await _uploadJsonFile(
-      authHeaders,
-      fileName: _settingsFileName,
-      fileId: settingsFile?.id,
-      jsonBody: _encodeSettingsFile(_settingsRepository.load()),
-    );
   }
 
-  Future<void> _syncAllEvents(Map<String, String> authHeaders) async {
+  Future<void> _backupAllEvents(Map<String, String> authHeaders) async {
     final localEvents = await _eventRepository.allEventsForSync();
-    final localById = {for (final event in localEvents) event.id: event};
+    final remoteFileById = await _listEventFiles(authHeaders);
+
+    for (final event in localEvents) {
+      await _uploadEventFile(authHeaders, event, remoteFileById[event.id]);
+      await _saveSyncedEvent(event);
+    }
+  }
+
+  Future<void> _restoreAllEvents(Map<String, String> authHeaders) async {
+    final localEvents = await _eventRepository.allEventsForSync();
     final remoteFiles = await _listEventFiles(authHeaders);
     final remoteById = <String, CalendarEvent>{};
-    final remoteFileById = <String, _DriveFile>{};
 
     for (final entry in remoteFiles.entries) {
       final remoteEvent = await _downloadEventFile(authHeaders, entry.value.id);
       if (remoteEvent == null) {
         continue;
       }
-      remoteFileById[entry.key] = entry.value;
       final existing = remoteById[entry.key];
       if (existing == null ||
           _effectiveUpdatedAt(
@@ -263,22 +359,11 @@ class GoogleDriveSyncService implements SyncService {
 
     final merged = _merge(localEvents, remoteById.values.toList());
     for (final event in merged) {
-      final local = localById[event.id];
-      final remote = remoteById[event.id];
-      final shouldUpload =
-          local != null &&
-          (remote == null ||
-              local.syncStatus != 'synced' ||
-              _effectiveUpdatedAt(local).isAfter(_effectiveUpdatedAt(remote)));
-
-      if (shouldUpload) {
-        await _uploadEventFile(authHeaders, event, remoteFileById[event.id]);
-      }
-      await _saveSyncedEvent(event);
+      await _saveRestoredEvent(event);
     }
   }
 
-  Future<void> _syncQueuedEvents(
+  Future<void> _backupQueuedEvents(
     Map<String, String> authHeaders,
     Set<String> eventIds,
   ) async {
@@ -288,27 +373,12 @@ class GoogleDriveSyncService implements SyncService {
         authHeaders,
         _eventFileName(eventId),
       );
-      final remote = remoteFile == null
-          ? null
-          : await _downloadEventFile(authHeaders, remoteFile.id);
-
       if (local == null) {
-        if (remote != null) {
-          await _saveSyncedEvent(remote);
-        }
         continue;
       }
 
-      final shouldUpload =
-          remote == null ||
-          local.syncStatus != 'synced' ||
-          _effectiveUpdatedAt(local).isAfter(_effectiveUpdatedAt(remote));
-      if (shouldUpload) {
-        await _uploadEventFile(authHeaders, local, remoteFile);
-        await _saveSyncedEvent(local);
-      } else {
-        await _saveSyncedEvent(remote);
-      }
+      await _uploadEventFile(authHeaders, local, remoteFile);
+      await _saveSyncedEvent(local);
     }
   }
 
@@ -318,6 +388,14 @@ class GoogleDriveSyncService implements SyncService {
     await _notificationService.cancelEventReminder(synced.id);
     if (synced.deletedAt == null) {
       await _notificationService.scheduleEventReminder(synced);
+    }
+  }
+
+  Future<void> _saveRestoredEvent(CalendarEvent event) async {
+    await _eventRepository.save(event);
+    await _notificationService.cancelEventReminder(event.id);
+    if (event.deletedAt == null) {
+      await _notificationService.scheduleEventReminder(event);
     }
   }
 
@@ -823,45 +901,6 @@ class GoogleDriveSyncService implements SyncService {
   int _intValue(Object? value, int fallback) {
     return value is int ? value : fallback;
   }
-
-  bool _shouldAdoptRemoteSettings(AppSettings local) {
-    final defaultCategoryIds = local.categories
-        .map((category) => category.id)
-        .toSet();
-    return local.defaultReminderMinutes == 60 &&
-        local.allDayReminderHour == 9 &&
-        local.allDayReminderMinute == 0 &&
-        local.morningBriefingHour == 8 &&
-        local.morningBriefingMinute == 0 &&
-        local.morningBriefingEnabled &&
-        !local.weekStartsOnMonday &&
-        local.showLunarDates &&
-        defaultCategoryIds.length == 2 &&
-        defaultCategoryIds.contains(EventCategory.basic.id) &&
-        defaultCategoryIds.contains(EventCategory.holiday.id) &&
-        _sameIntList(local.dDayReminderOffsets, const [-7, -3, -1, 0]) &&
-        local.calendarDensity == CalendarDensity.standard &&
-        local.defaultCalendarView == CalendarViewMode.week &&
-        local.hiddenCategoryIds.isEmpty &&
-        local.calendarShowHolidays &&
-        !local.calendarDdayOnly &&
-        !local.hideSensitiveEvents &&
-        !local.hideSensitiveNotifications;
-  }
-
-  bool _sameIntList(List<int> a, List<int> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    final sortedA = [...a]..sort();
-    final sortedB = [...b]..sort();
-    for (var index = 0; index < sortedA.length; index++) {
-      if (sortedA[index] != sortedB[index]) {
-        return false;
-      }
-    }
-    return true;
-  }
 }
 
 class GoogleDriveSyncException implements Exception {
@@ -900,6 +939,20 @@ class GoogleDriveSyncStatus {
       error: clearError ? null : error ?? this.error,
     );
   }
+}
+
+enum _SyncRequestKind { backupOnly, restoreOnly, backupThenRestore }
+
+class _PendingSyncRequest {
+  const _PendingSyncRequest({
+    required this.kind,
+    required this.promptIfNecessary,
+    this.eventIds,
+  });
+
+  final _SyncRequestKind kind;
+  final bool promptIfNecessary;
+  final Set<String>? eventIds;
 }
 
 class _DriveFile {

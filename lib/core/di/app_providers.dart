@@ -12,8 +12,6 @@ import '../../features/events/data/drift_event_repository.dart';
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
 import '../calendar/korean_holiday_service.dart';
-import '../backup/backup_service.dart';
-import '../backup/file_backup_service.dart';
 import '../firebase/firebase_app_service.dart';
 import '../firebase/firebase_auth_service.dart';
 import '../notifications/local_notification_service.dart';
@@ -96,10 +94,6 @@ final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
 
 final syncServiceProvider = Provider<SyncService>((ref) {
   return ref.watch(googleDriveSyncServiceProvider);
-});
-
-final backupServiceProvider = Provider<BackupService>((ref) {
-  return FileBackupService(ref.watch(databaseProvider));
 });
 
 final eventCommandServiceProvider = Provider<EventCommandService>((ref) {

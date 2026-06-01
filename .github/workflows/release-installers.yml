@@ -1,0 +1,191 @@
+name: Release Installers
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v2.0.1"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.0"
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build installable APK
+        run: flutter build apk --debug --no-pub
+
+      - name: Stage APK
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            version="${{ inputs.tag }}"
+            version="${version#v}"
+          fi
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-debug.apk "dist/daily-android-${version}.apk"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/daily-android-*.apk
+          if-no-files-found: error
+
+  apple:
+    name: macOS DMG and unsigned iOS IPA
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.0"
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build macOS app
+        run: flutter build macos --release --no-pub
+
+      - name: Build unsigned iOS app
+        run: flutter build ios --release --no-codesign --no-pub
+
+      - name: Stage Apple installers
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            version="${{ inputs.tag }}"
+            version="${version#v}"
+          fi
+          mkdir -p dist
+
+          app_path="build/macos/Build/Products/Release/Daily.app"
+          hdiutil create \
+            -volname "Daily ${version}" \
+            -srcfolder "$app_path" \
+            -ov \
+            -format UDZO \
+            "dist/daily-macos-${version}.dmg"
+
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          /usr/bin/zip -qry "dist/daily-ios-${version}-unsigned.ipa" Payload
+          rm -rf Payload
+
+      - name: Upload Apple artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple
+          path: |
+            dist/daily-macos-*.dmg
+            dist/daily-ios-*-unsigned.ipa
+          if-no-files-found: error
+
+  windows:
+    name: Windows ZIP
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.0"
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows app
+        run: flutter build windows --release --no-pub
+
+      - name: Stage Windows ZIP
+        shell: pwsh
+        run: |
+          $version = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ inputs.tag }}".TrimStart("v")
+          }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive `
+            -Path build/windows/x64/runner/Release/* `
+            -DestinationPath "dist/daily-windows-$version.zip" `
+            -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/daily-windows-*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - android
+      - apple
+      - windows
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Daily ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          body_path: docs/RELEASE_NOTES_2.0.1.md
+          files: |
+            dist/*
+          fail_on_unmatched_files: true
