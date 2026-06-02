@@ -370,9 +370,9 @@ class _WeekRow extends StatelessWidget {
   final bool compact;
   final ValueChanged<DateTime> onDateSelected;
 
-  static const _flagTop = 30.0;
-  static const _flagHeight = 20.0;
-  static const _flagGap = 3.0;
+  static const _flagTop = 27.0;
+  static const _flagHeight = 19.0;
+  static const _flagGap = 2.0;
 
   @override
   Widget build(BuildContext context) {
@@ -387,7 +387,7 @@ class _WeekRow extends StatelessWidget {
         final overflowInset = compact ? 2.0 : 6.0;
         final usableFlagHeight = math.max(
           0,
-          constraints.maxHeight - _flagTop - 18,
+          constraints.maxHeight - _flagTop - 14,
         );
         final visibleLanes = math.max(
           1,
@@ -590,7 +590,7 @@ class _DayCellBackground extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 1.5),
-        padding: const EdgeInsets.fromLTRB(6, 5, 6, 5),
+        padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
         decoration: BoxDecoration(
           color: fill,
           borderRadius: BorderRadius.circular(8),
@@ -602,13 +602,14 @@ class _DayCellBackground extends StatelessWidget {
                 )
               : rangeSelected
               ? Border.all(color: const Color(0xff93c5fd))
-              : null,
+              : Border.all(color: Colors.transparent),
         ),
         alignment: Alignment.topLeft,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             _DayNumber(
+              key: ValueKey('day-number-${day.year}-${day.month}-${day.day}'),
               day: day,
               inMonth: inMonth,
               today: today,
@@ -617,20 +618,26 @@ class _DayCellBackground extends StatelessWidget {
             if (lunar != null) ...[
               const SizedBox(width: 3),
               Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    lunar.shortLabel,
-                    maxLines: 1,
-                    softWrap: false,
-                    textScaler: TextScaler.noScaling,
-                    style: TextStyle(
-                      fontSize: 8.5,
-                      height: 1.0,
-                      color: inMonth
-                          ? const Color(0xff9aa3af)
-                          : const Color(0xffc7ccd4),
+                child: SizedBox(
+                  height: 21,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        lunar.shortLabel,
+                        maxLines: 1,
+                        softWrap: false,
+                        textScaler: TextScaler.noScaling,
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          height: 1.0,
+                          color: inMonth
+                              ? const Color(0xff9aa3af)
+                              : const Color(0xffc7ccd4),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -645,6 +652,7 @@ class _DayCellBackground extends StatelessWidget {
 
 class _DayNumber extends StatelessWidget {
   const _DayNumber({
+    super.key,
     required this.day,
     required this.inMonth,
     required this.today,
@@ -678,20 +686,24 @@ class _DayNumber extends StatelessWidget {
       ),
     );
 
-    if (!today) {
-      return SizedBox(height: 17, child: child);
-    }
+    final content = today
+        ? Container(
+            width: 21,
+            height: 21,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xff2563eb),
+            ),
+            child: child,
+          )
+        : SizedBox(
+            width: 21,
+            height: 21,
+            child: Align(alignment: Alignment.center, child: child),
+          );
 
-    return Container(
-      width: 21,
-      height: 21,
-      alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: Color(0xff2563eb),
-      ),
-      child: child,
-    );
+    return SizedBox(width: 21, height: 21, child: content);
   }
 }
 

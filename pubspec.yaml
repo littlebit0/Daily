@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.0.2
+version: 2.0.3
 
 environment:
   sdk: ^3.11.5
@@ -31,12 +31,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   flutter_riverpod: ^3.3.1
   drift: ^2.33.0
-  drift_flutter: ^0.3.0
+  sqlite3_flutter_libs: ^0.6.0+eol
   path: ^1.9.1
   path_provider: ^2.1.5
   intl: ^0.20.2
@@ -45,11 +42,7 @@ dependencies:
   flutter_local_notifications: ^21.0.0
   timezone: ^0.11.0
   shared_preferences: ^2.5.5
-  flutter_secure_storage: ^10.1.0
-  collection: ^1.19.1
-  firebase_core: ^4.8.0
-  firebase_auth: ^6.5.0
-  cloud_firestore: ^6.4.0
+  flutter_secure_storage: ^10.3.1
   google_sign_in: ^7.2.0
   http: ^1.6.0
   klc: ^0.1.0
@@ -74,11 +67,11 @@ msix_config:
   display_name: Daily
   publisher_display_name: littlebit0
   identity_name: littlebit0.Daily
-  msix_version: 2.0.2.0
+  msix_version: 2.0.3.0
   logo_path: ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png
   capabilities: internetClient
   output_path: dist
-  output_name: daily-windows-2.0.2
+  output_name: daily-windows-2.0.3
   architecture: x64
   install_certificate: false
 

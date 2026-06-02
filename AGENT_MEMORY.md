@@ -9,13 +9,15 @@ keystore passwords to this file.
 
 - Repository: `littlebit0/Daily`
 - Local path used for this work:
-  `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0`
+  `C:\Users\com\Documents\New project\.codex-tools\portfolio_repos\Daily`
 - Branch: `main`
 - Current visible app version in repo:
-  `2.0.2`
+  `2.0.3`
 - Current internal build number:
-  no `+` suffix in `pubspec.yaml`; Android 2.0.2 artifacts are built with
-  build number `6` via build command only.
+  no `+` suffix in `pubspec.yaml`; Android 2.0.3 artifacts are built with build
+  number `7` via build command only. Windows 2.0.3 builds must omit
+  `--build-number` so Windows file/product versions stay `2.0.3` without a `+`
+  suffix.
 - Latest release work commit before this handoff:
   `e6be3ba Release Daily 2.0.1 installers`
 - Release tag published:
@@ -577,6 +579,81 @@ removed only after confirming they are not user-created work.
     release, Windows/Android are rebuilt from this code. The user explicitly
     allowed reusing the existing 2.0.1 macOS DMG and unsigned iOS IPA because
     dedicated Mac/iPhone 2.0.2 artifacts do not exist yet.
+  - 2026-06-02 GitHub issue #2 Windows/Android UI fix: adjusted the shared
+    month grid cell layout so lunar labels and Gregorian day numbers share the
+    same fixed 21 px header row, including today's blue circle. All cells now
+    keep a 1 px border slot, using a transparent border when not selected, so
+    selected/today cells no longer shift their y-position. Event span flags now
+    start closer to the date header (`_flagTop` 27) with smaller lane height/gap
+    to reduce wasted vertical space. Added a widget test that checks today's
+    date label and a neighboring date label have the same y-position and that
+    the event flag begins close to the day header. Android and Windows debug
+    builds were rebuilt and launched after this change. Mac/iPhone agents
+    should port/verify the same month-cell alignment behavior if their platform
+    rendering diverges from the shared Flutter widget.
+  - 2026-06-02 Windows/Android dependency cleanup: removed inactive
+    Firebase/Firestore Dart code and dependencies from the active shared
+    Flutter project. `syncServiceProvider` already pointed at Google Drive v2,
+    and the Firebase Auth/Firestore providers and `FirestoreSyncService` were
+    only self-referenced legacy code. Removed the stale Android
+    `google-services.json` from project `424765276744` so Android does not carry
+    dead Firebase metadata that conflicts with the current iPhone-aligned
+    Google Drive AppData project `234127810480`.
+  - The same cleanup removed unused direct dependencies `cupertino_icons` and
+    `collection`, replaced the unused direct `drift_flutter` dependency with an
+    explicit `sqlite3_flutter_libs` dependency so the native SQLite bundle
+    remains intentional, and updated `flutter_secure_storage` to `10.3.1`.
+    Removing `drift_flutter` also removed the unused transitive
+    `sqlcipher_flutter_libs` package. Android Gradle Plugin was updated within
+    major version 8 to `8.13.2`, Kotlin was updated to `2.3.21`, and
+    `android/app/build.gradle.kts` was migrated from the deprecated
+    `kotlinOptions.jvmTarget` setter to the Kotlin `compilerOptions` DSL.
+  - Verification after dependency cleanup: `.\tool\flutter.ps1 analyze
+    --no-pub` passed, `.\tool\flutter.ps1 test --no-pub` passed with 31 tests,
+    Android debug APK built with `--build-name=2.0.2 --build-number=6`,
+    installed on emulator `emulator-5554`, launched with app PID `26002`, and
+    recent Android logs showed no `FATAL EXCEPTION` / `E AndroidRuntime`.
+    Windows debug build produced `build\windows\x64\runner\Debug\daily.exe`
+    and the smoke launch stayed running with PID `15872`.
+  - Mac/iPhone agents must mirror the dependency cleanup on their side before
+    the next Apple build: run Flutter dependency generation on macOS/iOS so
+    Firebase/Firestore plugin registration is removed from platform-generated
+    files, verify no stale Firebase native references remain, and then run the
+    normal iOS/macOS analyze/test/build checks. This Windows/Android pass did
+    not edit iOS/macOS platform implementation files.
+  - 2026-06-02 Windows/Android Google login follow-up: after clean reinstall,
+    the user reported Windows browser login could not finish and Android Drive
+    permission approval timed out. Root cause in the shared Dart auth service:
+    the previous 10-second optimization used the same timeout for user-driven
+    OAuth/permission approval UI and app-controlled token/network work. That
+    closed the Windows loopback server and Android authorization wait while the
+    user was still approving. The fix separates those budgets:
+    browser/account/Drive permission approval now waits up to 2 minutes, while
+    silent auth, token exchange, userinfo, Drive API requests, and logout
+    remain bounded at 10 seconds or less. Verification after the fix:
+    `.\tool\flutter.ps1 analyze --no-pub` passed, `.\tool\flutter.ps1 test
+    --no-pub` passed with 31 tests, Android and Windows debug builds passed,
+    Android was uninstalled/reinstalled/launched on emulator `emulator-5554`
+    with PID `27520` and no fatal AndroidRuntime logs, and Windows app data was
+    backed up/removed before relaunching the latest debug build with PID `5640`.
+    Mac/iPhone agents should mirror this distinction if any platform-specific
+    auth wrapper has its own timeout: user approval waits must not share the
+    short network/sync timeout.
+  - 2026-06-02 Windows/Android-only 2.0.3 update: bumped `pubspec.yaml` visible
+    version to `2.0.3` with no `+` suffix, updated Windows MSIX metadata to
+    `2.0.3.0`, added `docs/RELEASE_NOTES_2.0.3.md`, rebuilt Android with
+    versionName `2.0.3` and versionCode `7`, and rebuilt Windows with
+    `--build-name=2.0.3` only so Windows file/product versions are exactly
+    `2.0.3`. Prepared local artifacts
+    `dist/daily-android-2.0.3.apk` and `dist/daily-windows-2.0.3.zip`.
+    SHA-256: Android
+    `a9a73c94065658846cb351aa642c6afd7544d01ffba8bb8ff664ac73ba69de63`;
+    Windows
+    `e308bc9fb50b33834a2ea7af951bf17aefb179df0cd29330c90143a5b8771a6e`.
+    Final 2.0.3 smoke check installed/launched the Android APK on
+    `emulator-5554` with PID `28242` and no fatal AndroidRuntime logs, then
+    launched the Windows debug build with PID `10748`. This pass intentionally
+    did not produce new macOS/iOS artifacts.
 
 ## Security Notes
 

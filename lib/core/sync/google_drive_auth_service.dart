@@ -66,12 +66,12 @@ class GoogleDriveAuthService {
   static const _expiresAtKey = '${_storagePrefix}expires_at';
   static const _emailKey = '${_storagePrefix}email';
   static const _displayNameKey = '${_storagePrefix}display_name';
-  static const _mobileInteractiveAuthTimeout = Duration(seconds: 10);
+  static const _mobileUserApprovalTimeout = Duration(minutes: 2);
   static const _mobileSilentAuthorizationTimeout = Duration(seconds: 10);
   static const _mobileLightweightAuthTimeout = Duration(seconds: 3);
   static const _mobileAccountClearTimeout = Duration(seconds: 2);
   static const _mobileSignOutTimeout = Duration(seconds: 3);
-  static const _desktopInteractiveAuthTimeout = Duration(seconds: 10);
+  static const _desktopUserApprovalTimeout = Duration(minutes: 2);
   static const _desktopNetworkTimeout = Duration(seconds: 10);
 
   final FlutterSecureStorage _secureStorage;
@@ -277,7 +277,7 @@ class GoogleDriveAuthService {
 
       final user = await GoogleSignIn.instance
           .authenticate(scopeHint: scopes)
-          .timeout(_mobileInteractiveAuthTimeout);
+          .timeout(_mobileUserApprovalTimeout);
       _setCurrentUser(user);
       return _toDriveAccount(user);
     } on GoogleSignInException catch (error) {
@@ -348,7 +348,7 @@ class GoogleDriveAuthService {
     }
     try {
       final timeout = promptIfNecessary
-          ? _mobileInteractiveAuthTimeout
+          ? _mobileUserApprovalTimeout
           : _mobileSilentAuthorizationTimeout;
       return await user?.authorizationClient
           .authorizationHeaders(scopes, promptIfNecessary: promptIfNecessary)
@@ -509,7 +509,7 @@ class GoogleDriveAuthService {
     try {
       await _openSystemBrowser(authUri);
       final request = await server.first.timeout(
-        _desktopInteractiveAuthTimeout,
+        _desktopUserApprovalTimeout,
         onTimeout: () => throw TimeoutException('Google 로그인이 시간 초과되었습니다.'),
       );
       final params = request.uri.queryParameters;

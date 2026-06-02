@@ -12,8 +12,6 @@ import '../../features/events/data/drift_event_repository.dart';
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
 import '../calendar/korean_holiday_service.dart';
-import '../firebase/firebase_app_service.dart';
-import '../firebase/firebase_auth_service.dart';
 import '../notifications/local_notification_service.dart';
 import '../notifications/notification_service.dart';
 import '../settings/app_settings.dart';
@@ -63,18 +61,6 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
 
 final koreanHolidayServiceProvider = Provider<KoreanHolidayService>((ref) {
   return KoreanHolidayService();
-});
-
-final firebaseAppServiceProvider = Provider<FirebaseAppService>((ref) {
-  return FirebaseAppService();
-});
-
-final firebaseAuthServiceProvider = Provider<FirebaseAuthService>((ref) {
-  return FirebaseAuthService(ref.watch(firebaseAppServiceProvider));
-});
-
-final authStateProvider = StreamProvider((ref) {
-  return ref.watch(firebaseAuthServiceProvider).authStateChanges();
 });
 
 final googleDriveAuthServiceProvider = Provider<GoogleDriveAuthService>((ref) {
