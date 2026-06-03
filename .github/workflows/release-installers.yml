@@ -146,8 +146,21 @@ jobs:
             $version = "${{ inputs.tag }}".TrimStart("v")
           }
           New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $releaseDir = "build/windows/x64/runner/Release"
+          $packageDir = "dist/windows-package"
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $packageDir
+          New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+          foreach ($item in @("daily.exe", "flutter_windows.dll", "native_assets.json", "data")) {
+            $source = Join-Path $releaseDir $item
+            if (Test-Path $source) {
+              Copy-Item -Recurse -Force $source $packageDir
+            }
+          }
+          Get-ChildItem -Path $releaseDir -File -Filter "*.dll" |
+            Where-Object { $_.Name -ne "flutter_windows.dll" } |
+            Copy-Item -Destination $packageDir -Force
           Compress-Archive `
-            -Path build/windows/x64/runner/Release/* `
+            -Path "$packageDir/*" `
             -DestinationPath "dist/daily-windows-$version.zip" `
             -Force
 
@@ -185,7 +198,7 @@ jobs:
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: Daily ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          body_path: docs/RELEASE_NOTES_2.0.2.md
+          body_path: docs/RELEASE_NOTES_2.0.4.md
           files: |
             dist/*
           fail_on_unmatched_files: true

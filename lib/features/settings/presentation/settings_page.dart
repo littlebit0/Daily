@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/sync/google_drive_auth_service.dart';
 import '../../../core/sync/google_drive_sync_service.dart';
 import '../../events/domain/event_category.dart';
 
@@ -81,23 +82,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsSection(
             title: '알림',
             children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('알림 테스트'),
-                subtitle: Text(
-                  _notificationMessage.isEmpty
-                      ? '즉시 알림을 보내고 예약 상태를 확인합니다.'
-                      : _notificationMessage,
-                ),
-                trailing: FilledButton(
-                  onPressed: _notificationBusy ? null : _testNotification,
-                  child: _notificationBusy
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('보내기'),
-                ),
+              _NotificationTestTile(
+                message: _notificationMessage,
+                busy: _notificationBusy,
+                onPressed: _testNotification,
               ),
               if (_notificationMessage.contains('차단')) ...[
                 const SizedBox(height: 8),
@@ -576,9 +564,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _syncMessage = '';
     });
     try {
-      final account = await ref
-          .read(googleDriveAuthServiceProvider)
-          .signIn(forceAccountSelection: true);
+      final authService = ref.read(googleDriveAuthServiceProvider);
+      final account = await authService.signIn(forceAccountSelection: true);
+      final headers = await authService.authorizationHeaders(
+        promptIfNecessary: true,
+      );
+      if (headers == null) {
+        throw const GoogleDriveAuthException(
+          'Google Drive 권한 승인이 완료되지 않았습니다. 다시 로그인해 주세요.',
+        );
+      }
       final syncService = ref.read(googleDriveSyncServiceProvider);
       await syncService.startListeningOnly(flushPendingChanges: false);
       await syncService.syncPendingChangesNow(
@@ -966,6 +961,61 @@ class _DdayOffsetsTile extends StatelessWidget {
   }
 }
 
+class _NotificationTestTile extends StatelessWidget {
+  const _NotificationTestTile({
+    required this.message,
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final String message;
+  final bool busy;
+  final VoidCallback onPressed;
+
+  static const _defaultMessage = '즉시 알림을 보내고 예약 상태를 확인합니다.';
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = message.isEmpty ? _defaultMessage : message;
+    final button = FilledButton(
+      onPressed: busy ? null : onPressed,
+      child: busy
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Text('보내기'),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 520) {
+          return ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('알림 테스트'),
+            subtitle: Text(subtitle),
+            trailing: button,
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('알림 테스트', style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(height: 2),
+              Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerRight, child: button),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _CategoryTile extends StatelessWidget {
   const _CategoryTile({required this.category, required this.onDelete});
 
@@ -986,11 +1036,19 @@ class _CategoryTile extends StatelessWidget {
       ),
       title: Text(category.label),
       subtitle: Text(category.locked ? '삭제 불가' : '사용자 분류'),
-      trailing: IconButton(
-        tooltip: category.locked ? '삭제 불가' : '분류 삭제',
-        onPressed: onDelete,
-        icon: const Icon(Icons.delete_outline),
-      ),
+      trailing: category.locked
+          ? Tooltip(
+              message: '삭제 불가',
+              child: Icon(
+                Icons.lock_outline,
+                color: Theme.of(context).disabledColor,
+              ),
+            )
+          : IconButton(
+              tooltip: '분류 삭제',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+            ),
     );
   }
 }
@@ -1026,8 +1084,8 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           title: Text(connected ? email! : '로컬 모드 사용 중'),
           subtitle: Text(
             connected
-                ? '이 Google 계정으로 모든 기기의 일정을 자동 백업하고 복원합니다.'
-                : 'Google 계정 연결 없이 이 기기에 일정을 저장합니다. 로그인하면 Drive 백업과 동기화를 사용할 수 있습니다.',
+                ? '이 계정으로 모든 기기의 일정을 백업하고 복원합니다.'
+                : 'Google 계정 없이 이 기기에 저장합니다. 로그인하면 Drive 백업과 동기화를 사용할 수 있습니다.',
           ),
         ),
         Row(

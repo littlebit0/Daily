@@ -12,16 +12,16 @@ keystore passwords to this file.
   `C:\Users\com\Documents\New project\.codex-tools\portfolio_repos\Daily`
 - Branch: `main`
 - Current visible app version in repo:
-  `2.0.3`
+  `2.0.4`
 - Current internal build number:
-  no `+` suffix in `pubspec.yaml`; Android 2.0.3 artifacts are built with build
-  number `7` via build command only. Windows 2.0.3 builds must omit
-  `--build-number` so Windows file/product versions stay `2.0.3` without a `+`
+  no `+` suffix in `pubspec.yaml`; Android 2.0.4 artifacts are built with build
+  number `8` via build command only. Windows 2.0.4 builds must omit
+  `--build-number` so Windows file/product versions stay `2.0.4` without a `+`
   suffix.
 - Latest release work commit before this handoff:
   `e6be3ba Release Daily 2.0.1 installers`
 - Release tag published:
-  `v2.0.2` after the Windows/Android 2.0.2 follow-up release.
+  `v2.0.4` after the Windows/Android 2.0.4 follow-up release.
 - GitHub SSH authentication was configured and verified for user `littlebit0`.
 - GitHub CLI authentication was completed with `repo` scope in a temporary
   config directory.
@@ -36,6 +36,65 @@ keystore passwords to this file.
   from explicit Google actions. Verification passed: `flutter analyze --no-pub`,
   `flutter test --no-pub`, Android debug APK install/run on `Daily_API_35`,
   and Windows debug build/run.
+- Windows/Android verification on 2026-06-03 addressed the latest reported
+  issues except the two items the user explicitly excluded: the wide empty
+  month detail panel when no date events exist, and missing accessibility
+  labels on the bottom event input / Gemini API key input. Changes made:
+  Android/Windows shared month `PageView` now uses a faster page-settling
+  spring and implicit adjacent page preparation, so a horizontal monthly swipe
+  no longer remains half-settled for seconds; wide month detail loading now
+  keeps the details panel mounted instead of showing a large spinner during
+  range reload; settings notification test layout moves the send button below
+  text on compact widths; Google Drive local-mode copy was shortened to avoid
+  awkward Korean line breaks; locked categories now show a disabled lock icon
+  instead of an apparently tappable delete icon. Google login hardening:
+  mobile and desktop user approval waits remain separate from short
+  silent/network timeouts, explicit Drive authorization is verified immediately
+  after Settings > Google login, and prompt-driven header requests can recover
+  from an empty local session by re-entering sign-in before failing.
+  Windows release packaging now stages only runtime files before zipping, so
+  `.pdb`, `.lib`, and `.exp` artifacts are excluded from
+  `daily-windows-2.0.4.zip`.
+- 2026-06-03 verification results: `.\tool\flutter.ps1 analyze --no-pub`
+  passed, `.\tool\flutter.ps1 test --no-pub` passed with 31 tests, Android
+  debug APK was rebuilt with test-only build number `8`, and the smaller
+  x86_64 split APK (`app-x86_64-debug.apk`, about 79.9 MB) installed
+  successfully on `emulator-5554` after the universal debug APK hit emulator
+  storage limits. Android launched with PID `8966`; the monthly swipe was
+  visually settled on July by the 450 ms capture, and Settings showed the new
+  compact notification layout plus the disabled lock icon for the locked
+  holiday category. Windows release build succeeded with `daily.exe`
+  file/product version `2.0.4`; the refreshed local ZIP is about 14.4 MB and
+  contains no `.pdb/.lib/.exp` entries. The Windows app process launched from
+  `build\windows\x64\runner\Release\daily.exe`, window title `daily`, and was
+  responding. Computer Use screenshot capture was unavailable in this Codex
+  session (`Computer Use native pipe path is unavailable` on two attempts), so
+  Windows visual screenshot validation could not be completed here.
+- 2026-06-03 `2.0.4` release artifacts prepared locally:
+  `dist/release-2.0.4/daily-android-2.0.4.apk` (versionName `2.0.4`,
+  versionCode `8`, SHA-256
+  `18080e2fedebbc48a2e685e8d7a529930125b26e795c1af31fc8732b72385681`),
+  `dist/release-2.0.4/daily-windows-2.0.4.zip` (SHA-256
+  `5f465ed937a2afd9079ff7c62b78a68890bc11686073261031fcf4d042faec87`),
+  and `dist/release-2.0.4/SHA256SUMS.txt`.
+- Mac/iPhone workers: do not change the excluded UI items unless the user asks.
+  If macOS/iOS has platform-specific Google auth wrappers or release packaging
+  scripts outside this shared Flutter code, mirror the same distinction:
+  user-driven Google account/Drive permission approval must not share the short
+  token/network timeout, and package artifacts should exclude debug symbols and
+  intermediate libraries unless intentionally shipped.
+- 2026-06-03 release handoff for `2.0.4`: Android/Windows-specific chronic
+  symptoms such as Android emulator storage limits, Android debug/release
+  signature mismatch, Windows Computer Use pipe availability, and Windows ZIP
+  debug-symbol leakage should not be treated as macOS/iOS defects. Aside from
+  those platform-only phenomena, macOS/iOS agents should apply or verify the
+  same shared Flutter behavior where relevant: natural month swipe settling,
+  stable month detail loading, compact settings text layout, locked category
+  affordance, and robust Google Drive authorization validation. Mac/iPhone
+  agents also need to perform actual UX/UI demonstration testing on simulator
+  and device where available, then identify and fix any bugs, vulnerabilities,
+  optimization needs, delays, and UX/UI improvement items they find. This
+  Windows/Android agent did not modify macOS/iOS platform implementation files.
 
 ## Cross-Platform Sync Rule
 

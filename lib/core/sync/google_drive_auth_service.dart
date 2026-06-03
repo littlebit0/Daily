@@ -289,7 +289,7 @@ class GoogleDriveAuthService {
     } on TimeoutException {
       _setCurrentUser(null);
       throw const GoogleDriveAuthException(
-        'Google 로그인 또는 권한 승인 응답이 없어 중단했습니다. 로그인 창을 닫았다면 다시 로그인 버튼을 눌러 주세요.',
+        'Google 로그인 승인이 완료되지 않았습니다. 로그인 창을 닫았다면 다시 로그인 버튼을 눌러 주세요.',
       );
     }
   }
@@ -344,20 +344,31 @@ class GoogleDriveAuthService {
         _setCurrentUser(user);
       } on Object {
         _setCurrentUser(null);
+        if (promptIfNecessary) {
+          await signIn();
+          user = _currentUser;
+        }
       }
     }
     try {
       final timeout = promptIfNecessary
           ? _mobileUserApprovalTimeout
           : _mobileSilentAuthorizationTimeout;
-      return await user?.authorizationClient
+      final headers = await user?.authorizationClient
           .authorizationHeaders(scopes, promptIfNecessary: promptIfNecessary)
           .timeout(timeout);
+      if (headers == null && promptIfNecessary) {
+        _setCurrentUser(null);
+        throw const GoogleDriveAuthException(
+          'Google Drive 권한 승인이 완료되지 않았습니다. 다시 로그인해 주세요.',
+        );
+      }
+      return headers;
     } on PlatformException catch (error) {
       throw GoogleDriveAuthException(_platformAuthMessage(error));
     } on TimeoutException {
       throw const GoogleDriveAuthException(
-        'Google 인증 정보를 가져오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+        'Google Drive 권한 승인이 완료되지 않았습니다. 승인 창을 닫았다면 다시 로그인해 주세요.',
       );
     }
   }

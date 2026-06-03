@@ -90,23 +90,11 @@ class MonthCalendarPage extends ConsumerWidget {
                               left: BorderSide(color: Color(0xffedf0f5)),
                             ),
                           ),
-                          child: eventsAsync.when(
-                            data: (events) => EventDetailsPanel(
-                              date: selectedDate,
-                              events: _eventsForDay(
-                                _filterVisibleEvents(
-                                  events,
-                                  settings,
-                                  searchQuery,
-                                ),
-                                selectedDate,
-                              ),
-                            ),
-                            error: (error, stackTrace) =>
-                                Center(child: Text('$error')),
-                            loading: () => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
+                          child: _MonthDetailsPanel(
+                            eventsAsync: eventsAsync,
+                            settings: settings,
+                            searchQuery: searchQuery,
+                            selectedDate: selectedDate,
                           ),
                         ),
                       ],
@@ -162,6 +150,42 @@ class MonthCalendarPage extends ConsumerWidget {
       ref,
       DateTime(currentMonth.year, currentMonth.month + delta),
       selectedDate,
+    );
+  }
+}
+
+class _MonthDetailsPanel extends StatelessWidget {
+  const _MonthDetailsPanel({
+    required this.eventsAsync,
+    required this.settings,
+    required this.searchQuery,
+    required this.selectedDate,
+  });
+
+  final AsyncValue<List<CalendarEvent>> eventsAsync;
+  final AppSettings settings;
+  final String searchQuery;
+  final DateTime selectedDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return eventsAsync.when(
+      data: _buildPanel,
+      error: (error, stackTrace) => Center(child: Text('$error')),
+      loading: () => EventDetailsPanel(
+        date: selectedDate,
+        events: const <CalendarEvent>[],
+      ),
+    );
+  }
+
+  Widget _buildPanel(List<CalendarEvent> events) {
+    return EventDetailsPanel(
+      date: selectedDate,
+      events: _eventsForDay(
+        _filterVisibleEvents(events, settings, searchQuery),
+        selectedDate,
+      ),
     );
   }
 }
@@ -286,6 +310,8 @@ class _MonthPageViewState extends State<_MonthPageView> {
   Widget build(BuildContext context) {
     return PageView.builder(
       controller: _controller,
+      allowImplicitScrolling: true,
+      physics: const _ResponsiveMonthPagePhysics(),
       onPageChanged: (index) {
         if (_applyingExternalMonth || index == _currentPage) {
           return;
@@ -321,6 +347,22 @@ class _MonthPageViewState extends State<_MonthPageView> {
   int _monthDelta(DateTime from, DateTime to) {
     return (to.year - from.year) * 12 + to.month - from.month;
   }
+}
+
+class _ResponsiveMonthPagePhysics extends PageScrollPhysics {
+  const _ResponsiveMonthPagePhysics({super.parent});
+
+  @override
+  _ResponsiveMonthPagePhysics applyTo(ScrollPhysics? ancestor) {
+    return _ResponsiveMonthPagePhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  SpringDescription get spring => SpringDescription.withDampingRatio(
+    mass: 0.75,
+    stiffness: 520,
+    ratio: 1.05,
+  );
 }
 
 class _CalendarMonthPage extends ConsumerWidget {
