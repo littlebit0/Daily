@@ -121,6 +121,23 @@ class GoogleDriveAuthService {
     return _desktopOAuthConfigValue('client_secret');
   }
 
+  String get _configuredDesktopRedirectHost {
+    for (final uri in _desktopOAuthConfigUriListValue('redirect_uris')) {
+      final parsed = Uri.tryParse(uri);
+      if (parsed == null || parsed.scheme != 'http') {
+        continue;
+      }
+      final host = parsed.host.toLowerCase();
+      if (host == 'localhost' ||
+          host == '127.0.0.1' ||
+          host == '[::1]' ||
+          host == '::1') {
+        return host == '[::1]' ? '::1' : host;
+      }
+    }
+    return '127.0.0.1';
+  }
+
   String _desktopOAuthConfigValue(String key) {
     for (final file in _desktopOAuthConfigFiles()) {
       try {
@@ -151,22 +168,58 @@ class GoogleDriveAuthService {
       yield File(override);
     }
 
-    if (!Platform.isWindows) {
+    if (Platform.isMacOS) {
+      final home = Platform.environment['HOME']?.trim();
+      if (home != null && home.isNotEmpty) {
+        yield File(
+          '$home${Platform.pathSeparator}Library'
+          '${Platform.pathSeparator}Application Support'
+          '${Platform.pathSeparator}Daily'
+          '${Platform.pathSeparator}google_desktop_oauth.json',
+        );
+        yield File(
+          '$home${Platform.pathSeparator}Library'
+          '${Platform.pathSeparator}Application Support'
+          '${Platform.pathSeparator}com.littlebit0.daily'
+          '${Platform.pathSeparator}google_desktop_oauth.json',
+        );
+      }
       return;
     }
 
-    for (final root in <String?>[
-      Platform.environment['APPDATA'],
-      Platform.environment['LOCALAPPDATA'],
-    ]) {
-      final normalizedRoot = root?.trim();
-      if (normalizedRoot == null || normalizedRoot.isEmpty) {
+    if (Platform.isWindows) {
+      for (final root in <String?>[
+        Platform.environment['APPDATA'],
+        Platform.environment['LOCALAPPDATA'],
+      ]) {
+        final normalizedRoot = root?.trim();
+        if (normalizedRoot == null || normalizedRoot.isEmpty) {
+          continue;
+        }
+        yield File(
+          '$normalizedRoot${Platform.pathSeparator}Daily'
+          '${Platform.pathSeparator}google_desktop_oauth.json',
+        );
+      }
+    }
+  }
+
+  Iterable<String> _desktopOAuthConfigUriListValue(String key) sync* {
+    for (final file in _desktopOAuthConfigFiles()) {
+      try {
+        if (!file.existsSync()) {
+          continue;
+        }
+        final decoded = jsonDecode(file.readAsStringSync());
+        if (decoded is! Map<String, dynamic>) {
+          continue;
+        }
+        yield* _oauthJsonStringListValue(decoded, key);
+      } on FormatException {
+        continue;
+      } on FileSystemException {
         continue;
       }
-      yield File(
-        '$normalizedRoot${Platform.pathSeparator}Daily'
-        '${Platform.pathSeparator}google_desktop_oauth.json',
-      );
     }
   }
 
@@ -186,6 +239,34 @@ class GoogleDriveAuthService {
       }
     }
     return '';
+  }
+
+  Iterable<String> _oauthJsonStringListValue(
+    Map<String, dynamic> json,
+    String key,
+  ) sync* {
+    final direct = json[key];
+    if (direct is List) {
+      for (final item in direct) {
+        if (item is String && item.trim().isNotEmpty) {
+          yield item.trim();
+        }
+      }
+    }
+    for (final sectionName in const ['installed', 'web']) {
+      final section = json[sectionName];
+      if (section is! Map<String, dynamic>) {
+        continue;
+      }
+      final nested = section[key];
+      if (nested is List) {
+        for (final item in nested) {
+          if (item is String && item.trim().isNotEmpty) {
+            yield item.trim();
+          }
+        }
+      }
+    }
   }
 
   String get _configuredAppleClientId {
@@ -499,8 +580,18 @@ class GoogleDriveAuthService {
   }
 
   Future<_DesktopCodeResponse> _requestDesktopAuthorizationCode() async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final redirectUri = 'http://127.0.0.1:${server.port}/';
+    final redirectHost = _configuredDesktopRedirectHost;
+    final server = await HttpServer.bind(
+      redirectHost == '::1'
+          ? InternetAddress.loopbackIPv6
+          : redirectHost == 'localhost'
+          ? 'localhost'
+          : InternetAddress.loopbackIPv4,
+      0,
+    );
+    final redirectUri = redirectHost == '::1'
+        ? 'http://[::1]:${server.port}/'
+        : 'http://$redirectHost:${server.port}/';
     final verifier = _randomUrlSafeString(64);
     final challenge = _pkceChallenge(verifier);
     final state = _randomUrlSafeString(24);

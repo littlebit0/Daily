@@ -577,7 +577,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final syncService = ref.read(googleDriveSyncServiceProvider);
       await syncService.startListeningOnly(flushPendingChanges: false);
       await syncService.syncPendingChangesNow(
-        promptIfNecessary: true,
+        promptIfNecessary: false,
         restoreAfterBackup: true,
       );
       if (!mounted) {

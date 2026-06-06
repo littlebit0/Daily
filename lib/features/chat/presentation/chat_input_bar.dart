@@ -17,13 +17,25 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   var _submitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_handleInputChanged);
+  }
+
+  @override
   void dispose() {
+    _controller.removeListener(_handleInputChanged);
     _controller.dispose();
     super.dispose();
   }
 
+  void _handleInputChanged() {
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
+    final canSubmit = _controller.text.trim().isNotEmpty && !_submitting;
     return SafeArea(
       top: false,
       child: Container(
@@ -50,7 +62,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             const SizedBox(width: 8),
             IconButton.filled(
               tooltip: '등록',
-              onPressed: _submitting ? null : _submit,
+              onPressed: canSubmit ? _submit : null,
               icon: _submitting
                   ? const SizedBox.square(
                       dimension: 18,
