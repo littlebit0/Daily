@@ -592,7 +592,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       });
     } on Object catch (error) {
       if (mounted) {
-        setState(() => _syncMessage = '$error');
+        setState(() => _syncMessage = _googleAccountErrorMessage(error));
       }
     } finally {
       if (mounted) {
@@ -618,7 +618,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       }
     } on Object catch (error) {
       if (mounted) {
-        setState(() => _syncMessage = '$error');
+        setState(() => _syncMessage = _googleAccountErrorMessage(error));
       }
     } finally {
       if (mounted) {
@@ -691,7 +691,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       }
     } on Object catch (error) {
       if (mounted) {
-        setState(() => _syncMessage = '$error');
+        setState(() => _syncMessage = _googleAccountErrorMessage(error));
       }
     } finally {
       if (mounted) {
@@ -765,7 +765,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       }
     } on Object catch (error) {
       if (mounted) {
-        setState(() => _syncMessage = '$error');
+        setState(() => _syncMessage = _googleAccountErrorMessage(error));
       }
     } finally {
       if (mounted) {
@@ -788,6 +788,44 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     } on Object {
       // Pending local changes keep their pending state and are retried later.
     }
+  }
+
+  String _googleAccountErrorMessage(Object error) {
+    if (error is GoogleDriveAuthException) {
+      return error.message;
+    }
+    if (error is GoogleDriveSyncException) {
+      return error.message;
+    }
+
+    final text = error.toString().trim();
+    if (text.isEmpty) {
+      return '요청을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    }
+    final lower = text.toLowerCase();
+    if (lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('network') ||
+        lower.contains('timeoutexception')) {
+      return '네트워크 연결을 확인한 뒤 다시 시도해 주세요.';
+    }
+    if (lower.contains('invalid_grant') ||
+        lower.contains('invalid_token') ||
+        text.contains('HTTP 401')) {
+      return 'Google 로그인이 만료되었습니다. 다시 로그인해 주세요.';
+    }
+    if (lower.contains('permission') ||
+        lower.contains('insufficient') ||
+        text.contains('HTTP 403')) {
+      return 'Google Drive 권한이 부족합니다. 다시 로그인해 권한을 승인해 주세요.';
+    }
+    if (text.contains('HTTP 429')) {
+      return 'Google Drive 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+    }
+    if (RegExp(r'HTTP 5\d\d').hasMatch(text)) {
+      return 'Google Drive 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
+    }
+    return text;
   }
 }
 

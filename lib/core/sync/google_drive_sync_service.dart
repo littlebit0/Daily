@@ -315,10 +315,33 @@ class GoogleDriveSyncService implements SyncService {
       statusNotifier.value = statusNotifier.value.copyWith(
         syncing: false,
         message: '동기화 실패',
-        error: '$error',
+        error: _syncErrorMessage(error),
       );
       rethrow;
     }
+  }
+
+  String _syncErrorMessage(Object error) {
+    if (error is GoogleDriveAuthException) {
+      return error.message;
+    }
+    if (error is GoogleDriveSyncException) {
+      return error.message;
+    }
+    if (error is TimeoutException) {
+      return '네트워크 응답 시간이 초과되었습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.';
+    }
+    final text = error.toString().trim();
+    if (text.isEmpty) {
+      return '동기화를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    }
+    final lower = text.toLowerCase();
+    if (lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('network')) {
+      return '네트워크 연결을 확인한 뒤 다시 시도해 주세요.';
+    }
+    return text;
   }
 
   Future<void> _backup(
@@ -712,9 +735,34 @@ class GoogleDriveSyncService implements SyncService {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return;
     }
-    throw GoogleDriveSyncException(
-      'Google 계정 동기화 실패: HTTP ${response.statusCode} ${response.body}',
-    );
+    throw GoogleDriveSyncException(_driveRequestErrorMessage(response));
+  }
+
+  String _driveRequestErrorMessage(http.Response response) {
+    final body = response.body.toLowerCase();
+    if (response.statusCode == 401 ||
+        body.contains('invalid_grant') ||
+        body.contains('invalid_token')) {
+      return 'Google 로그인이 만료되었습니다. 다시 로그인해 주세요.';
+    }
+    if (response.statusCode == 403 ||
+        body.contains('insufficient') ||
+        body.contains('permission')) {
+      return 'Google Drive 권한이 부족합니다. 다시 로그인해 권한을 승인해 주세요.';
+    }
+    if (response.statusCode == 404) {
+      return 'Google Drive 백업 파일을 찾지 못했습니다. 다시 동기화해 주세요.';
+    }
+    if (response.statusCode == 409) {
+      return 'Google Drive 백업 상태가 바뀌었습니다. 다시 동기화해 주세요.';
+    }
+    if (response.statusCode == 429) {
+      return 'Google Drive 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+    }
+    if (response.statusCode >= 500) {
+      return 'Google Drive 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
+    }
+    return 'Google Drive 동기화를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.';
   }
 
   String _encodeEventFile(CalendarEvent event) {

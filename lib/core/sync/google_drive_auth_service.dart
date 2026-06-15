@@ -624,7 +624,9 @@ class GoogleDriveAuthService {
           request,
           'Google 로그인이 취소되었습니다. 이 창을 닫고 Daily로 돌아가세요.',
         );
-        throw GoogleDriveAuthException('Google 로그인 실패: $error');
+        throw GoogleDriveAuthException(
+          _desktopAuthorizationErrorMessage(error),
+        );
       }
       if (requestState != state || code == null || code.isEmpty) {
         await _writeBrowserResponse(
@@ -667,7 +669,9 @@ class GoogleDriveAuthService {
     final decoded = _decodeTokenResponse(response);
     final refreshToken = decoded['refresh_token'] as String?;
     if (refreshToken == null || refreshToken.isEmpty) {
-      throw const GoogleDriveAuthException('Google 갱신 토큰을 받지 못했습니다.');
+      throw const GoogleDriveAuthException(
+        'Google 로그인을 완료하지 못했습니다. 다시 로그인해 주세요.',
+      );
     }
     return _tokensFromJson(decoded, refreshToken: refreshToken);
   }
@@ -706,12 +710,13 @@ class GoogleDriveAuthService {
   }
 
   Map<String, Object?> _decodeTokenResponse(http.Response response) {
-    final decoded = jsonDecode(response.body) as Map<String, Object?>;
+    final decoded = _decodeJsonObject(response.body);
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return decoded;
     }
-    final error = decoded['error_description'] ?? decoded['error'];
-    throw GoogleDriveAuthException('Google 토큰 요청 실패: $error');
+    throw GoogleDriveAuthException(
+      _desktopTokenRequestMessage(response.statusCode, decoded),
+    );
   }
 
   _DesktopTokens _tokensFromJson(
@@ -720,7 +725,9 @@ class GoogleDriveAuthService {
   }) {
     final accessToken = json['access_token'] as String?;
     if (accessToken == null || accessToken.isEmpty) {
-      throw const GoogleDriveAuthException('Google 액세스 토큰을 받지 못했습니다.');
+      throw const GoogleDriveAuthException(
+        'Google 로그인을 완료하지 못했습니다. 다시 로그인해 주세요.',
+      );
     }
     final expiresIn = json['expires_in'] as int? ?? 3600;
     return _DesktopTokens(
@@ -741,7 +748,7 @@ class GoogleDriveAuthService {
         .timeout(_desktopNetworkTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw GoogleDriveAuthException(
-        'Google 계정 정보를 가져오지 못했습니다: HTTP ${response.statusCode}',
+        _desktopAccountRequestMessage(response.statusCode),
       );
     }
     final decoded = jsonDecode(response.body) as Map<String, Object?>;
@@ -753,6 +760,77 @@ class GoogleDriveAuthService {
       email: email,
       displayName: decoded['name'] as String?,
     );
+  }
+
+  Map<String, Object?> _decodeJsonObject(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        return Map<String, Object?>.from(decoded);
+      }
+    } on FormatException {
+      return const {};
+    }
+    return const {};
+  }
+
+  String _desktopAuthorizationErrorMessage(String error) {
+    final normalized = error.trim().toLowerCase();
+    if (normalized == 'access_denied') {
+      return 'Google 로그인이 취소되었습니다.';
+    }
+    if (normalized.contains('temporarily_unavailable') ||
+        normalized.contains('server_error')) {
+      return 'Google 로그인 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
+    }
+    return 'Google 로그인을 완료하지 못했습니다. 다시 시도해 주세요.';
+  }
+
+  String _desktopTokenRequestMessage(
+    int statusCode,
+    Map<String, Object?> decoded,
+  ) {
+    final error = '${decoded['error'] ?? ''}'.toLowerCase();
+    final description = '${decoded['error_description'] ?? ''}'.toLowerCase();
+    final detail = '$error $description';
+
+    if (detail.contains('invalid_client')) {
+      return 'Windows Google 로그인 클라이언트 설정이 올바르지 않습니다. OAuth 클라이언트 정보를 확인해 주세요.';
+    }
+    if (detail.contains('redirect_uri')) {
+      return 'Windows Google 로그인 리디렉션 설정이 올바르지 않습니다. OAuth 클라이언트 설정을 확인해 주세요.';
+    }
+    if (statusCode == 401 ||
+        detail.contains('invalid_grant') ||
+        detail.contains('invalid_token')) {
+      return 'Google 로그인이 만료되었습니다. 다시 로그인해 주세요.';
+    }
+    if (statusCode == 403 || detail.contains('access_denied')) {
+      return 'Google Drive 권한이 부족합니다. 다시 로그인해 권한을 승인해 주세요.';
+    }
+    if (statusCode == 429) {
+      return 'Google 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+    }
+    if (statusCode >= 500) {
+      return 'Google 로그인 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
+    }
+    return 'Google 로그인 정보를 확인하지 못했습니다. 다시 로그인해 주세요.';
+  }
+
+  String _desktopAccountRequestMessage(int statusCode) {
+    if (statusCode == 401) {
+      return 'Google 로그인이 만료되었습니다. 다시 로그인해 주세요.';
+    }
+    if (statusCode == 403) {
+      return 'Google 계정 정보를 확인할 권한이 없습니다. 다시 로그인해 주세요.';
+    }
+    if (statusCode == 429) {
+      return 'Google 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+    }
+    if (statusCode >= 500) {
+      return 'Google 계정 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
+    }
+    return 'Google 계정 정보를 확인하지 못했습니다. 다시 로그인해 주세요.';
   }
 
   Future<void> _restoreDesktopSession() async {
@@ -934,14 +1012,10 @@ class GoogleDriveAuthService {
         Platform.isMacOS && hasKeychainError
             ? '$_macosKeychainConfigurationMessage'
                   '${detailText.isEmpty ? '' : ' ($detailText)'}'
-            : '기기의 Google Play 서비스 또는 Google 계정 설정 문제로 로그인할 수 없습니다.'
-                  '${detailText.isEmpty ? '' : ' ($detailText)'}',
+            : '기기의 Google 로그인 설정 문제로 로그인할 수 없습니다. Google Play 서비스와 Google 계정 상태를 확인해 주세요.',
       GoogleSignInExceptionCode.uiUnavailable =>
-        'Google 로그인 화면을 열 수 없습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.'
-            '${detailText.isEmpty ? '' : ' ($detailText)'}',
-      _ =>
-        'Google 로그인 실패: ${error.code.name}'
-            '${detailText.isEmpty ? '' : ' ($detailText)'}',
+        'Google 로그인 화면을 열 수 없습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.',
+      _ => 'Google 로그인을 완료하지 못했습니다. 다시 시도해 주세요.',
     };
   }
 
@@ -980,8 +1054,7 @@ class GoogleDriveAuthService {
       return '$_appleClientConfigurationMessage'
           '${detail.isEmpty ? '' : ' ($detail)'}';
     }
-    return 'Google 로그인 처리 중 문제가 발생했습니다.'
-        '${detail.isEmpty ? '' : ' ($detail)'}';
+    return 'Google 로그인 처리 중 문제가 발생했습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.';
   }
 }
 
