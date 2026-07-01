@@ -13,7 +13,7 @@
 
 ### 짧은 설명
 
-일정, 알림, D-day와 Google 동기화를 지원하는 개인 캘린더
+일정, 알림, D-day와 선택적 Google Drive 동기화를 지원하는 개인 캘린더
 
 ### 자세한 설명
 
@@ -25,11 +25,12 @@ Daily는 개인 일정을 빠르게 기록하고 여러 기기에서 이어서 �
 - 반복 일정과 D-day
 - 음력과 대한민국 공휴일 표시
 - 민감 일정 숨김과 앱 잠금
-- Google Drive AppData 기반 기기 간 동기화
 - 로그인 없이 사용하는 로컬 모드
+- 선택적 Google Drive AppData 백업 및 기기 간 동기화
 
-Google 동기화는 사용자의 Google Drive AppData 영역에 Daily 전용 데이터만
-저장합니다. 일반 Google Drive 파일은 읽거나 변경하지 않습니다.
+Google Drive 연결은 선택 사항입니다. 연결하면 사용자의 Google Drive
+AppData 영역에 Daily 전용 데이터만 저장합니다. 일반 Google Drive 파일은
+읽거나 변경하지 않습니다.
 
 ## Play Console 필수 입력
 
@@ -45,24 +46,25 @@ Google 동기화는 사용자의 Google Drive AppData 영역에 Daily 전용 데
 
 ## 데이터 보안 작성 기준
 
-- 수집/처리 데이터: 일정, 설정, 선택한 Google 계정 인증 정보
+- 수집/처리 데이터: 일정, 설정, 선택한 Google Drive 연결 인증 정보
 - 사용 목적: 앱 기능, 백업, 기기 간 동기화
 - Google Drive 범위: `drive.appdata`
 - 일반 Drive 파일 접근: 없음
 - 앱 잠금 PIN: 기기 보안 저장소에만 저장, 동기화하지 않음
 - Gemini API 키: 보안 저장소에만 저장, 현재 AI 기능은 비활성 상태
-- 계정 및 데이터 삭제: 앱 설정의 회원탈퇴에서 로컬 데이터와 Drive AppData 백업 삭제
+- 데이터 삭제: 앱 설정의 로컬 데이터 초기화 또는 Drive 백업 삭제에서
+  로컬 데이터와 Drive AppData 백업 삭제
 
 ## 출시 전 실제 기기 확인
 
 1. 앱을 완전히 삭제하고 Play 서명 빌드를 설치한다.
 2. 로컬 모드가 정상적으로 시작되는지 확인한다.
-3. Google 로그인과 Drive 권한 승인을 완료한다.
+3. Google Drive 연결과 Drive 권한 승인을 완료한다.
 4. 기존 v2 일정과 설정이 복원되는지 확인한다.
 5. 일정 생성, 수정, 삭제가 다른 기기에 반영되는지 확인한다.
 6. 알림 권한과 예약 알림을 확인한다.
-7. 로그아웃과 회원탈퇴를 확인한다.
-8. 재설치 후 Google 계정 복원을 확인한다.
+7. Google Drive 연결 해제와 Drive 백업 삭제 흐름을 확인한다.
+8. 재설치 후 Google Drive 백업 복원을 확인한다.
 
 ## 제출 파일 검증
 

@@ -7,18 +7,21 @@
   the upload keystore.
 - Confirm Google OAuth Android client has the package name and upload/release
   SHA-1/SHA-256 fingerprints.
-- Confirm OAuth consent screen is published before external Google accounts are
-  expected to sign in.
+- Confirm OAuth consent screen is published before external users are expected
+  to connect Google Drive.
 - Test on a clean Android install:
   1. Welcome screen appears.
-  2. Google login restores the Drive v2 event/settings file set.
-  3. Notification permission prompt appears.
-  4. Create, edit, delete, and sync an event.
-  5. Reinstall and confirm restore.
-  6. Log out from Settings and confirm the welcome screen appears.
-  7. Add URL, weather, sensitive flag, D-day, and recurrence edits to a sample
+  2. Local mode starts without any account.
+  3. Optional Google Drive connection restores the Drive v2 event/settings file
+     set.
+  4. Notification permission prompt appears.
+  5. Create, edit, delete, and sync an event.
+  6. Reinstall and confirm Google Drive backup restore.
+  7. Disconnect Google Drive from Settings and confirm the user can choose
+     whether to keep using local data or return to the welcome screen.
+  8. Add URL, weather, sensitive flag, D-day, and recurrence edits to a sample
      event.
-  8. Run membership withdrawal and confirm local data is cleared and the Drive
+  9. Run Drive backup deletion and confirm local data is cleared and the Drive
      app-data backup is deleted.
 
 ## Windows
@@ -47,7 +50,8 @@
 - Run `flutter test`.
 - Build Android release.
 - Build Windows release.
-- Verify Google Drive sync with at least one fresh account.
+- Verify Google Drive connection and sync with at least one fresh Google
+  account.
 - Verify Korea public holidays around Seollal, Chuseok, Buddha's Birthday,
   Children's Day, Constitution Day, Labor Day from 2027, and substitute
   holidays.

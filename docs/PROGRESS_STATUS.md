@@ -26,7 +26,7 @@ Daily는 Flutter 기반 개인 캘린더 앱이며 2.0.0 기준으로 Google Dri
 - 로컬 알림 서비스
 - 기본 알림 1시간 전
 - 오전 8시 아침 브리핑 알림 구조
-- Google 계정 로그인 필수 흐름
+- 계정 없이 사용하는 로컬 모드와 선택적 Google Drive 연결 흐름
 - Google Drive AppData 동기화 서비스
 - 자동 동기화 상태 표시
 - 삭제 이벤트 tombstone 처리
@@ -49,9 +49,10 @@ Daily는 Flutter 기반 개인 캘린더 앱이며 2.0.0 기준으로 Google Dri
 - 동기화 파일: `daily-sync-v2-event-{eventId}.json`, `daily-sync-v2-settings.json`
 - 저장 위치: Google Drive `appDataFolder`
 - OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
-- Android Google 로그인 확인 완료
+- Android Google Drive 연결 확인 완료
 - Windows Desktop OAuth 흐름 구현
-- 설정 화면에서 로그인, 즉시 동기화, 로그아웃, 회원탈퇴 제공
+- 설정 화면에서 Google Drive 연결, 즉시 동기화, 연결 해제, Drive 백업
+  삭제 제공
 
 ## 검증 완료
 
@@ -72,7 +73,7 @@ Daily는 Flutter 기반 개인 캘린더 앱이며 2.0.0 기준으로 Google Dri
 - Android release APK 빌드 통과
 - Android release App Bundle 빌드 통과
 - Windows release 빌드 통과
-- Android 에뮬레이터 설치 및 로그인 UI 확인
+- Android 에뮬레이터 설치 및 Google Drive 연결 UI 확인
 - Windows 릴리즈 실행 확인
 
 배포 산출물:
@@ -123,8 +124,8 @@ Windows 환경에서는 최종 iOS/macOS 빌드를 검증할 수 없다.
 
 ## 다음 권장 순서
 
-1. 실제 Android 기기에서 Google 로그인과 Drive 동기화 왕복 검증
-2. Android Play Console에 1.1.0 AAB 업로드
+1. 실제 Android 기기에서 Google Drive 연결과 Drive 동기화 왕복 검증
+2. Android Play Console에 최신 AAB 업로드
 3. Play App signing SHA-1을 OAuth Android client에 추가
 4. 실제 기기 알림 권한과 예약 알림 검증
 5. Windows 설치 패키징 방식 고도화

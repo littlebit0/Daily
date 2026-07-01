@@ -1,8 +1,8 @@
 # Google Drive Sync Setup
 
 This setup must be done in stages. Do not skip the Google Cloud/OAuth stage;
-the app can build without it, but Google sign-in will not complete correctly
-until OAuth clients and scopes are configured.
+the app can build without it, but Google Drive connection will not complete
+correctly until OAuth clients and scopes are configured.
 
 ## Stage 1: Implemented in the app
 
@@ -18,7 +18,7 @@ until OAuth clients and scopes are configured.
   devices.
 - Settings now has a Google Drive sync section with connect, manual sync, and
   disconnect actions.
-- Automatic sync runs on app start, after Google Drive sign-in, when the app
+- Automatic sync runs on app start, after Google Drive connection, when the app
   returns to the foreground, before the app backgrounds/exits, and after local
   event/settings changes.
 - The app no longer polls Google Drive every few seconds while idle. Local
@@ -27,13 +27,13 @@ until OAuth clients and scopes are configured.
 - If another sync request arrives while a sync is already running, one more
   sync pass is guaranteed after the current pass finishes.
 - Event create/update/delete sync uploads only the changed event file. App
-  start, sign-in, resume, and manual sync list v2 event files and merge by
-  event ID.
+  start, Google Drive connection, resume, and manual sync list v2 event files
+  and merge by event ID.
 - All-day events are normalized to local date boundaries during sync and local
   database save/load. V2 event files include `startDate` and `endDate`
   date-only fields for all-day events, preventing iPhone/iOS UTC-midnight
   all-day events from appearing as two-day events on Android/Windows.
-- Google Sign-In can receive a web OAuth client ID through:
+- Android Google Drive connection can receive a web OAuth client ID through:
 
 ```powershell
 .\tool\flutter.ps1 run --dart-define=GOOGLE_SIGN_IN_SERVER_CLIENT_ID="<web-client-id>"
@@ -77,7 +77,7 @@ OAuth clients currently checked in or referenced by the app:
   `424765276744`
 - Android package name: `com.littlebit0.dailycalendar`
 - OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
-- Web OAuth client for Android sign-in:
+- Web OAuth client for Android Google Drive connection:
   `234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com`
 - Android debug OAuth client:
   `234127810480-mst5c3lojau02lbdov924j8o7vaohonl.apps.googleusercontent.com`
@@ -96,11 +96,12 @@ OAuth clients currently checked in or referenced by the app:
 
 Known configuration gaps:
 
-- iOS Google Sign-In now has a checked-in iOS OAuth client for
+- iOS Google Drive connection now has a checked-in iOS OAuth client for
   `com.littlebit0.daily`; keep `GIDServerClientID`/`SERVER_CLIENT_ID` absent
   unless a same-project iOS-specific server client is deliberately added.
-- macOS Google Sign-In has a checked-in OAuth client and URL scheme. Native
-  Google Sign-In also requires keychain sharing entitlement in signed builds;
+- macOS Google Drive connection has a checked-in OAuth client and URL scheme.
+  The native GoogleSignIn SDK path also requires keychain sharing entitlement in
+  signed builds;
   local debug builds without an Apple development certificate keep that
   entitlement disabled so the app can still run in local mode.
 - Android runtime now uses package `com.littlebit0.dailycalendar` and the
@@ -109,8 +110,8 @@ Known configuration gaps:
   `google-services.json` still references legacy project `424765276744`; do not
   use it as the source of truth for Google Drive AppData sync.
 - Windows must have the Desktop OAuth client secret available locally. Without
-  it Google rejects the token exchange and the app shows a Google token request
-  failure.
+  it Google rejects the token exchange and the app shows a Google Drive token
+  request failure.
 - iPhone/iOS and macOS must implement the same v2 file layout. Do not keep
   writing or reading the abandoned `daily-sync-v1.json` snapshot on those
   platforms.
@@ -123,7 +124,7 @@ Still required before public release:
    SHA-1 as the current Android release OAuth client. Add another Android OAuth
    client if Play Console App integrity reports a different app signing SHA-1.
 3. Publish the OAuth app to production when the app is ready for external users.
-4. Re-test Google Drive sign-in/sync from a fresh Google account.
+4. Re-test Google Drive connection/sync from a fresh Google account.
 
 Android debug signing certificate:
 
@@ -149,12 +150,12 @@ scope for an app's own configuration data:
 
 1. Android: first runtime target. The current app code is wired for this.
 2. Windows: the app now uses desktop OAuth instead of the unsupported native
-   Google Sign-In plugin path. A Desktop app OAuth client ID must be supplied
+   GoogleSignIn plugin path. A Desktop app OAuth client ID must be supplied
    through `GOOGLE_DESKTOP_CLIENT_ID` or `%APPDATA%\Daily\google_desktop_oauth.json`.
    The current 234 Desktop client also requires its generated client secret.
-3. macOS: local mode builds and runs. Native Google Sign-In is wired to the
-   macOS OAuth client and URL scheme, but keychain sharing requires Apple
-   development signing. If native Google Sign-In is not suitable for the
+3. macOS: local mode builds and runs. The native GoogleSignIn SDK path is wired
+   to the macOS OAuth client and URL scheme, but keychain sharing requires Apple
+   development signing. If native GoogleSignIn is not suitable for the
    signing environment, build with
    `GOOGLE_MACOS_AUTH_MODE=desktop` and `GOOGLE_DESKTOP_CLIENT_ID` to use the
    browser OAuth flow instead. Add `GOOGLE_DESKTOP_CLIENT_SECRET` only when the
@@ -169,7 +170,7 @@ scope for an app's own configuration data:
   production-grade private data storage.
 - Add conflict UX for simultaneous edits on multiple devices.
 - Add a sync status screen or last-sync timestamp.
-- Test sign-in and sync with a fresh Google account, two Android installs, and
-  then each desktop/mobile platform.
+- Test Google Drive connection and sync with a fresh Google account, two
+  Android installs, and then each desktop/mobile platform.
 - For public distribution, publish the OAuth consent screen to production and
   provide the required privacy policy/support links.

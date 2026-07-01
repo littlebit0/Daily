@@ -257,6 +257,105 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Perform actual UX/UI demonstration testing on simulator/device where
   available and fix bugs, vulnerabilities, optimization needs, delays, and
   UX/UI issues found.
+- 2026-07-02 App Review response work:
+  - Apple rejected iOS `2.0.5(10)` on 2026-06-25 for Guideline 5.1.2(i)
+    because App Privacy metadata indicated data used for tracking, and for
+    Guideline 4.8 because Google login appeared to be a primary account login
+    without an equivalent login option.
+  - Code was updated to clarify that Daily can be fully used without an
+    account and that Google is only an optional Google Drive AppData backup/
+    sync connection:
+    - Welcome copy now says all calendar features work without an account.
+    - Initial Google action now says `Google Drive 백업 복원`.
+    - Settings action now says `Google Drive 연결`; disconnect/delete wording
+      no longer presents this as Daily account login/withdrawal.
+  - `docs/STORE_SUBMISSION.md` now includes App Review reply drafts for both
+    5.1.2(i) and 4.8 plus the exact App Privacy label corrections.
+  - `docs/PRIVACY_POLICY.md` now says optional Google Drive connection rather
+    than optional Google sign-in.
+  - Verification after these changes passed:
+    `./tool/flutter.sh analyze --no-pub` and `./tool/flutter.sh test --no-pub`
+    with 31 tests.
+  - App Store Connect still must be updated manually:
+    - App Privacy: collected data can remain Email Address, User ID, and Other
+      User Content for app functionality, linked to identity when Drive sync is
+      enabled, but `Used for Tracking` must be `No`.
+    - Reply to App Review explaining Daily has no primary account requirement;
+      local mode is full-featured, and Google authorization is only optional
+      Google Drive AppData backup/sync.
+- 2026-07-02 iOS/macOS App Review UX smoke/debug continuation:
+  - Shared code still had user-facing error/status strings that said
+    `Google 로그인` or `다시 로그인` inside the auth/sync services. These could
+    appear after failed Drive authorization and undermine the App Review 4.8
+    explanation.
+  - Updated `GoogleDriveAuthService` and `GoogleDriveSyncService` messages to
+    describe the flow as `Google Drive 연결`, `권한 승인`, or `다시 연결`.
+  - Fixed a desktop OAuth error wording bug where macOS token request failures
+    could incorrectly say `Windows Google 로그인...`; desktop OAuth errors now
+    use a platform label (`macOS`, `Windows`, or `데스크톱`).
+  - Added a focused sync test to ensure missing Google auth headers show
+    `Google Drive 연결이 필요합니다.` and do not issue Drive requests.
+  - Verification passed after this continuation:
+    `./tool/flutter.sh analyze --no-pub`,
+    `./tool/flutter.sh test --no-pub`, and
+    `./tool/flutter.sh test --no-pub test/core/sync/google_drive_sync_service_test.dart`.
+    The full suite now has 32 tests.
+  - macOS debug app was rebuilt and launched through `./tool/run_macos.sh`.
+    It was signed with the local Apple Development identity and opened one
+    visible `Daily` window from `~/Applications/Daily.app`. Calendar month
+    view and Settings entry rendered correctly. No duplicate Daily process was
+    left by the launcher.
+  - iOS Simulator `iPhone 17 Pro Max` on iOS 26.5 was booted and ran the app.
+    The first-run screen showed the corrected copy:
+    account-free full calendar use and optional `Google Drive 백업 복원`.
+    Local start entered the calendar, the More menu showed Settings, and
+    Settings opened with normal notification/calendar controls.
+  - iOS notification permission appeared after local start. The agent asked for
+    explicit confirmation before pressing `허용` because it changes notification
+    permission state. The prompt was not accepted by the agent.
+  - Automated iOS GUI scrolling is limited in this environment: Computer Use
+    currently exposes click/state but no drag/scroll tool, and `simctl ui` has
+    no touch scroll command. Lower Settings sections were therefore confirmed
+    through shared Flutter code and widget tests rather than iOS GUI scrolling
+    in this pass.
+- 2026-07-02 Android/Windows parity and handoff:
+  - The user clarified that only Android/Windows-related remote changes should
+    be considered, not a full pull/merge. `git fetch origin` was run and
+    `git diff --name-status HEAD..origin/main -- android windows` showed no
+    remote Android/Windows platform file changes to import.
+  - Android and Windows platform files did not need code changes. The actual
+    parity fixes are in shared Flutter auth/sync code and Android/Windows
+    release docs:
+    - User-facing auth/sync failures now say `Google Drive 연결`, `권한 승인`,
+      or `다시 연결` instead of presenting the flow as a Daily account login.
+    - Windows Desktop OAuth token/configuration errors now use the correct
+      platform label and describe Google Drive connection failures.
+    - Android Play submission copy now states that local mode is fully usable
+      without an account and Google Drive AppData sync is optional.
+    - Android release checklist now tests local start, optional Google Drive
+      restore, connection disconnect choices, and Drive backup deletion instead
+      of old logout/member-withdrawal wording.
+    - Google Drive setup and progress docs now describe Android/Windows as the
+      same optional Drive AppData v2 sync model used by iPhone/macOS.
+  - Verified by search that the Android/Windows target docs and shared app code
+    no longer contain the old `Google 로그인`, `회원탈퇴`, `Google login`,
+    `Google Sign-In`, or `membership withdrawal` wording, except code symbols
+    such as `GoogleSignInAccount` in implementation files.
+  - Windows still needs a real Windows machine test after this commit:
+    - build with `.\tool\flutter.ps1 build windows --release --no-pub`
+    - launch the release app
+    - confirm local mode starts without an account
+    - confirm Google Drive connection opens the desktop OAuth browser flow
+    - confirm invalid/missing Desktop OAuth secret errors show Google Drive
+      connection wording, not Google login wording
+    - confirm connect, manual sync, disconnect choice, and Drive backup deletion
+      match Android/iPhone/macOS behavior.
+  - Android still needs real-device or emulator smoke after this commit:
+    - clean install the release/AAB-equivalent build
+    - confirm local mode starts without an account
+    - confirm optional Google Drive connection and v2 AppData restore
+    - confirm create/update/delete sync, notification permission, disconnect
+      choices, and Drive backup deletion.
 
 ## Recommended Next Steps
 

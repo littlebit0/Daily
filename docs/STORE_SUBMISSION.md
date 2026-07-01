@@ -1,6 +1,6 @@
 # Daily Apple App Store Submission Plan
 
-Current app version: `2.0.1+5`
+Current app version: `2.0.5`
 
 Scope for this pass: Apple App Store submission only. Google Play and
 Microsoft Store submission are intentionally deferred.
@@ -8,7 +8,7 @@ Microsoft Store submission are intentionally deferred.
 ## Store Metadata Draft
 
 - App name: `Daily`
-- Subtitle: `빠르게 기록하고 모든 기기에서 동기화하는 개인 캘린더`
+- Subtitle: `계정 없이 시작하고 필요할 때 동기화하는 개인 캘린더`
 - Primary category: Productivity
 - Secondary category: Lifestyle
 - Support URL: `https://github.com/littlebit0/Daily/issues`
@@ -20,7 +20,7 @@ Microsoft Store submission are intentionally deferred.
 
 ### Short Description
 
-일정 입력, 알림, D-day, Google 동기화를 지원하는 개인 캘린더입니다.
+일정 입력, 알림, D-day, 선택적 Google Drive 동기화를 지원하는 개인 캘린더입니다.
 
 ### Full Description
 
@@ -30,7 +30,7 @@ Daily는 일정을 빠르게 기록하고 여러 기기에서 이어서 사용�
 - 일정 알림과 아침 브리핑
 - D-day 표시와 알림
 - 민감 일정 숨김
-- Google Drive AppData 기반 계정 동기화
+- 선택적 Google Drive AppData 백업 및 동기화
 - 로컬 모드 사용
 - iPhone, iPad, Mac 지원
 
@@ -41,7 +41,7 @@ Daily의 Google 동기화는 사용자의 Google Drive AppData 영역에 앱 전
 
 ### Short Description
 
-A personal calendar with reminders, D-day tracking, and Google sync.
+A personal calendar with reminders, D-day tracking, and optional Google Drive sync.
 
 ### Full Description
 
@@ -52,7 +52,7 @@ available across Apple devices.
 - Event reminders and morning briefing
 - D-day tracking and notifications
 - Sensitive event hiding
-- Google Drive AppData account sync
+- Optional Google Drive AppData backup and sync
 - Local-only mode
 - iPhone, iPad, and Mac support
 
@@ -74,8 +74,8 @@ It does not read or edit your regular Drive files.
 
 - iOS bundle ID: `com.littlebit0.daily`
 - macOS bundle ID: `com.littlebit0.daily.macos`
-- Version: `2.0.1`
-- Build: `5`
+- Version: `2.0.5`
+- Build: `11`
 
 ## Local Submission Readiness
 
@@ -114,15 +114,69 @@ Current local signing state:
 
 ## Review Notes Draft
 
-Daily can be used in local-only mode without signing in. Google login is
-optional and is used only for syncing the user's own calendar data through the
-app-specific Google Drive AppData folder.
+Daily can be used in local-only mode without signing in or creating an account.
+Google authorization is optional and is used only when the user chooses Google
+Drive backup/sync for their own calendar data through the app-specific Google
+Drive AppData folder.
 
 Suggested reviewer note:
 
 ```text
-Google sign-in is optional. The app can be reviewed in local-only mode by
-choosing local use on the welcome screen. If Google sign-in is tested, Daily
-uses Google Drive AppData only for app-specific calendar sync and does not
-read or modify the user's regular Drive files.
+Daily does not require users to sign in or create a Daily account. The app can
+be fully reviewed in local-only mode by choosing "로컬로 시작" on the welcome
+screen.
+
+The Google option is not used to create or authenticate a Daily primary account.
+It is an optional Google Drive authorization used only when the user chooses
+Google Drive backup/sync. Daily uses the Google Drive AppData folder only for
+app-specific calendar sync and does not read, list, or modify the user's regular
+Google Drive files.
+```
+
+## App Review 2026-06-25 Response
+
+### Guideline 5.1.2(i)
+
+App Privacy should be updated in App Store Connect so the collected data is not
+marked as "Data Used to Track You." Daily does not use advertising, ad
+measurement, data brokers, IDFA, or cross-app/site tracking.
+
+Use the following privacy label structure:
+
+- Data collection: Yes.
+- Data types: Email Address, User ID, Other User Content.
+- Purpose: App Functionality only.
+- Linked to identity: Yes for the Google account email/user ID and synced
+  calendar content when Google Drive sync is enabled.
+- Used for tracking: No.
+
+Suggested reply:
+
+```text
+We have updated the App Privacy information. Daily does not track users across
+apps or websites, does not use IDFA, does not include advertising or advertising
+measurement, and does not share collected data with data brokers. The Google
+account email/user ID and calendar content are used only for app functionality:
+optional Google Drive AppData backup and sync selected by the user.
+```
+
+### Guideline 4.8
+
+The submitted UI used "Google login" wording, which could make the optional
+Google Drive authorization appear to be a primary account login. The app has
+been updated to clarify that Daily can be fully used without an account and
+that Google is only an optional Drive backup/sync connection.
+
+Suggested reply:
+
+```text
+Daily does not use Google to set up or authenticate a Daily primary account.
+Users can use all calendar features without signing in by selecting local mode
+on the welcome screen. The Google option is an optional Google Drive
+authorization for app-specific backup and sync in the user's Google Drive
+AppData folder.
+
+We updated the app UI to make this clearer: the welcome screen now states that
+all calendar features are available without an account, and the Google action
+is labeled as Google Drive backup/sync rather than primary account login.
 ```

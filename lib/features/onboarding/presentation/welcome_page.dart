@@ -43,8 +43,8 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Daily는 바로 로컬에서 사용할 수 있습니다. Google 계정을 연결하면 '
-                    '백업을 복원하고 이후 변경 사항을 자동으로 동기화합니다.',
+                    'Daily는 계정 없이 모든 캘린더 기능을 바로 사용할 수 있습니다. '
+                    'Google Drive 연결은 사용자가 선택한 백업과 기기 간 동기화에만 사용됩니다.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: const Color(0xff5f6875),
@@ -66,7 +66,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.login),
-                    label: const Text('Google로 로그인 및 복원'),
+                    label: const Text('Google Drive 백업 복원'),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
@@ -94,7 +94,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   Future<void> _connectAndRestore() async {
     setState(() {
       _busy = true;
-      _message = 'Google 로그인 창을 여는 중입니다.';
+      _message = 'Google Drive 연결 창을 여는 중입니다.';
     });
     try {
       final account = await ref
@@ -102,7 +102,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
           .signIn(forceAccountSelection: true);
       if (account == null) {
         if (mounted) {
-          setState(() => _message = 'Google 로그인이 취소되었습니다.');
+          setState(() => _message = 'Google Drive 연결이 취소되었습니다.');
         }
         return;
       }

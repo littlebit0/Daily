@@ -571,7 +571,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       );
       if (headers == null) {
         throw const GoogleDriveAuthException(
-          'Google Drive 권한 승인이 완료되지 않았습니다. 다시 로그인해 주세요.',
+          'Google Drive 권한 승인이 완료되지 않았습니다. 다시 연결해 주세요.',
         );
       }
       final syncService = ref.read(googleDriveSyncServiceProvider);
@@ -588,7 +588,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           .load();
       setState(() {
         _driveEmail = account?.email;
-        _syncMessage = 'Google 계정 로그인이 완료되었습니다.';
+        _syncMessage = 'Google Drive 연결이 완료되었습니다.';
       });
     } on Object catch (error) {
       if (mounted) {
@@ -614,7 +614,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ref.read(appSettingsProvider.notifier).state = ref
             .read(settingsRepositoryProvider)
             .load();
-        setState(() => _syncMessage = '계정 동기화 완료');
+        setState(() => _syncMessage = 'Google Drive 동기화 완료');
       }
     } on Object catch (error) {
       if (mounted) {
@@ -631,9 +631,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final choice = await showDialog<_GoogleLogoutChoice>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('로그아웃 방식 선택'),
+        title: const Text('Google Drive 연결 해제'),
         content: const Text(
-          'Google 계정 로그아웃 전에 먼저 선택하세요. 기존 일정을 남긴 채 바로 로컬로 전환하거나, 마지막으로 동기화한 뒤 로그아웃하고 시작 화면으로 돌아갈 수 있습니다.',
+          'Google Drive 연결을 해제하기 전에 먼저 선택하세요. 기존 일정을 남긴 채 바로 로컬로 전환하거나, 마지막으로 동기화한 뒤 연결을 해제하고 시작 화면으로 돌아갈 수 있습니다.',
         ),
         actions: [
           TextButton(
@@ -678,7 +678,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           }
           setState(() {
             _driveEmail = null;
-            _syncMessage = '마지막 동기화 후 로그아웃하고 시작 화면으로 돌아갑니다.';
+            _syncMessage = '마지막 동기화 후 연결을 해제하고 시작 화면으로 돌아갑니다.';
           });
           ref.read(appSettingsProvider.notifier).state = updated;
           Navigator.of(context).popUntil((route) => route.isFirst);
@@ -704,9 +704,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final authService = ref.read(googleDriveAuthServiceProvider);
     final hasGoogleAccount =
         _driveEmail != null || authService.currentAccount != null;
-    final title = hasGoogleAccount ? '회원탈퇴' : '로컬 데이터 초기화';
+    final title = hasGoogleAccount ? 'Drive 백업 삭제' : '로컬 데이터 초기화';
     final content = hasGoogleAccount
-        ? '계정 백업과 이 기기의 모든 일정, 설정을 삭제하고 로그인 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.'
+        ? 'Google Drive의 Daily 백업과 이 기기의 모든 일정, 설정을 삭제하고 시작 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.'
         : '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다. Google 계정 백업은 삭제하지 않습니다.';
 
     final confirmed = await showDialog<bool>(
@@ -722,7 +722,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(hasGoogleAccount ? '탈퇴' : '초기화'),
+            child: Text(hasGoogleAccount ? '삭제' : '초기화'),
           ),
         ],
       ),
@@ -758,7 +758,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         setState(() {
           _driveEmail = null;
           _syncMessage = hasGoogleAccount
-              ? '회원탈퇴가 완료되었습니다.'
+              ? 'Drive 백업 삭제가 완료되었습니다.'
               : '로컬 데이터 초기화가 완료되었습니다.';
         });
         Navigator.of(context).popUntil((route) => route.isFirst);
@@ -812,12 +812,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (lower.contains('invalid_grant') ||
         lower.contains('invalid_token') ||
         text.contains('HTTP 401')) {
-      return 'Google 로그인이 만료되었습니다. 다시 로그인해 주세요.';
+      return 'Google Drive 연결이 만료되었습니다. 다시 연결해 주세요.';
     }
     if (lower.contains('permission') ||
         lower.contains('insufficient') ||
         text.contains('HTTP 403')) {
-      return 'Google Drive 권한이 부족합니다. 다시 로그인해 권한을 승인해 주세요.';
+      return 'Google Drive 권한이 부족합니다. 다시 연결해 권한을 승인해 주세요.';
     }
     if (text.contains('HTTP 429')) {
       return 'Google Drive 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
@@ -1123,7 +1123,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           subtitle: Text(
             connected
                 ? '이 계정으로 모든 기기의 일정을 백업하고 복원합니다.'
-                : 'Google 계정 없이 이 기기에 저장합니다. 로그인하면 Drive 백업과 동기화를 사용할 수 있습니다.',
+                : '계정 없이 모든 캘린더 기능을 이 기기에 저장합니다. Google Drive를 연결하면 백업과 동기화를 사용할 수 있습니다.',
           ),
         ),
         Row(
@@ -1137,15 +1137,15 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Icon(connected ? Icons.sync : Icons.login),
-                label: Text(connected ? '지금 동기화' : 'Google로 로그인'),
+                    : Icon(connected ? Icons.sync : Icons.cloud_outlined),
+                label: Text(connected ? '지금 동기화' : 'Google Drive 연결'),
               ),
             ),
             if (connected) ...[
               const SizedBox(width: 8),
               OutlinedButton(
                 onPressed: busy ? null : onDisconnect,
-                child: const Text('로그아웃'),
+                child: const Text('연결 해제'),
               ),
             ],
           ],
@@ -1154,7 +1154,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: busy ? null : onDeleteAccount,
           icon: const Icon(Icons.person_remove_outlined),
-          label: Text(connected ? '회원탈퇴' : '로컬 데이터 초기화'),
+          label: Text(connected ? 'Drive 백업 삭제' : '로컬 데이터 초기화'),
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.red,
             side: const BorderSide(color: Colors.red),

@@ -441,9 +441,42 @@ void main() {
 
     expect(requests, isEmpty);
   });
+
+  test(
+    'sync asks for Google Drive connection when auth headers are missing',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final requests = <http.Request>[];
+      final httpClient = MockClient((request) async {
+        requests.add(request);
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        authService: _MissingHeaderGoogleDriveAuthService(),
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      await service.syncNow();
+
+      expect(service.statusNotifier.value.message, 'Google Drive 연결이 필요합니다.');
+      expect(requests, isEmpty);
+    },
+  );
 }
 
 GoogleDriveSyncService _service({
+  GoogleDriveAuthService? authService,
   required _MemoryEventRepository repository,
   required _FakeNotificationService notificationService,
   required SharedPreferences preferences,
@@ -452,7 +485,7 @@ GoogleDriveSyncService _service({
   Duration changeSyncDelay = Duration.zero,
 }) {
   return GoogleDriveSyncService(
-    authService: _FakeGoogleDriveAuthService(),
+    authService: authService ?? _FakeGoogleDriveAuthService(),
     eventRepository: repository,
     notificationService: notificationService,
     settingsRepository: SettingsRepository(preferences: preferences),
@@ -538,6 +571,15 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
     bool promptIfNecessary = false,
   }) async {
     return const {'Authorization': 'Bearer test-token'};
+  }
+}
+
+class _MissingHeaderGoogleDriveAuthService extends _FakeGoogleDriveAuthService {
+  @override
+  Future<Map<String, String>?> authorizationHeaders({
+    bool promptIfNecessary = false,
+  }) async {
+    return null;
   }
 }
 

@@ -334,15 +334,15 @@ class GoogleDriveAuthService {
       } on TimeoutException {
         _setDesktopAccount(null);
         throw const GoogleDriveAuthException(
-          'Google 로그인 응답 시간이 초과되었습니다. 브라우저 창을 닫고 다시 시도해 주세요.',
+          'Google Drive 연결 응답 시간이 초과되었습니다. 브라우저 창을 닫고 다시 시도해 주세요.',
         );
       }
     }
     if (!_isAvailable) {
-      throw UnsupportedError('현재 플랫폼에서는 Google 로그인을 지원하지 않습니다.');
+      throw UnsupportedError('현재 플랫폼에서는 Google Drive 연결을 지원하지 않습니다.');
     }
     if (!GoogleSignIn.instance.supportsAuthenticate()) {
-      throw UnsupportedError('현재 플랫폼에서는 Google 로그인을 지원하지 않습니다.');
+      throw UnsupportedError('현재 플랫폼에서는 Google Drive 연결을 지원하지 않습니다.');
     }
 
     try {
@@ -370,7 +370,7 @@ class GoogleDriveAuthService {
     } on TimeoutException {
       _setCurrentUser(null);
       throw const GoogleDriveAuthException(
-        'Google 로그인 승인이 완료되지 않았습니다. 로그인 창을 닫았다면 다시 로그인 버튼을 눌러 주세요.',
+        'Google Drive 연결 승인이 완료되지 않았습니다. 연결 창을 닫았다면 다시 연결 버튼을 눌러 주세요.',
       );
     }
   }
@@ -411,7 +411,7 @@ class GoogleDriveAuthService {
         );
       } on TimeoutException {
         throw const GoogleDriveAuthException(
-          'Google 인증 응답 시간이 초과되었습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+          'Google Drive 연결 응답 시간이 초과되었습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
         );
       }
     }
@@ -441,7 +441,7 @@ class GoogleDriveAuthService {
       if (headers == null && promptIfNecessary) {
         _setCurrentUser(null);
         throw const GoogleDriveAuthException(
-          'Google Drive 권한 승인이 완료되지 않았습니다. 다시 로그인해 주세요.',
+          'Google Drive 권한 승인이 완료되지 않았습니다. 다시 연결해 주세요.',
         );
       }
       return headers;
@@ -449,7 +449,7 @@ class GoogleDriveAuthService {
       throw GoogleDriveAuthException(_platformAuthMessage(error));
     } on TimeoutException {
       throw const GoogleDriveAuthException(
-        'Google Drive 권한 승인이 완료되지 않았습니다. 승인 창을 닫았다면 다시 로그인해 주세요.',
+        'Google Drive 권한 승인이 완료되지 않았습니다. 승인 창을 닫았다면 다시 연결해 주세요.',
       );
     }
   }
@@ -517,26 +517,26 @@ class GoogleDriveAuthService {
 
   String get _appleClientConfigurationMessage {
     if (Platform.isIOS) {
-      return 'iOS Google 로그인을 사용하려면 GIDClientID plist 설정 또는 '
+      return 'iOS Google Drive 연결을 사용하려면 GIDClientID plist 설정 또는 '
           'GOOGLE_IOS_CLIENT_ID 빌드 인자와 reversed client ID URL scheme이 필요합니다. '
           '지금은 로컬 모드로 사용할 수 있습니다.';
     }
     if (Platform.isMacOS) {
-      return 'macOS Google 로그인을 사용하려면 GIDClientID plist 설정 또는 '
+      return 'macOS Google Drive 연결을 사용하려면 GIDClientID plist 설정 또는 '
           'GOOGLE_MACOS_CLIENT_ID 빌드 인자와 reversed client ID URL scheme이 필요합니다. '
           '지금은 로컬 모드로 사용할 수 있습니다.';
     }
-    return 'Google 로그인 클라이언트 설정이 필요합니다.';
+    return 'Google Drive 연결 클라이언트 설정이 필요합니다.';
   }
 
   String get _macosKeychainConfigurationMessage =>
-      'macOS Google 로그인을 사용하려면 keychain sharing entitlement가 필요합니다. '
+      'macOS Google Drive 연결을 사용하려면 keychain sharing entitlement가 필요합니다. '
       '새 빌드에서도 같은 오류가 나면 Apple 개발 팀 서명 설정을 확인해 주세요.';
 
   Future<GoogleDriveAccount?> _signInWithDesktopOAuth() async {
     if (_configuredDesktopClientId.isEmpty) {
       throw UnsupportedError(
-        'Google 로그인 설정이 아직 완료되지 않았습니다. 앱 업데이트 후 다시 시도해 주세요.',
+        'Google Drive 연결 설정이 아직 완료되지 않았습니다. 앱 업데이트 후 다시 시도해 주세요.',
       );
     }
 
@@ -612,7 +612,7 @@ class GoogleDriveAuthService {
       await _openSystemBrowser(authUri);
       final request = await server.first.timeout(
         _desktopUserApprovalTimeout,
-        onTimeout: () => throw TimeoutException('Google 로그인이 시간 초과되었습니다.'),
+        onTimeout: () => throw TimeoutException('Google Drive 연결이 시간 초과되었습니다.'),
       );
       final params = request.uri.queryParameters;
       final requestState = params['state'];
@@ -622,7 +622,7 @@ class GoogleDriveAuthService {
       if (error != null) {
         await _writeBrowserResponse(
           request,
-          'Google 로그인이 취소되었습니다. 이 창을 닫고 Daily로 돌아가세요.',
+          'Google Drive 연결이 취소되었습니다. 이 창을 닫고 Daily로 돌아가세요.',
         );
         throw GoogleDriveAuthException(
           _desktopAuthorizationErrorMessage(error),
@@ -631,14 +631,14 @@ class GoogleDriveAuthService {
       if (requestState != state || code == null || code.isEmpty) {
         await _writeBrowserResponse(
           request,
-          'Google 로그인 응답을 확인할 수 없습니다. 이 창을 닫고 다시 시도하세요.',
+          'Google Drive 연결 응답을 확인할 수 없습니다. 이 창을 닫고 다시 시도하세요.',
         );
-        throw const GoogleDriveAuthException('Google 로그인 응답이 올바르지 않습니다.');
+        throw const GoogleDriveAuthException('Google Drive 연결 응답이 올바르지 않습니다.');
       }
 
       await _writeBrowserResponse(
         request,
-        'Google 로그인이 완료되었습니다. 이 창을 닫고 Daily로 돌아가세요.',
+        'Google Drive 연결이 완료되었습니다. 이 창을 닫고 Daily로 돌아가세요.',
       );
       return _DesktopCodeResponse(
         code: code,
@@ -670,7 +670,7 @@ class GoogleDriveAuthService {
     final refreshToken = decoded['refresh_token'] as String?;
     if (refreshToken == null || refreshToken.isEmpty) {
       throw const GoogleDriveAuthException(
-        'Google 로그인을 완료하지 못했습니다. 다시 로그인해 주세요.',
+        'Google Drive 연결을 완료하지 못했습니다. 다시 연결해 주세요.',
       );
     }
     return _tokensFromJson(decoded, refreshToken: refreshToken);
@@ -679,7 +679,7 @@ class GoogleDriveAuthService {
   Future<void> _refreshDesktopAccessToken() async {
     final refreshToken = _desktopTokens?.refreshToken;
     if (refreshToken == null || refreshToken.isEmpty) {
-      throw const GoogleDriveAuthException('저장된 Google 갱신 토큰이 없습니다.');
+      throw const GoogleDriveAuthException('저장된 Google Drive 갱신 토큰이 없습니다.');
     }
     final response = await _httpClient
         .post(
@@ -726,7 +726,7 @@ class GoogleDriveAuthService {
     final accessToken = json['access_token'] as String?;
     if (accessToken == null || accessToken.isEmpty) {
       throw const GoogleDriveAuthException(
-        'Google 로그인을 완료하지 못했습니다. 다시 로그인해 주세요.',
+        'Google Drive 연결을 완료하지 못했습니다. 다시 연결해 주세요.',
       );
     }
     final expiresIn = json['expires_in'] as int? ?? 3600;
@@ -777,13 +777,23 @@ class GoogleDriveAuthService {
   String _desktopAuthorizationErrorMessage(String error) {
     final normalized = error.trim().toLowerCase();
     if (normalized == 'access_denied') {
-      return 'Google 로그인이 취소되었습니다.';
+      return 'Google Drive 연결이 취소되었습니다.';
     }
     if (normalized.contains('temporarily_unavailable') ||
         normalized.contains('server_error')) {
-      return 'Google 로그인 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
+      return 'Google Drive 연결 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
     }
-    return 'Google 로그인을 완료하지 못했습니다. 다시 시도해 주세요.';
+    return 'Google Drive 연결을 완료하지 못했습니다. 다시 시도해 주세요.';
+  }
+
+  String get _desktopPlatformLabel {
+    if (Platform.isMacOS) {
+      return 'macOS';
+    }
+    if (Platform.isWindows) {
+      return 'Windows';
+    }
+    return '데스크톱';
   }
 
   String _desktopTokenRequestMessage(
@@ -795,34 +805,34 @@ class GoogleDriveAuthService {
     final detail = '$error $description';
 
     if (detail.contains('invalid_client')) {
-      return 'Windows Google 로그인 클라이언트 설정이 올바르지 않습니다. OAuth 클라이언트 정보를 확인해 주세요.';
+      return '$_desktopPlatformLabel Google Drive 연결 클라이언트 설정이 올바르지 않습니다. OAuth 클라이언트 정보를 확인해 주세요.';
     }
     if (detail.contains('redirect_uri')) {
-      return 'Windows Google 로그인 리디렉션 설정이 올바르지 않습니다. OAuth 클라이언트 설정을 확인해 주세요.';
+      return '$_desktopPlatformLabel Google Drive 연결 리디렉션 설정이 올바르지 않습니다. OAuth 클라이언트 설정을 확인해 주세요.';
     }
     if (statusCode == 401 ||
         detail.contains('invalid_grant') ||
         detail.contains('invalid_token')) {
-      return 'Google 로그인이 만료되었습니다. 다시 로그인해 주세요.';
+      return 'Google Drive 연결이 만료되었습니다. 다시 연결해 주세요.';
     }
     if (statusCode == 403 || detail.contains('access_denied')) {
-      return 'Google Drive 권한이 부족합니다. 다시 로그인해 권한을 승인해 주세요.';
+      return 'Google Drive 권한이 부족합니다. 다시 연결해 권한을 승인해 주세요.';
     }
     if (statusCode == 429) {
       return 'Google 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
     }
     if (statusCode >= 500) {
-      return 'Google 로그인 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
+      return 'Google Drive 연결 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
     }
-    return 'Google 로그인 정보를 확인하지 못했습니다. 다시 로그인해 주세요.';
+    return 'Google Drive 연결 정보를 확인하지 못했습니다. 다시 연결해 주세요.';
   }
 
   String _desktopAccountRequestMessage(int statusCode) {
     if (statusCode == 401) {
-      return 'Google 로그인이 만료되었습니다. 다시 로그인해 주세요.';
+      return 'Google Drive 연결이 만료되었습니다. 다시 연결해 주세요.';
     }
     if (statusCode == 403) {
-      return 'Google 계정 정보를 확인할 권한이 없습니다. 다시 로그인해 주세요.';
+      return 'Google 계정 정보를 확인할 권한이 없습니다. 다시 연결해 주세요.';
     }
     if (statusCode == 429) {
       return 'Google 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
@@ -830,7 +840,7 @@ class GoogleDriveAuthService {
     if (statusCode >= 500) {
       return 'Google 계정 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
     }
-    return 'Google 계정 정보를 확인하지 못했습니다. 다시 로그인해 주세요.';
+    return 'Google 계정 정보를 확인하지 못했습니다. 다시 연결해 주세요.';
   }
 
   Future<void> _restoreDesktopSession() async {
@@ -994,7 +1004,7 @@ class GoogleDriveAuthService {
       'UNREGISTERED_ON_API_CONSOLE',
     );
     final androidConfigurationMessage =
-        'Google 로그인 클라이언트 설정이 올바르지 않습니다. '
+        'Google Drive 연결 클라이언트 설정이 올바르지 않습니다. '
         'Android 패키지명과 앱 서명 SHA-1이 Google Cloud OAuth 클라이언트에 등록되어 있는지 확인해 주세요.'
         '${detailText.isEmpty ? '' : ' ($detailText)'}';
 
@@ -1003,7 +1013,7 @@ class GoogleDriveAuthService {
     }
 
     return switch (error.code) {
-      GoogleSignInExceptionCode.canceled => 'Google 로그인이 취소되었습니다.',
+      GoogleSignInExceptionCode.canceled => 'Google Drive 연결이 취소되었습니다.',
       GoogleSignInExceptionCode.clientConfigurationError =>
         Platform.isIOS || Platform.isMacOS
             ? _appleClientConfigurationMessage
@@ -1012,10 +1022,10 @@ class GoogleDriveAuthService {
         Platform.isMacOS && hasKeychainError
             ? '$_macosKeychainConfigurationMessage'
                   '${detailText.isEmpty ? '' : ' ($detailText)'}'
-            : '기기의 Google 로그인 설정 문제로 로그인할 수 없습니다. Google Play 서비스와 Google 계정 상태를 확인해 주세요.',
+            : '기기의 Google 연결 설정 문제로 연결할 수 없습니다. Google Play 서비스와 Google 계정 상태를 확인해 주세요.',
       GoogleSignInExceptionCode.uiUnavailable =>
-        'Google 로그인 화면을 열 수 없습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.',
-      _ => 'Google 로그인을 완료하지 못했습니다. 다시 시도해 주세요.',
+        'Google Drive 연결 화면을 열 수 없습니다. 앱을 다시 열고 연결 버튼을 다시 눌러 주세요.',
+      _ => 'Google Drive 연결을 완료하지 못했습니다. 다시 시도해 주세요.',
     };
   }
 
@@ -1037,7 +1047,7 @@ class GoogleDriveAuthService {
 
   String _platformAuthMessage(PlatformException error) {
     if (_isCredentialClearFailure(error)) {
-      return 'Google 계정 상태를 초기화하지 못했습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.';
+      return 'Google 계정 상태를 초기화하지 못했습니다. 앱을 다시 열고 연결 버튼을 다시 눌러 주세요.';
     }
     final detail = [
       if (error.code.trim().isNotEmpty) error.code,
@@ -1054,7 +1064,7 @@ class GoogleDriveAuthService {
       return '$_appleClientConfigurationMessage'
           '${detail.isEmpty ? '' : ' ($detail)'}';
     }
-    return 'Google 로그인 처리 중 문제가 발생했습니다. 앱을 다시 열고 로그인 버튼을 다시 눌러 주세요.';
+    return 'Google Drive 연결 처리 중 문제가 발생했습니다. 앱을 다시 열고 연결 버튼을 다시 눌러 주세요.';
   }
 }
 

@@ -283,7 +283,7 @@ class GoogleDriveSyncService implements SyncService {
       if (headers == null) {
         statusNotifier.value = statusNotifier.value.copyWith(
           syncing: false,
-          message: 'Google 로그인이 필요합니다.',
+          message: 'Google Drive 연결이 필요합니다.',
         );
         return;
       }
@@ -743,12 +743,12 @@ class GoogleDriveSyncService implements SyncService {
     if (response.statusCode == 401 ||
         body.contains('invalid_grant') ||
         body.contains('invalid_token')) {
-      return 'Google 로그인이 만료되었습니다. 다시 로그인해 주세요.';
+      return 'Google Drive 연결이 만료되었습니다. 다시 연결해 주세요.';
     }
     if (response.statusCode == 403 ||
         body.contains('insufficient') ||
         body.contains('permission')) {
-      return 'Google Drive 권한이 부족합니다. 다시 로그인해 권한을 승인해 주세요.';
+      return 'Google Drive 권한이 부족합니다. 다시 연결해 권한을 승인해 주세요.';
     }
     if (response.statusCode == 404) {
       return 'Google Drive 백업 파일을 찾지 못했습니다. 다시 동기화해 주세요.';

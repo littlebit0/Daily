@@ -204,117 +204,119 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Google logout can keep using local mode without syncing', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
-    FlutterSecureStorage.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    final settingsRepository = SettingsRepository(preferences: preferences);
-    final authService = _FakeGoogleDriveAuthService();
-    final notificationService = _FakeNotification();
-    final eventRepository = _FakeEventRepository();
-    final driveSyncService = _FakeGoogleDriveSyncService(
-      authService: authService,
-      eventRepository: eventRepository,
-      notificationService: notificationService,
-      settingsRepository: settingsRepository,
-    );
+  testWidgets(
+    'Google Drive disconnect can keep using local mode without syncing',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+      FlutterSecureStorage.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      final authService = _FakeGoogleDriveAuthService();
+      final notificationService = _FakeNotification();
+      final eventRepository = _FakeEventRepository();
+      final driveSyncService = _FakeGoogleDriveSyncService(
+        authService: authService,
+        eventRepository: eventRepository,
+        notificationService: notificationService,
+        settingsRepository: settingsRepository,
+      );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          settingsRepositoryProvider.overrideWithValue(settingsRepository),
-          notificationServiceProvider.overrideWithValue(notificationService),
-          eventRepositoryProvider.overrideWithValue(eventRepository),
-          googleDriveAuthServiceProvider.overrideWithValue(authService),
-          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
-          syncServiceProvider.overrideWithValue(_FakeSync()),
-        ],
-        child: const DailyApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(notificationService),
+            eventRepositoryProvider.overrideWithValue(eventRepository),
+            googleDriveAuthServiceProvider.overrideWithValue(authService),
+            googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('설정'));
-    await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, -2200));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('설정'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, -2200));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('로그아웃'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('연결 해제'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('로그아웃 방식 선택'), findsOneWidget);
-    expect(authService.signOutCalls, 0);
+      expect(find.text('Google Drive 연결 해제'), findsOneWidget);
+      expect(authService.signOutCalls, 0);
 
-    await tester.tap(find.text('로컬로 전환'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('로컬로 전환'));
+      await tester.pumpAndSettle();
 
-    expect(authService.signOutCalls, 1);
-    expect(driveSyncService.syncNowCalls, 0);
-    expect(settingsRepository.load().onboardingCompleted, isTrue);
-    expect(find.text('로컬 모드 사용 중'), findsOneWidget);
-    expect(find.textContaining('로컬 일정은 그대로 유지됩니다'), findsOneWidget);
+      expect(authService.signOutCalls, 1);
+      expect(driveSyncService.syncNowCalls, 0);
+      expect(settingsRepository.load().onboardingCompleted, isTrue);
+      expect(find.text('로컬 모드 사용 중'), findsOneWidget);
+      expect(find.textContaining('로컬 일정은 그대로 유지됩니다'), findsOneWidget);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
-  testWidgets('Google logout can sync once and return to the start screen', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
-    FlutterSecureStorage.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    final settingsRepository = SettingsRepository(preferences: preferences);
-    final authService = _FakeGoogleDriveAuthService();
-    final notificationService = _FakeNotification();
-    final eventRepository = _FakeEventRepository();
-    final driveSyncService = _FakeGoogleDriveSyncService(
-      authService: authService,
-      eventRepository: eventRepository,
-      notificationService: notificationService,
-      settingsRepository: settingsRepository,
-    );
+  testWidgets(
+    'Google Drive disconnect can sync once and return to the start screen',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+      FlutterSecureStorage.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      final authService = _FakeGoogleDriveAuthService();
+      final notificationService = _FakeNotification();
+      final eventRepository = _FakeEventRepository();
+      final driveSyncService = _FakeGoogleDriveSyncService(
+        authService: authService,
+        eventRepository: eventRepository,
+        notificationService: notificationService,
+        settingsRepository: settingsRepository,
+      );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          settingsRepositoryProvider.overrideWithValue(settingsRepository),
-          notificationServiceProvider.overrideWithValue(notificationService),
-          eventRepositoryProvider.overrideWithValue(eventRepository),
-          googleDriveAuthServiceProvider.overrideWithValue(authService),
-          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
-          syncServiceProvider.overrideWithValue(_FakeSync()),
-        ],
-        child: const DailyApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(notificationService),
+            eventRepositoryProvider.overrideWithValue(eventRepository),
+            googleDriveAuthServiceProvider.overrideWithValue(authService),
+            googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('설정'));
-    await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, -2200));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('설정'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, -2200));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('로그아웃'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('연결 해제'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('로그아웃 방식 선택'), findsOneWidget);
-    expect(authService.signOutCalls, 0);
-    expect(driveSyncService.syncNowCalls, 0);
+      expect(find.text('Google Drive 연결 해제'), findsOneWidget);
+      expect(authService.signOutCalls, 0);
+      expect(driveSyncService.syncNowCalls, 0);
 
-    await tester.tap(find.text('동기화 후 시작 화면'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('동기화 후 시작 화면'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
-    expect(authService.signOutCalls, 1);
-    expect(driveSyncService.syncNowCalls, 0);
-    expect(driveSyncService.syncPendingChangesNowCalls, 1);
-    expect(settingsRepository.load().onboardingCompleted, isFalse);
-    expect(find.text('Daily 시작하기'), findsOneWidget);
+      expect(authService.signOutCalls, 1);
+      expect(driveSyncService.syncNowCalls, 0);
+      expect(driveSyncService.syncPendingChangesNowCalls, 1);
+      expect(settingsRepository.load().onboardingCompleted, isFalse);
+      expect(find.text('Daily 시작하기'), findsOneWidget);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }
 
 class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
