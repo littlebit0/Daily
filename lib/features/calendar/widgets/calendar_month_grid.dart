@@ -42,6 +42,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
   DateTime? _rangeStart;
   DateTime? _rangeEnd;
   bool _mouseRangeActive = false;
+  bool _longPressRangeActive = false;
 
   @override
   Widget build(BuildContext context) {
@@ -50,8 +51,9 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
       6,
       (weekIndex) => days.skip(weekIndex * 7).take(7).toList(),
     );
-    final compact = MediaQuery.sizeOf(context).width < 720;
-    final maxFlags = _maxFlagsForDensity(widget.density, compact: compact);
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 720;
+    final maxFlags = _maxFlagsForDensity(widget.density, width: width);
     final holidayDays = _holidayDays(widget.events);
 
     return Padding(
@@ -81,11 +83,12 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                 child: LayoutBuilder(
                   builder: (context, constraints) => Listener(
                     onPointerDown: (event) {
-                      if (event.kind != PointerDeviceKind.mouse ||
-                          event.buttons != kPrimaryMouseButton) {
+                      if (!_isDesktopRangePointer(event.kind) ||
+                          !_hasPrimaryButton(event.buttons)) {
                         return;
                       }
                       _mouseRangeActive = true;
+                      _longPressRangeActive = false;
                       _startRangeSelection(
                         event.localPosition,
                         days,
@@ -94,11 +97,6 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                     },
                     onPointerMove: (event) {
                       if (!_mouseRangeActive) {
-                        return;
-                      }
-                      if ((event.buttons & kPrimaryMouseButton) == 0) {
-                        _mouseRangeActive = false;
-                        _finishRangeSelection();
                         return;
                       }
                       _updateRangeSelection(
@@ -115,23 +113,50 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                       _finishRangeSelection();
                     },
                     onPointerCancel: (_) {
+                      if (!_mouseRangeActive && !_longPressRangeActive) {
+                        return;
+                      }
                       _mouseRangeActive = false;
+                      _longPressRangeActive = false;
                       _clearRangeSelection();
                     },
                     child: GestureDetector(
                       behavior: HitTestBehavior.translucent,
-                      onLongPressStart: (details) => _startRangeSelection(
-                        details.localPosition,
-                        days,
-                        constraints,
-                      ),
-                      onLongPressMoveUpdate: (details) => _updateRangeSelection(
-                        details.localPosition,
-                        days,
-                        constraints,
-                      ),
-                      onLongPressEnd: (_) => _finishRangeSelection(),
-                      onLongPressCancel: _clearRangeSelection,
+                      onLongPressStart: (details) {
+                        if (_mouseRangeActive) {
+                          return;
+                        }
+                        _longPressRangeActive = true;
+                        _startRangeSelection(
+                          details.localPosition,
+                          days,
+                          constraints,
+                        );
+                      },
+                      onLongPressMoveUpdate: (details) {
+                        if (!_longPressRangeActive) {
+                          return;
+                        }
+                        _updateRangeSelection(
+                          details.localPosition,
+                          days,
+                          constraints,
+                        );
+                      },
+                      onLongPressEnd: (_) {
+                        if (!_longPressRangeActive) {
+                          return;
+                        }
+                        _longPressRangeActive = false;
+                        _finishRangeSelection();
+                      },
+                      onLongPressCancel: () {
+                        if (!_longPressRangeActive) {
+                          return;
+                        }
+                        _longPressRangeActive = false;
+                        _clearRangeSelection();
+                      },
                       child: Column(
                         children: [
                           for (final week in weeks)
@@ -287,11 +312,30 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
         a.day == b.day;
   }
 
-  int _maxFlagsForDensity(CalendarDensity density, {required bool compact}) {
+  bool _isDesktopRangePointer(PointerDeviceKind kind) {
+    return kind == PointerDeviceKind.mouse ||
+        kind == PointerDeviceKind.trackpad;
+  }
+
+  bool _hasPrimaryButton(int buttons) {
+    return (buttons & kPrimaryMouseButton) != 0;
+  }
+
+  int _maxFlagsForDensity(CalendarDensity density, {required double width}) {
+    final standardTarget = switch (width) {
+      <= 390 => 4,
+      <= 430 => 5,
+      <= 520 => 6,
+      <= 720 => 7,
+      <= 880 => 8,
+      <= 1120 => 9,
+      <= 1360 => 10,
+      _ => 12,
+    };
     return switch (density) {
-      CalendarDensity.relaxed => compact ? 2 : 5,
-      CalendarDensity.standard => compact ? 3 : 8,
-      CalendarDensity.dense => compact ? 5 : 12,
+      CalendarDensity.relaxed => math.max(3, standardTarget - 1),
+      CalendarDensity.standard => standardTarget,
+      CalendarDensity.dense => standardTarget + 1,
     };
   }
 }
@@ -370,10 +414,6 @@ class _WeekRow extends StatelessWidget {
   final bool compact;
   final ValueChanged<DateTime> onDateSelected;
 
-  static const _flagTop = 27.0;
-  static const _flagHeight = 19.0;
-  static const _flagGap = 2.0;
-
   @override
   Widget build(BuildContext context) {
     final weekStart = weekDays.first;
@@ -383,25 +423,71 @@ class _WeekRow extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cellWidth = constraints.maxWidth / 7;
+        var metrics = _MonthFlagMetrics.forLayout(
+          compact: compact,
+          rowHeight: constraints.maxHeight,
+          maxFlags: maxFlags,
+          reserveOverflow: false,
+        );
         final flagInset = compact ? 1.0 : 5.0;
         final overflowInset = compact ? 2.0 : 6.0;
-        final usableFlagHeight = math.max(
-          0,
-          constraints.maxHeight - _flagTop - 14,
-        );
-        final visibleLanes = math.max(
-          1,
-          math.min(maxFlags, usableFlagHeight ~/ (_flagHeight + _flagGap)),
-        );
+        var visibleLanes = metrics.visibleLanes;
+        var overflowCounts = _overflowCounts(segments, visibleLanes);
+        final hasOverflow = overflowCounts.any((count) => count > 0);
+        if (hasOverflow) {
+          metrics = _MonthFlagMetrics.forLayout(
+            compact: compact,
+            rowHeight: constraints.maxHeight,
+            maxFlags: maxFlags,
+            reserveOverflow: true,
+          );
+          visibleLanes = metrics.visibleLanes;
+          overflowCounts = _overflowCounts(segments, visibleLanes);
+        }
         final visibleSegments = segments
             .where((segment) => segment.lane < visibleLanes)
             .toList();
-        final overflowCounts = _overflowCounts(segments, visibleLanes);
+        final overflowTop = math.min(
+          metrics.top +
+              visibleLanes * (metrics.height + metrics.gap) +
+              metrics.overflowGap,
+          math.max(0.0, constraints.maxHeight - metrics.overflowHeight - 2),
+        );
+        final rangeSegment = _rangeHighlightSegment(weekStart);
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Stack(
             children: [
+              if (rangeSegment != null)
+                Positioned(
+                  left: rangeSegment.startCol * cellWidth + 1.5,
+                  top: 2,
+                  width:
+                      (rangeSegment.endCol - rangeSegment.startCol + 1) *
+                          cellWidth -
+                      3,
+                  bottom: 2,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      key: ValueKey(
+                        'selected-range-${weekStart.year}-${weekStart.month}-${weekStart.day}',
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xffdbeafe),
+                        borderRadius: BorderRadius.horizontal(
+                          left: rangeSegment.roundLeading
+                              ? const Radius.circular(8)
+                              : Radius.zero,
+                          right: rangeSegment.roundTrailing
+                              ? const Radius.circular(8)
+                              : Radius.zero,
+                        ),
+                        border: Border.all(color: const Color(0xff93c5fd)),
+                      ),
+                    ),
+                  ),
+                ),
               Row(
                 children: [
                   for (final day in weekDays)
@@ -410,7 +496,7 @@ class _WeekRow extends StatelessWidget {
                         day: day,
                         inMonth: day.month == month.month,
                         selected: _sameDay(day, selectedDate),
-                        rangeSelected: _inSelectedRange(day),
+                        rangeHighlighted: _inSelectedRange(day),
                         today: _sameDay(day, DateTime.now()),
                         holiday: holidayDays.contains(_dayStart(day)),
                         showLunarDate: showLunarDates,
@@ -425,12 +511,14 @@ class _WeekRow extends StatelessWidget {
                     for (final segment in visibleSegments)
                       Positioned(
                         left: segment.startCol * cellWidth + flagInset,
-                        top: _flagTop + segment.lane * (_flagHeight + _flagGap),
+                        top:
+                            metrics.top +
+                            segment.lane * (metrics.height + metrics.gap),
                         width:
                             (segment.endCol - segment.startCol + 1) *
                                 cellWidth -
                             flagInset * 2,
-                        height: _flagHeight,
+                        height: metrics.height,
                         child: _EventSpanFlag(
                           key: ValueKey(
                             'event-span-${segment.event.id}-${weekStart.year}-${weekStart.month}-${weekStart.day}',
@@ -442,19 +530,41 @@ class _WeekRow extends StatelessWidget {
                           showTime: showEventTimes,
                           hideSensitive: hideSensitiveEvents,
                           compact: compact,
+                          dense: metrics.denseText,
                         ),
                       ),
                     for (var index = 0; index < overflowCounts.length; index++)
                       if (overflowCounts[index] > 0)
                         Positioned(
                           left: index * cellWidth + overflowInset,
-                          bottom: 4,
+                          top: overflowTop,
                           width: cellWidth - overflowInset * 2,
-                          child: Text(
-                            '+${overflowCounts[index]}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall,
+                          height: metrics.overflowHeight,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.84),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: compact ? 2 : 4,
+                                ),
+                                child: Text(
+                                  '+${overflowCounts[index]}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textScaler: TextScaler.noScaling,
+                                  style: TextStyle(
+                                    fontSize: compact ? 9 : 10,
+                                    height: 1.0,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xff64748b),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                   ],
@@ -464,6 +574,35 @@ class _WeekRow extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  _RangeHighlightSegment? _rangeHighlightSegment(DateTime weekStart) {
+    final start = selectedRangeStart;
+    final end = selectedRangeEnd;
+    if (start == null || end == null) {
+      return null;
+    }
+
+    final normalizedStart = _dayStart(start.isAfter(end) ? end : start);
+    final normalizedEnd = _dayStart(start.isAfter(end) ? start : end);
+    final weekLast = weekStart.add(const Duration(days: 6));
+    if (normalizedEnd.isBefore(weekStart) ||
+        normalizedStart.isAfter(weekLast)) {
+      return null;
+    }
+
+    final segmentStart = normalizedStart.isAfter(weekStart)
+        ? normalizedStart
+        : weekStart;
+    final segmentEnd = normalizedEnd.isBefore(weekLast)
+        ? normalizedEnd
+        : weekLast;
+    return _RangeHighlightSegment(
+      startCol: segmentStart.difference(weekStart).inDays,
+      endCol: segmentEnd.difference(weekStart).inDays,
+      roundLeading: _sameDay(segmentStart, normalizedStart),
+      roundTrailing: _sameDay(segmentEnd, normalizedEnd),
     );
   }
 
@@ -556,7 +695,7 @@ class _DayCellBackground extends StatelessWidget {
     required this.day,
     required this.inMonth,
     required this.selected,
-    required this.rangeSelected,
+    required this.rangeHighlighted,
     required this.today,
     required this.holiday,
     required this.showLunarDate,
@@ -566,7 +705,7 @@ class _DayCellBackground extends StatelessWidget {
   final DateTime day;
   final bool inMonth;
   final bool selected;
-  final bool rangeSelected;
+  final bool rangeHighlighted;
   final bool today;
   final bool holiday;
   final bool showLunarDate;
@@ -576,10 +715,10 @@ class _DayCellBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = selected
+    final fill = rangeHighlighted
+        ? Colors.transparent
+        : selected
         ? const Color(0xffedf4ff)
-        : rangeSelected
-        ? const Color(0xffe8f2ff)
         : holiday && inMonth
         ? const Color(0xfffff4f4)
         : Colors.transparent;
@@ -589,19 +728,18 @@ class _DayCellBackground extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
+        key: ValueKey('day-cell-${day.year}-${day.month}-${day.day}'),
         margin: const EdgeInsets.symmetric(horizontal: 1.5),
         padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
         decoration: BoxDecoration(
           color: fill,
           borderRadius: BorderRadius.circular(8),
-          border: selected
+          border: selected && !rangeHighlighted
               ? Border.all(
                   color: Theme.of(
                     context,
                   ).colorScheme.primary.withValues(alpha: 0.30),
                 )
-              : rangeSelected
-              ? Border.all(color: const Color(0xff93c5fd))
               : Border.all(color: Colors.transparent),
         ),
         alignment: Alignment.topLeft,
@@ -715,6 +853,7 @@ class _EventSpanFlag extends StatelessWidget {
     required this.showTime,
     required this.hideSensitive,
     required this.compact,
+    required this.dense,
   });
 
   final CalendarEvent event;
@@ -722,6 +861,7 @@ class _EventSpanFlag extends StatelessWidget {
   final bool showTime;
   final bool hideSensitive;
   final bool compact;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -745,7 +885,13 @@ class _EventSpanFlag extends StatelessWidget {
         borderRadius: BorderRadius.circular(5),
       ),
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: compact ? 3 : 7),
+        padding: EdgeInsets.symmetric(
+          horizontal: dense
+              ? 2
+              : compact
+              ? 3
+              : 7,
+        ),
         child: Align(
           alignment: Alignment.centerLeft,
           child: Text(
@@ -753,7 +899,12 @@ class _EventSpanFlag extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: compact ? 10.5 : 11,
+              fontSize: dense
+                  ? 9.2
+                  : compact
+                  ? 10.5
+                  : 11,
+              height: dense ? 1.0 : null,
               fontWeight: FontWeight.w700,
               color: color,
             ),
@@ -777,6 +928,106 @@ class _EventSpanFlag extends StatelessWidget {
     }
     return diff > 0 ? 'D-$diff' : 'D+${diff.abs()}';
   }
+}
+
+class _MonthFlagMetrics {
+  const _MonthFlagMetrics({
+    required this.top,
+    required this.height,
+    required this.gap,
+    required this.visibleLanes,
+    required this.denseText,
+    required this.overflowHeight,
+    required this.overflowGap,
+  });
+
+  final double top;
+  final double height;
+  final double gap;
+  final int visibleLanes;
+  final bool denseText;
+  final double overflowHeight;
+  final double overflowGap;
+
+  static _MonthFlagMetrics forLayout({
+    required bool compact,
+    required double rowHeight,
+    required int maxFlags,
+    required bool reserveOverflow,
+  }) {
+    final top = compact ? 22.0 : 27.0;
+    final bottomReserve = compact ? 3.0 : 10.0;
+    final overflowHeight = compact ? 10.0 : 12.0;
+    final overflowGap = compact ? 1.0 : 2.0;
+    final regularHeight = compact ? 13.0 : 19.0;
+    final regularGap = compact ? 1.0 : 2.0;
+    final tightHeight = compact ? 10.5 : 17.0;
+    final tightGap = compact ? 1.0 : 2.0;
+    final overflowReserve = reserveOverflow ? overflowHeight + overflowGap : 0;
+    final usableHeight = math.max(
+      0.0,
+      rowHeight - top - bottomReserve - overflowReserve,
+    );
+
+    var height = regularHeight;
+    var gap = regularGap;
+    var visibleLanes = _lanesThatFit(
+      usableHeight: usableHeight,
+      height: height,
+      gap: gap,
+      maxFlags: maxFlags,
+    );
+    var denseText = false;
+
+    if (compact && visibleLanes < maxFlags) {
+      height = tightHeight;
+      gap = tightGap;
+      visibleLanes = _lanesThatFit(
+        usableHeight: usableHeight,
+        height: height,
+        gap: gap,
+        maxFlags: maxFlags,
+      );
+      denseText = true;
+    }
+
+    return _MonthFlagMetrics(
+      top: top,
+      height: height,
+      gap: gap,
+      visibleLanes: math.max(1, visibleLanes),
+      denseText: denseText,
+      overflowHeight: overflowHeight,
+      overflowGap: overflowGap,
+    );
+  }
+
+  static int _lanesThatFit({
+    required double usableHeight,
+    required double height,
+    required double gap,
+    required int maxFlags,
+  }) {
+    if (usableHeight <= 0) {
+      return 1;
+    }
+    final lanes = ((usableHeight + gap) / (height + gap)).floor();
+    return math.max(1, math.min(maxFlags, lanes));
+  }
+}
+
+class _RangeHighlightSegment {
+  const _RangeHighlightSegment({
+    required this.startCol,
+    required this.endCol,
+    required this.roundLeading,
+    required this.roundTrailing,
+  });
+
+  final int startCol;
+  final int endCol;
+  final bool roundLeading;
+  final bool roundTrailing;
 }
 
 class _EventSegment {

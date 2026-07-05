@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../auth/apple_account.dart';
 import '../../features/events/domain/event_category.dart';
 import 'app_settings.dart';
 
@@ -42,6 +43,10 @@ class SettingsRepository {
   static const _hideSensitiveNotificationsKey = 'hideSensitiveNotifications';
   static const _appLockEnabledKey = 'appLockEnabled';
   static const _deviceIdKey = 'deviceId';
+  static const _appleUserIdentifierKey = 'appleUserIdentifier';
+  static const _appleEmailKey = 'appleEmail';
+  static const _appleGivenNameKey = 'appleGivenName';
+  static const _appleFamilyNameKey = 'appleFamilyName';
   static const _geminiKey = 'geminiApiKey';
   static const _appLockPinHashKey = 'appLockPinHash';
 
@@ -169,6 +174,36 @@ class SettingsRepository {
     return created;
   }
 
+  AppleAccount? appleAccount() {
+    final userIdentifier = _preferences.getString(_appleUserIdentifierKey);
+    if (userIdentifier == null || userIdentifier.trim().isEmpty) {
+      return null;
+    }
+    return AppleAccount(
+      userIdentifier: userIdentifier,
+      email: _stringOrNull(_preferences.getString(_appleEmailKey)),
+      givenName: _stringOrNull(_preferences.getString(_appleGivenNameKey)),
+      familyName: _stringOrNull(_preferences.getString(_appleFamilyNameKey)),
+    );
+  }
+
+  Future<void> saveAppleAccount(AppleAccount account) async {
+    await _preferences.setString(
+      _appleUserIdentifierKey,
+      account.userIdentifier,
+    );
+    await _setNullableString(_appleEmailKey, account.email);
+    await _setNullableString(_appleGivenNameKey, account.givenName);
+    await _setNullableString(_appleFamilyNameKey, account.familyName);
+  }
+
+  Future<void> deleteAppleAccount() async {
+    await _preferences.remove(_appleUserIdentifierKey);
+    await _preferences.remove(_appleEmailKey);
+    await _preferences.remove(_appleGivenNameKey);
+    await _preferences.remove(_appleFamilyNameKey);
+  }
+
   Future<String?> geminiApiKey() {
     return _secureStorage.read(key: _geminiKey);
   }
@@ -218,6 +253,7 @@ class SettingsRepository {
     await _preferences.remove(_hideSensitiveNotificationsKey);
     await _preferences.remove(_appLockEnabledKey);
     await _preferences.remove(_deviceIdKey);
+    await deleteAppleAccount();
     await deleteGeminiApiKey();
     await deleteAppLockPin();
   }
@@ -300,6 +336,23 @@ class SettingsRepository {
     } on Object {
       return const [];
     }
+  }
+
+  Future<void> _setNullableString(String key, String? value) async {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      await _preferences.remove(key);
+      return;
+    }
+    await _preferences.setString(key, trimmed);
+  }
+
+  String? _stringOrNull(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
   }
 
   String _hashPin(String pin) {

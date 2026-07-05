@@ -357,18 +357,485 @@ Historical app-version notes below `2.0.0` were intentionally removed on
     - confirm create/update/delete sync, notification permission, disconnect
       choices, and Drive backup deletion.
 
+- 2026-07-04 Sign in with Apple implementation for App Review 4.8:
+  - Added real Sign in with Apple support for Apple platforms through
+    `sign_in_with_apple` 8.1.0.
+  - New shared auth files:
+    - `lib/core/auth/apple_account.dart`
+    - `lib/core/auth/apple_sign_in_service.dart`
+  - Apple login is exposed on iOS/macOS only. The welcome screen now shows
+    `Apple로 계속` above local start and optional Google Drive restore.
+  - Apple sign-in requests only email and full name scopes, stores the returned
+    local Apple user identifier plus optional email/name, and preserves the
+    stored email/name on later Apple sign-ins because Apple only returns them
+    on first authorization.
+  - Settings now has an Apple login section on iOS/macOS. Apple logout removes
+    only the Apple local session and keeps local events/settings. Local reset
+    clears Apple login state too.
+  - iOS and macOS native entitlements now include
+    `com.apple.developer.applesignin = Default`, and both Xcode projects mark
+    the Sign in with Apple capability.
+  - iOS App Store IPA was built as `2.0.5(14)` and copied to:
+    `dist/transporter-upload/Daily-iOS-Transporter-2.0.5-build14.ipa`
+  - IPA verification:
+    - bundle id: `com.littlebit0.daily`
+    - version: `2.0.5`
+    - build: `14`
+    - signed entitlement includes
+      `com.apple.developer.applesignin = Default`
+    - SHA-256:
+      `eda05bbb359449569e888524a539c387aa142c6f30da1896b506cecaec9cd7ba`
+  - Verification passed:
+    - `./tool/flutter.sh analyze --no-pub`
+    - `./tool/flutter.sh test --no-pub` (33 tests)
+    - `./tool/flutter.sh build ios --simulator --debug --no-pub`
+    - iOS Simulator `Daily Store 6.5` launched the fresh app and the first
+      screen showed the new `Apple로 계속` button.
+    - `./tool/flutter.sh build ipa --release --no-pub --build-name=2.0.5
+      --build-number=14`
+  - macOS Apple-login signing follow-up on 2026-07-04:
+    - The first local macOS app installed to `/Users/kimhwi/Applications`
+      was ad-hoc signed, so Apple login failed immediately with
+      AuthenticationServices authorization error 1000 / AuthKit -7026.
+    - The macOS Runner target was corrected to use Daily's Apple developer
+      team `A6Y73X2ZLS` instead of the stale `739BC896PZ` team.
+    - `xcodebuild -allowProvisioningUpdates -allowProvisioningDeviceRegistration`
+      registered this Mac and generated
+      `Mac Team Provisioning Profile: com.littlebit0.daily.macos`.
+    - A signed Debug build succeeded and was installed to
+      `/Users/kimhwi/Applications/Daily.app`.
+    - Installed macOS app verification:
+      - bundle id: `com.littlebit0.daily.macos`
+      - TeamIdentifier: `A6Y73X2ZLS`
+      - signed entitlement includes
+        `com.apple.developer.applesignin = Default`
+    - The app process launched successfully from the signed install. The actual
+      Apple ID approval step should be completed by the user; do not enter or
+      submit Apple ID credentials on the user's behalf.
+
+- 2026-07-04 macOS local data reset follow-up:
+  - User reported an error when pressing Settings > `로컬 데이터 초기화`.
+  - Screenshot inspection showed Settings stuck in a busy state with
+    `Google Drive 연결` spinning and `로컬 데이터 초기화` disabled, not a visible
+    error dialog.
+  - macOS logs showed repeated native notification authorization failures from
+    `com.littlebit0.daily.macos`.
+  - Root cause found in shared Settings code: local reset awaited event reminder
+    and morning briefing notification cancellation before clearing local data.
+    On macOS, that cancellation can initialize native notifications and request
+    authorization, so notification permission/signing state could block or fail
+    local data reset.
+  - Fix: local reset now attempts notification cleanup with a short bounded
+    timeout and does not let notification cleanup failures stop local event,
+    settings, Apple-session, or Google-account reset work.
+  - Added widget coverage that intentionally makes notification cleanup throw
+    during local reset and verifies the app still clears data and returns to the
+    welcome screen.
+  - Verification passed:
+    - `./tool/flutter.sh analyze --no-pub`
+    - `./tool/flutter.sh test --no-pub test/widget_test.dart`
+    - local unsigned macOS debug build via `xcodebuild` with signing disabled
+    - rebuilt app installed to `/Users/kimhwi/Applications/Daily.app` and
+      launched successfully
+  - Destructive GUI reset was not pressed during this pass because it would
+    delete the user's current local Daily data.
+
+- 2026-07-04 Google Drive auth-cancel UX follow-up:
+  - User requested no new upload/distribution artifacts until explicitly asked;
+    only bug fixing, feature testing, and debug/simulator runs should continue.
+  - Fixed a Google Drive login cancellation bug where starting Google Drive
+    connection from an unlinked state and then closing/leaving the login window
+    could leave the connect/restore button stuck in a loading-disabled state.
+  - Desktop OAuth now has a real pending sign-in cancellation signal. When the
+    app resumes while a desktop browser OAuth request is pending, the local
+    callback server wait is canceled and the UI returns to an actionable state.
+  - Welcome and Settings Google Drive flows now track stale connection attempts
+    so a canceled or late-completing auth Future cannot re-disable the button or
+    accidentally continue restore/sync work.
+  - iOS native Google Sign-In cancellation remains handled by the plugin's
+    canceled/error return path; the desktop resume-cancel hook is only used for
+    desktop OAuth.
+  - Added widget coverage for both first-run `Google Drive 백업 복원` and Settings
+    `Google Drive 연결` buttons to verify they re-enable after the auth window is
+    abandoned.
+  - Verification passed:
+    - `./tool/flutter.sh analyze --no-pub`
+    - `./tool/flutter.sh test --no-pub test/widget_test.dart`
+    - `./tool/flutter.sh test --no-pub`
+    - `./tool/flutter.sh build ios --simulator --debug --no-pub`
+  - Installed and launched the debug simulator build on `Daily Store 6.5`
+    (`2D0F9792-793F-4F86-95A9-02A7462060FA`). This was not an upload artifact.
+
+- 2026-07-04 physical iPhone install follow-up:
+  - User asked to install Daily on the physical iPhone, with no new upload
+    artifacts.
+  - The connected device is `김휘의 iPhone`, UDID
+    `00008150-00012D5421F3401C`, CoreDevice id
+    `415EDAF7-A303-50FD-8344-351D7BF59153`, running iOS `26.5.1`.
+  - Fixed iOS project signing for physical-device builds by setting
+    `DEVELOPMENT_TEAM = A6Y73X2ZLS` on the Runner Debug/Profile/Release build
+    configurations in `ios/Runner.xcodeproj/project.pbxproj`.
+  - `./tool/flutter.sh build ios --debug --no-pub` succeeded, and the resulting
+    `build/ios/iphoneos/Runner.app` has the expected team id and
+    `com.apple.developer.applesignin = Default` entitlement.
+  - `xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration
+    Debug -destination id=00008150-00012D5421F3401C
+    -allowProvisioningUpdates build` also succeeded.
+  - Installation is currently blocked before app transfer: the iPhone is only
+    visible over `localNetwork`/Wi-Fi and CoreDevice does not expose the
+    `Install Application` capability (`com.apple.coredevice.feature.installapp`).
+    `devicectl device install app` and `flutter install` both fail for that
+    reason.
+  - `xcrun xcdevice wait --usb --timeout=5 00008150-00012D5421F3401C` did not
+    find the device over USB. Next retry should use a USB cable, keep the iPhone
+    unlocked, trust the Mac if prompted, then rerun installation.
+  - Follow-up wireless check: `xcrun xcdevice enable --timeout=15
+    00008150-00012D5421F3401C` completed, but CoreDevice still did not expose
+    `Install Application`. The current Wi-Fi/localNetwork connection can launch,
+    uninstall, view screen, and transfer files, but cannot install app bundles.
+  - Practical wireless install alternatives are TestFlight over-the-air or
+    Ad Hoc/release-testing OTA distribution with a signed IPA and manifest.
+    Both require a distributable build artifact, so do not use them until the
+    user explicitly permits a new upload/distribution build.
+  - After the user connected USB, `xcrun xcdevice wait --usb --timeout=20
+    00008150-00012D5421F3401C` succeeded and CoreDevice reported
+    `transportType: wired`, but `Install Application` was still absent.
+  - Root cause now appears to be incomplete Xcode first-run platform setup:
+    Xcode 26.6 is showing the "Select the components you want to get started
+    with" dialog. iOS 26.5 platform support (`8.52 GB`) is selected but not
+    installed. watchOS/tvOS/visionOS were deselected in the dialog so only iOS
+    remains selected.
+  - Do not click `Download & Install` through GUI without explicit user
+    confirmation because it downloads/installs Xcode platform support.
+  - Follow-up correction: Xcode first-run/platform support was ultimately not
+    the blocker. Xcode 26.6 showed iOS 26.5 SDK installed, and
+    `xcodebuild -checkFirstLaunchStatus` was clean. The real blocker was a
+    stale CoreDevice/DDI pairing state after USB/wireless switching.
+  - Tried `xcodebuild test`; this first exposed missing `DEVELOPMENT_TEAM` on
+    `RunnerTests`, so `A6Y73X2ZLS` was added to RunnerTests Debug/Profile/Release
+    build configurations. The next test attempt still failed at install with
+    `Install Application not available`, confirming it was not an app build
+    error.
+  - Rebooted the physical iPhone with `devicectl device reboot`, waited for USB,
+    then ran `devicectl manage pair --device 00008150-00012D5421F3401C`.
+    Device moved from `unavailable` to `connected (no DDI)`.
+  - Running `devicectl device info ddiServices` then re-enabled DDI; capability
+    list finally included `Install Application`.
+  - Installed `build/ios/iphoneos/Runner.app` successfully:
+    bundle id `com.littlebit0.daily`, version `2.0.5`, bundle version `2.0.5`.
+    Then launched the app on `김휘의 iPhone` via `devicectl device process launch`.
+
+- 2026-07-04 version scheme update and iPhone reinstall:
+  - User defined the new public version scheme: an App Store-style
+    `2.0.5(14)` should be represented in-project as `2.5.14`; similarly
+    `3.0.2(20)` becomes `3.2.20`.
+  - Going forward, do not use a separate user-facing build-number suffix.
+    Use the mapped version string itself as both the display version and bundle
+    version where the platform allows it.
+  - Updated common Flutter version to `2.5.14` in `pubspec.yaml`.
+  - Updated Windows MSIX metadata to `2.5.14.0` and output name
+    `daily-windows-2.5.14`.
+  - Updated stale iOS/macOS RunnerTests Xcode `MARKETING_VERSION` and
+    `CURRENT_PROJECT_VERSION` values to `2.5.14`.
+  - Rebuilt iOS debug app successfully and verified
+    `CFBundleShortVersionString = 2.5.14` and `CFBundleVersion = 2.5.14`.
+  - Uninstalled the previous physical iPhone Daily install (`2.0.5/2.0.5`) and
+    installed the new build. Device app listing confirms Daily
+    `Version 2.5.14`, `Bundle Version 2.5.14`.
+  - Launch attempt after install was denied because the physical iPhone was
+    locked, not because of an app build failure.
+  - Follow-up crash diagnosis: the installed iPhone app kept quitting because
+    it was a Flutter `--debug` build installed directly with `devicectl`.
+    Console log showed:
+    `Cannot create a FlutterEngine instance in debug mode without Flutter
+    tooling or Xcode.`
+  - Fix was not app-code related: rebuilt iOS as a standalone launchable app
+    with `./tool/flutter.sh build ios --release --no-pub`, then uninstalled the
+    debug install and reinstalled `build/ios/iphoneos/Runner.app`.
+  - Verified release install on the physical iPhone:
+    - App listing: Daily `Version 2.5.14`, `Bundle Version 2.5.14`
+    - Normal `devicectl device process launch` succeeded
+    - Process list showed one live Runner process from the new install path
+  - For future physical iPhone installs intended for normal Home Screen use,
+    do not install `--debug` builds directly. Use release/profile or launch
+    debug builds only through `flutter run`/Xcode.
+
+- 2026-07-04 iOS 2.5.14 Transporter IPA and login screenshot:
+  - User confirmed the iPhone build is now normal and requested Transporter IPA
+    plus a login-screen screenshot using the App Store allowed size.
+  - Built App Store IPA with `./tool/flutter.sh build ipa --release --no-pub`.
+    Flutter validation reported:
+    - Version Number: `2.5.14`
+    - Build Number: `2.5.14`
+    - Bundle Identifier: `com.littlebit0.daily`
+  - Copied IPA to
+    `dist/transporter-upload/Daily-iOS-Transporter-2.5.14.ipa`.
+  - Verified IPA `Info.plist`:
+    - `CFBundleShortVersionString = 2.5.14`
+    - `CFBundleVersion = 2.5.14`
+  - Rebuilt and installed simulator app on `Daily Store 6.5`
+    (`2D0F9792-793F-4F86-95A9-02A7462060FA`) after uninstalling existing
+    simulator app data.
+  - Captured login/start screen at the App Store-accepted size:
+    `dist/app-store-screenshots/ios-login/daily-login-1242x2688.png`
+    (`1242 x 2688`).
+
+- 2026-07-04 macOS month-grid drag range creation fix:
+  - User reported that continuous/multi-day event creation by dragging on
+    macOS did not work.
+  - Root cause found in `CalendarMonthGrid`: desktop pointer drag selection and
+    touch long-press selection shared the same `_rangeStart`/`_rangeEnd` state,
+    so Flutter's `GestureDetector` long-press cancellation could clear the
+    desktop drag range before the pointer-up event finished it.
+  - Fix:
+    - Desktop primary-button drag and touch long-press range selection now have
+      separate active-state guards.
+    - Long-press cancel no longer clears an active desktop drag range.
+    - Pointer move no longer treats a missing primary-button bit as an immediate
+      finish, because desktop test/engine move events can vary there while the
+      pointer-up event is the reliable completion signal.
+    - The month `PageView` no longer accepts desktop pointer drags, so dragging
+      across the month grid is reserved for range creation instead of also
+      trying to page months.
+  - Added widget coverage in `test/features/calendar/calendar_month_grid_test.dart`
+    for primary mouse drag from May 4 to May 8 creating a normalized date range.
+  - Verification passed:
+    - `./tool/flutter.sh test --no-pub test/features/calendar/calendar_month_grid_test.dart`
+    - `./tool/flutter.sh analyze --no-pub`
+    - `./tool/flutter.sh test --no-pub` (37 tests)
+  - Local macOS test install:
+    - Closed/replaced the existing `/Users/kimhwi/Applications/Daily.app`
+      bundle without deleting app data.
+    - Installed an Xcode development-signed Debug build from the current code.
+    - Installed app verification: version `2.5.14`, bundle version `2.5.14`,
+      bundle id `com.littlebit0.daily.macos`, TeamIdentifier `A6Y73X2ZLS`,
+      Sign in with Apple entitlement present.
+    - Launched `/Users/kimhwi/Applications/Daily.app`; process was running as
+      `/Users/kimhwi/Applications/Daily.app/Contents/MacOS/Daily`.
+  - GitHub issue #6 UI follow-up:
+    - User approved applying the fix to both macOS and iOS.
+    - The date-range selection UI now renders as a continuous row-level
+      highlight instead of per-day separated selected cells.
+    - The highlight is implemented in shared Flutter code, so macOS and iOS use
+      the same behavior. It rounds only the true range start/end and uses flat
+      edges when the selected range continues across week rows.
+    - Added widget coverage that verifies a May 4-May 8 drag shows a single
+      wide `selected-range-2026-5-4` highlight while still creating the correct
+      normalized date range.
+    - Verification passed:
+      - `./tool/flutter.sh test --no-pub test/features/calendar/calendar_month_grid_test.dart`
+      - `./tool/flutter.sh analyze --no-pub`
+      - `./tool/flutter.sh test --no-pub` (37 tests)
+      - `./tool/flutter.sh build ios --simulator --debug --no-pub`
+      - Installed/launched the updated simulator app on `Daily Store 6.5`
+        (`2D0F9792-793F-4F86-95A9-02A7462060FA`).
+      - Rebuilt and installed the updated macOS app to
+        `/Users/kimhwi/Applications/Daily.app`; verified version `2.5.14`,
+        bundle version `2.5.14`, TeamIdentifier `A6Y73X2ZLS`, and Sign in with
+        Apple entitlement, then launched it.
+    - Follow-up after user verification:
+      - User confirmed the range creation worked but reported that selected
+        ranges over holidays still did not visibly change color.
+      - Root cause: holiday day-cell backgrounds were opaque and covered the
+        row-level selected-range highlight painted underneath them.
+      - Fix: day cells inside an active range now keep their own selected/holiday
+        backgrounds transparent so the continuous range highlight remains
+        visible over holiday dates too.
+      - Added widget coverage with a holiday on May 6 inside a May 4-May 8 drag
+        range. The test verifies the wide selected-range highlight exists and
+        the holiday cell background becomes transparent while the range is
+        active.
+      - Verification passed:
+        - `./tool/flutter.sh test --no-pub test/features/calendar/calendar_month_grid_test.dart`
+        - `./tool/flutter.sh analyze --no-pub`
+        - `./tool/flutter.sh test --no-pub` (37 tests)
+        - `./tool/flutter.sh build ios --simulator --debug --no-pub`
+        - Installed/launched the updated simulator app on `Daily Store 6.5`
+          (`2D0F9792-793F-4F86-95A9-02A7462060FA`).
+        - Rebuilt and installed the updated macOS app to
+          `/Users/kimhwi/Applications/Daily.app`; verified version `2.5.14`,
+          bundle version `2.5.14`, TeamIdentifier `A6Y73X2ZLS`, Sign in with
+          Apple entitlement, then launched it.
+        - Built a signed iOS release app with
+          `./tool/flutter.sh build ios --release --no-pub` and installed it on
+          the connected physical iPhone `김휘의 iPhone`
+          (`415EDAF7-A303-50FD-8344-351D7BF59153`).
+        - Physical iPhone app listing confirmed Daily version `2.5.14`, bundle
+          version `2.5.14`.
+        - Launch from `devicectl` was denied only because the iPhone was locked;
+          installation itself succeeded.
+  - GitHub issue #4:
+    - Issue title: `일정 시작 전 알림 건의`.
+    - User approved implementing multiple start-before reminders and also asked
+      that delivered push/local notifications must not disappear merely because
+      Daily is opened.
+    - Implemented multiple event reminders in shared Flutter code:
+      - Added `CalendarEvent.reminderMinutesBeforeList` and
+        `EventDraft.reminderMinutesBeforeList`.
+      - Kept `reminderMinutesBefore` as a compatibility getter/input so old
+        callers and old sync data still read as one selected reminder.
+      - Added Drift schema v4 column `reminder_minutes_before_list` and migrated
+        legacy `reminder_minutes_before` into `[value]`.
+      - Google Drive v2 event JSON now writes `reminderMinutesBeforeList` while
+        still writing/reading legacy `reminderMinutesBefore`.
+      - Event editor now shows multi-select reminder chips plus custom reminder
+        input instead of a single reminder dropdown.
+      - Notification scheduling now creates one stable notification id per
+        event/reminder-minute pair so selected reminders do not overwrite each
+        other.
+      - Cancel/reschedule paths pass old+new reminder minutes to remove stale
+        pending reminders, including custom minute values.
+    - Delivered-notification retention:
+      - macOS native notification bridge now has `cancelPending`.
+      - iOS AppDelegate now registers the same `daily/native_notifications`
+        channel for `cancelPending`.
+      - Daily cancellation/reschedule flows use pending-only cancellation on
+        iOS/macOS, so already delivered notifications in Notification Center are
+        left for the user to clear manually.
+      - Android/Windows continue to use the plugin cancellation fallback because
+        the current plugin API does not expose a pending-only cancellation path.
+    - Verification passed:
+      - `./tool/flutter.sh analyze --no-pub`
+      - `./tool/flutter.sh test --no-pub test/features/events/event_editor_dialog_test.dart test/features/events/reminder_minutes_test.dart test/core/notifications/reminder_delivery_plan_test.dart test/features/chat/rule_based_schedule_parser_test.dart`
+      - `./tool/flutter.sh test --no-pub` (41 tests)
+      - `./tool/flutter.sh build ios --debug --simulator --no-pub`
+      - `GOOGLE_DESKTOP_CLIENT_SECRET=... ./tool/flutter.sh build macos --debug --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET=...`
+    - Needs manual UX smoke verification on macOS and iOS after install:
+      - Create/edit an event with multiple reminders selected.
+      - Confirm pending reminders are scheduled.
+      - Confirm a delivered Daily notification remains in Notification Center
+        after opening Daily until the user dismisses it.
+
 ## Recommended Next Steps
 
-1. Build and install the latest `2.0.4` code onto the connected iPhone.
-2. Re-test Google login and identify the exact phase if the UI remains stuck.
-3. Run `./tool/flutter.sh analyze --no-pub` and `./tool/flutter.sh test --no-pub`
+1. Upload `dist/transporter-upload/Daily-iOS-Transporter-2.0.5-build14.ipa`
+   with Transporter and select build `2.0.5(14)` in App Store Connect.
+2. In App Review Notes for build 14, state that Sign in with Apple was added:
+   users can continue with Apple, use local-only mode, or optionally connect
+   Google Drive AppData for backup/sync.
+3. For macOS Apple-login verification, use the signed install at
+   `/Users/kimhwi/Applications/Daily.app`. Do not replace it with an ad-hoc
+   `CODE_SIGNING_ALLOWED=NO` build when testing Apple login.
+4. Run `./tool/flutter.sh analyze --no-pub` and `./tool/flutter.sh test --no-pub`
    after any shared-code changes.
-4. Verify iOS simulator, connected iPhone, and macOS app against the same Google
-   account.
 5. If releasing a shared sync-affecting update, publish Windows/Android and
    Mac/iPhone artifacts together.
-6. For App Store distribution, finish Apple Developer/App Store Connect provider
-   activation and configure Apple Distribution signing/provisioning.
+
+## Batch Verification Checklist
+
+- GitHub issue #4 multiple reminders:
+  - On macOS and iOS, create a normal timed event with multiple reminders
+    selected, including at least one custom minute value.
+  - Reopen/edit the event and confirm all selected reminder chips are preserved.
+  - Confirm the event syncs between macOS and iOS with the same reminder list.
+  - Wait for at least two reminder times and confirm separate OS Notification
+    Center alerts are delivered.
+  - Open Daily after a notification has arrived and confirm the delivered
+    notification stays in Notification Center until the user dismisses it.
+  - Change the event reminder list and confirm removed reminders no longer fire.
+  - Delete the event and confirm future pending reminders for that event stop
+    firing.
+- GitHub issue #5 search/calendar UX:
+  - Status: implementation is in place, but user explicitly asked to defer
+    hands-on UX testing until all current issue fixes are complete.
+  - On macOS and iOS, tap the search icon and confirm the search field opens
+    inline above the calendar instead of navigating to a separate page.
+  - Confirm the calendar is pushed down with an animation while the search panel
+    is open.
+  - Type a query and confirm full-calendar search results appear below the
+    inline search field; selecting a result should move the calendar to that
+    event's date and close the search panel.
+  - Confirm the filter sheet still controls the current-view search/filter
+    behavior separately from the inline full search.
+  - On iOS, confirm month previous/next buttons are not shown and month movement
+    is done by swiping the calendar.
+  - On iOS, confirm search, filter, and settings buttons are visible directly in
+    the header instead of hidden behind a more menu.
+  - On macOS and iOS, confirm the persistent bottom chat input is gone.
+  - On macOS and iOS, confirm the bottom bar has `빠른 보기`, `주/월/일`, and
+    `LLM` controls.
+  - Press `LLM` and confirm the existing LLM schedule input opens in a bottom
+    sheet and can still create an event.
+  - On macOS and iOS, confirm week and day event lists scroll when they contain
+    more events than fit.
+  - On macOS month view, confirm two-finger/trackpad or horizontal mouse wheel
+    scrolling moves between months.
+- GitHub issue #8 version display:
+  - Status: implementation is in place, but hands-on settings UI verification
+    is deferred until the current issue batch is ready for one test pass.
+  - Open Settings on macOS and iOS and confirm an `앱 정보` section appears near
+    the bottom.
+  - Confirm the `Daily 버전` tile displays the app version as `2.5.14` or the
+    current package version without a `+build` suffix.
+  - Confirm the Settings page still opens normally if package metadata loading
+    is slow or unavailable.
+- GitHub issue #9 category editing:
+  - Status: implementation is in place, but hands-on settings/category UX
+    verification is deferred until the current issue batch is ready for one test
+    pass.
+  - Open Settings on macOS and iOS and confirm user-editable categories show an
+    edit button next to the delete button.
+  - Edit a custom category name and color, save it, and confirm the category row
+    updates without creating a duplicate category.
+  - Assign an event to that category before editing, then confirm the event still
+    remains in the same category after the category label/color change.
+  - Confirm the default/basic category can be edited if present, while the locked
+    holiday category remains non-editable and non-deletable.
+  - Confirm category changes are saved after closing and reopening Settings.
+- GitHub issue #10 Google Drive session restore:
+  - Status: implementation is in place, but hands-on iOS/macOS verification is
+    deferred until the current issue batch is ready for one test pass.
+  - On iOS, connect Google Drive, fully terminate Daily, reopen it, and confirm
+    Settings still shows the connected Google account instead of local mode.
+  - On iOS, after the same restart, create or edit an event and confirm Google
+    Drive sync continues without reconnecting.
+  - On macOS, repeat the restart/open Settings flow and confirm the connected
+    Google account is restored in the UI when a saved desktop OAuth session
+    exists.
+  - Confirm Daily does not open the Google login/permission window during app
+    start or Settings open; only the explicit connect/sync buttons may prompt.
+- GitHub issue #11 iOS month calendar density:
+  - Status: implementation is in place. Pro Max simulator GUI confirmed that
+    the filter sheet no longer crashes when pressing `완료`; final 13 mini/17
+    GUI re-check was blocked by Codex usage-limit rejection on `simctl launch`.
+  - Compact month-grid event density now targets standard-mode visible event
+    counts by screen width: iPhone 13 mini-class width shows 4 events per busy
+    day when height allows, iPhone 17-class width shows 5, and Pro Max-class
+    width shows 6.
+  - If the actual row height is too small, the grid reduces visible lanes before
+    overlap and keeps the `+N` overflow indicator.
+  - The `+N` overflow indicator now reserves its own line below visible event
+    chips instead of being anchored to the bottom of the day cell, preventing
+    overlap on compact iPhone widths.
+  - The bottom calendar bar now sizes its quick-view icon, view segmented
+    control, and LLM icon from the available bar width so the left/right icon
+    controls and center tabs scale consistently by device width.
+  - The filter sheet, app-lock PIN dialog, number dialog, and category
+    add/edit dialog no longer dispose `TextEditingController` instances from
+    the outer async function before the input widget has left the tree. Category
+    and PIN/number dialogs now own their controllers in stateful dialog widgets.
+  - macOS uses the same width-based target curve, so wide windows keep
+    proportionally higher event capacity without a separate platform fork.
+  - Verified:
+    - `./tool/flutter.sh analyze --no-pub` passed.
+    - `./tool/flutter.sh test --no-pub` passed.
+    - `./tool/flutter.sh test --no-pub test/widget_test.dart test/features/calendar/calendar_month_grid_test.dart` passed after bottom bar proportional sizing.
+    - iOS simulator debug build succeeded with `./tool/flutter.sh build ios --simulator --debug --no-pub`.
+    - Pro Max simulator GUI confirmed filter `완료` closes without the previous Flutter red screen.
+  - Manual verification needed:
+    - On iOS and macOS Settings, open category add and edit dialogs, save/cancel
+      them, and confirm no Flutter red screen appears.
+    - On iOS and macOS Settings, enable app password/PIN and confirm save/cancel
+      does not trigger the same red screen.
+    - iPhone 13 mini-equivalent simulator: create 5+ events on one day and
+      confirm 4 are visible if the layout height allows it, otherwise at least
+      3 are visible without overlap.
+    - iPhone 17-equivalent simulator: confirm 5 events are visible on one busy
+      day with overflow for additional events.
+    - iPhone Pro Max-equivalent simulator: confirm 6 events are visible if the
+      layout allows it, otherwise 5 are visible without overlap.
+    - On macOS, later resize the month view across narrow and wide widths and
+      confirm visible event capacity scales smoothly with no text overlap.
 
 ## Security Notes
 

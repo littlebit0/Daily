@@ -85,6 +85,33 @@ void main() {
     expect(find.text('반복 간격'), findsWidgets);
     expect(find.text('1 이상의 숫자를 입력하세요.'), findsOneWidget);
   });
+
+  testWidgets('saves multiple selected reminders from the event dialog', (
+    tester,
+  ) async {
+    EventDraft? savedDraft;
+    await tester.pumpWidget(
+      _DialogHost(
+        builder: (context) => EventEditorDialog(
+          initialDate: DateTime(2026, 5, 28, 10),
+          defaultReminderMinutes: 60,
+        ),
+        onSaved: (draft) => savedDraft = draft,
+      ),
+    );
+
+    await tester.tap(find.text('열기'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '복수 알림 일정');
+    await tester.ensureVisible(find.text('10분 전'));
+    await tester.tap(find.text('10분 전'));
+    await tester.tap(find.text('30분 전'));
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+
+    expect(savedDraft, isNotNull);
+    expect(savedDraft!.reminderMinutesBeforeList, [10, 30, 60]);
+  });
 }
 
 class _DialogHost extends StatelessWidget {

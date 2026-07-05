@@ -8,7 +8,10 @@ abstract interface class NotificationService {
     bool allowImmediate = false,
   });
 
-  Future<void> cancelEventReminder(String eventId);
+  Future<void> cancelEventReminder(
+    String eventId, {
+    List<int> reminderMinutesBeforeList = const [],
+  });
 
   Future<void> scheduleMorningBriefing({
     required int hour,

@@ -587,7 +587,10 @@ class _FakeNotificationService implements NotificationService {
   final scheduled = <CalendarEvent>[];
 
   @override
-  Future<void> cancelEventReminder(String eventId) async {}
+  Future<void> cancelEventReminder(
+    String eventId, {
+    List<int> reminderMinutesBeforeList = const [],
+  }) async {}
 
   @override
   Future<void> cancelMorningBriefing() async {}

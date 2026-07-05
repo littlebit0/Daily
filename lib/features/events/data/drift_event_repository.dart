@@ -107,6 +107,9 @@ class DriftEventRepository implements EventRepository {
             category: Value(_storedCategoryValue(normalized)),
             colorValue: Value(normalized.colorValue),
             reminderMinutesBefore: Value(normalized.reminderMinutesBefore),
+            reminderMinutesBeforeList: Value(
+              jsonEncode(normalized.reminderMinutesBeforeList),
+            ),
             recurrenceFrequency: Value(normalized.recurrence.frequency.name),
             recurrenceInterval: Value(normalized.recurrence.interval),
             recurrenceUntil: Value(normalized.recurrence.until),

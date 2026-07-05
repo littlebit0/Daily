@@ -45,8 +45,12 @@ class EventCommandService {
     final updated = event
         .copyWith(updatedAt: _clock.now(), syncStatus: 'pending')
         .normalizeAllDayBounds();
+    final existing = await _repository.findById(updated.id);
     await _repository.save(updated);
-    await _notificationService.cancelEventReminder(updated.id);
+    await _notificationService.cancelEventReminder(
+      updated.id,
+      reminderMinutesBeforeList: _combinedReminderMinutes(existing, updated),
+    );
     await _notificationService.scheduleEventReminder(
       updated,
       allowImmediate: true,
@@ -55,8 +59,23 @@ class EventCommandService {
   }
 
   Future<void> delete(String eventId) async {
+    final existing = await _repository.findById(eventId);
     await _repository.delete(eventId);
-    await _notificationService.cancelEventReminder(eventId);
+    await _notificationService.cancelEventReminder(
+      eventId,
+      reminderMinutesBeforeList:
+          existing?.reminderMinutesBeforeList ?? const [],
+    );
     await _syncService.queueEventDelete(eventId);
+  }
+
+  List<int> _combinedReminderMinutes(
+    CalendarEvent? existing,
+    CalendarEvent updated,
+  ) {
+    return normalizeReminderMinutes([
+      ...?existing?.reminderMinutesBeforeList,
+      ...updated.reminderMinutesBeforeList,
+    ]);
   }
 }

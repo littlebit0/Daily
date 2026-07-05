@@ -196,6 +196,11 @@
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
 						LastSwiftMigration = 1100;
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -383,6 +388,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = A6Y73X2ZLS;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -411,9 +417,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 2.5.14;
+				DEVELOPMENT_TEAM = A6Y73X2ZLS;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 2.5.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -428,9 +435,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 2.5.14;
+				DEVELOPMENT_TEAM = A6Y73X2ZLS;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 2.5.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -443,9 +451,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 2.5.14;
+				DEVELOPMENT_TEAM = A6Y73X2ZLS;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 2.5.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -572,6 +581,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = A6Y73X2ZLS;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -604,6 +614,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = A6Y73X2ZLS;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",

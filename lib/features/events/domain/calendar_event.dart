@@ -2,7 +2,7 @@ import 'event_category.dart';
 import 'recurrence_rule.dart';
 
 class CalendarEvent {
-  const CalendarEvent({
+  CalendarEvent({
     required this.id,
     required this.title,
     required this.startAt,
@@ -17,7 +17,8 @@ class CalendarEvent {
     this.location,
     this.url,
     this.weather,
-    this.reminderMinutesBefore,
+    int? reminderMinutesBefore,
+    List<int>? reminderMinutesBeforeList,
     this.recurrence = const RecurrenceRule(),
     this.deletedAt,
     this.deviceId = '',
@@ -27,7 +28,12 @@ class CalendarEvent {
     this.readOnly = false,
     this.systemEvent = false,
     this.holiday = false,
-  });
+  }) : reminderMinutesBeforeList = normalizeReminderMinutes(
+         reminderMinutesBeforeList ??
+             (reminderMinutesBefore == null
+                 ? const <int>[]
+                 : <int>[reminderMinutesBefore]),
+       );
 
   final String id;
   final String? occurrenceId;
@@ -41,7 +47,7 @@ class CalendarEvent {
   final bool allDay;
   final EventCategory category;
   final int colorValue;
-  final int? reminderMinutesBefore;
+  final List<int> reminderMinutesBeforeList;
   final RecurrenceRule recurrence;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -59,6 +65,10 @@ class CalendarEvent {
   bool get isDeleted => deletedAt != null;
 
   bool get isRecurring => recurrence.isRepeating;
+
+  int? get reminderMinutesBefore => reminderMinutesBeforeList.isEmpty
+      ? null
+      : reminderMinutesBeforeList.first;
 
   CalendarEvent normalizeAllDayBounds() {
     if (!allDay) {
@@ -93,6 +103,7 @@ class CalendarEvent {
     EventCategory? category,
     int? colorValue,
     int? reminderMinutesBefore,
+    List<int>? reminderMinutesBeforeList,
     RecurrenceRule? recurrence,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -112,6 +123,12 @@ class CalendarEvent {
     bool clearReminder = false,
     bool clearDeletedAt = false,
   }) {
+    final nextReminderMinutes = clearReminder
+        ? const <int>[]
+        : reminderMinutesBeforeList ??
+              (reminderMinutesBefore == null
+                  ? this.reminderMinutesBeforeList
+                  : <int>[reminderMinutesBefore]);
     return CalendarEvent(
       id: id ?? this.id,
       occurrenceId: clearOccurrenceId
@@ -127,9 +144,7 @@ class CalendarEvent {
       allDay: allDay ?? this.allDay,
       category: category ?? this.category,
       colorValue: colorValue ?? this.colorValue,
-      reminderMinutesBefore: clearReminder
-          ? null
-          : reminderMinutesBefore ?? this.reminderMinutesBefore,
+      reminderMinutesBeforeList: nextReminderMinutes,
       recurrence: recurrence ?? this.recurrence,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -143,4 +158,9 @@ class CalendarEvent {
       holiday: holiday ?? this.holiday,
     );
   }
+}
+
+List<int> normalizeReminderMinutes(Iterable<int> values) {
+  final sorted = values.where((value) => value >= 0).toSet().toList()..sort();
+  return List.unmodifiable(sorted);
 }

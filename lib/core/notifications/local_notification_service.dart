@@ -32,6 +32,7 @@ class LocalNotificationService implements NotificationService {
   static const _windowsAppUserModelId = 'Personal.Daily.Calendar';
   static const _windowsGuid = '4c124e1f-e041-4f68-aa1e-9ee8ec1a4fb7';
   static const _dueReminderGrace = Duration(minutes: 2);
+  static const _commonReminderMinutes = [0, 5, 10, 15, 30, 60, 1440];
   static const _commonDdayOffsets = [
     -365,
     -180,
@@ -106,12 +107,13 @@ class LocalNotificationService implements NotificationService {
     }
 
     final settings = _settingsRepository.load();
-    final reminderMinutes = event.reminderMinutesBefore;
+    final reminderMinutesList = event.reminderMinutesBeforeList;
     final title = settings.hideSensitiveNotifications && event.sensitive
         ? '비공개 일정'
         : event.title;
-    if (reminderMinutes != null) {
-      final base = _baseReminderTime(event, settings);
+    final base = _baseReminderTime(event, settings);
+    var deliveredImmediateReminder = false;
+    for (final reminderMinutes in reminderMinutesList) {
       final reminderAt = base.subtract(Duration(minutes: reminderMinutes));
       final plan = resolveReminderDeliveryPlan(
         reminderAt: reminderAt,
@@ -121,14 +123,20 @@ class LocalNotificationService implements NotificationService {
         allowImmediate: allowImmediate,
         dueGrace: _dueReminderGrace,
       );
+      if (plan.type == ReminderDeliveryType.immediate) {
+        if (deliveredImmediateReminder) {
+          continue;
+        }
+        deliveredImmediateReminder = true;
+      }
       await _deliverPlan(
-        id: _eventNotificationId(event.id),
+        id: _eventNotificationId(event.id, reminderMinutes),
         title: title,
         body: reminderMinutes == 0 || plan.deliverAt == base
             ? '일정이 시작됩니다.'
             : '일정 시작 ${_minutesLabel(reminderMinutes)}입니다.',
         plan: plan,
-        payload: event.id,
+        payload: '${event.id}:reminder:$reminderMinutes',
       );
     }
 
@@ -156,15 +164,28 @@ class LocalNotificationService implements NotificationService {
   }
 
   @override
-  Future<void> cancelEventReminder(String eventId) async {
+  Future<void> cancelEventReminder(
+    String eventId, {
+    List<int> reminderMinutesBeforeList = const [],
+  }) async {
     await initialize();
-    await _cancelNotification(_eventNotificationId(eventId));
+    await _cancelPendingNotification(_legacyEventNotificationId(eventId));
+    final reminderMinutes = {
+      ..._commonReminderMinutes,
+      _settingsRepository.load().defaultReminderMinutes,
+      ...reminderMinutesBeforeList,
+    };
+    for (final minutes in reminderMinutes) {
+      await _cancelPendingNotification(_eventNotificationId(eventId, minutes));
+    }
     final offsets = {
       ..._commonDdayOffsets,
       ..._settingsRepository.load().dDayReminderOffsets,
     };
     for (final offset in offsets) {
-      await _cancelNotification(_eventDdayNotificationId(eventId, offset));
+      await _cancelPendingNotification(
+        _eventDdayNotificationId(eventId, offset),
+      );
     }
   }
 
@@ -194,7 +215,7 @@ class LocalNotificationService implements NotificationService {
   @override
   Future<void> cancelMorningBriefing() async {
     await initialize();
-    await _cancelNotification(_briefingId);
+    await _cancelPendingNotification(_briefingId);
   }
 
   @override
@@ -397,6 +418,16 @@ class LocalNotificationService implements NotificationService {
     await _plugin.cancel(id: id);
   }
 
+  Future<void> _cancelPendingNotification(int id) async {
+    if (_usesNativeDarwinNotificationControl) {
+      await _nativeNotificationChannel.invokeMethod<void>('cancelPending', {
+        'id': id,
+      });
+      return;
+    }
+    await _cancelNotification(id);
+  }
+
   Future<AndroidScheduleMode> _androidScheduleMode() async {
     final androidPlugin = _plugin
         .resolvePlatformSpecificImplementation<
@@ -427,6 +458,11 @@ class LocalNotificationService implements NotificationService {
 
   bool get _usesNativeMacNotifications =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+
+  bool get _usesNativeDarwinNotificationControl =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
 
   NotificationDetails _notificationDetails() {
     return const NotificationDetails(
@@ -459,8 +495,12 @@ class LocalNotificationService implements NotificationService {
     );
   }
 
-  int _eventNotificationId(String eventId) {
+  int _legacyEventNotificationId(String eventId) {
     return _notificationId(eventId, 1000);
+  }
+
+  int _eventNotificationId(String eventId, int reminderMinutes) {
+    return _notificationId('$eventId:reminder:$reminderMinutes', 1000);
   }
 
   int _testNotificationId() {

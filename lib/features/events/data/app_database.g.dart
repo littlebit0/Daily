@@ -133,6 +133,18 @@ class $EventRecordsTable extends EventRecords
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _reminderMinutesBeforeListMeta =
+      const VerificationMeta('reminderMinutesBeforeList');
+  @override
+  late final GeneratedColumn<String> reminderMinutesBeforeList =
+      GeneratedColumn<String>(
+        'reminder_minutes_before_list',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
   static const VerificationMeta _recurrenceFrequencyMeta =
       const VerificationMeta('recurrenceFrequency');
   @override
@@ -292,6 +304,7 @@ class $EventRecordsTable extends EventRecords
     category,
     colorValue,
     reminderMinutesBefore,
+    reminderMinutesBeforeList,
     recurrenceFrequency,
     recurrenceInterval,
     recurrenceUntil,
@@ -396,6 +409,15 @@ class $EventRecordsTable extends EventRecords
         reminderMinutesBefore.isAcceptableOrUnknown(
           data['reminder_minutes_before']!,
           _reminderMinutesBeforeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reminder_minutes_before_list')) {
+      context.handle(
+        _reminderMinutesBeforeListMeta,
+        reminderMinutesBeforeList.isAcceptableOrUnknown(
+          data['reminder_minutes_before_list']!,
+          _reminderMinutesBeforeListMeta,
         ),
       );
     }
@@ -547,6 +569,10 @@ class $EventRecordsTable extends EventRecords
         DriftSqlType.int,
         data['${effectivePrefix}reminder_minutes_before'],
       ),
+      reminderMinutesBeforeList: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reminder_minutes_before_list'],
+      )!,
       recurrenceFrequency: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}recurrence_frequency'],
@@ -617,6 +643,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
   final String category;
   final int colorValue;
   final int? reminderMinutesBefore;
+  final String reminderMinutesBeforeList;
   final String recurrenceFrequency;
   final int recurrenceInterval;
   final DateTime? recurrenceUntil;
@@ -642,6 +669,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     required this.category,
     required this.colorValue,
     this.reminderMinutesBefore,
+    required this.reminderMinutesBeforeList,
     required this.recurrenceFrequency,
     required this.recurrenceInterval,
     this.recurrenceUntil,
@@ -680,6 +708,9 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     if (!nullToAbsent || reminderMinutesBefore != null) {
       map['reminder_minutes_before'] = Variable<int>(reminderMinutesBefore);
     }
+    map['reminder_minutes_before_list'] = Variable<String>(
+      reminderMinutesBeforeList,
+    );
     map['recurrence_frequency'] = Variable<String>(recurrenceFrequency);
     map['recurrence_interval'] = Variable<int>(recurrenceInterval);
     if (!nullToAbsent || recurrenceUntil != null) {
@@ -723,6 +754,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       reminderMinutesBefore: reminderMinutesBefore == null && nullToAbsent
           ? const Value.absent()
           : Value(reminderMinutesBefore),
+      reminderMinutesBeforeList: Value(reminderMinutesBeforeList),
       recurrenceFrequency: Value(recurrenceFrequency),
       recurrenceInterval: Value(recurrenceInterval),
       recurrenceUntil: recurrenceUntil == null && nullToAbsent
@@ -764,6 +796,9 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       reminderMinutesBefore: serializer.fromJson<int?>(
         json['reminderMinutesBefore'],
       ),
+      reminderMinutesBeforeList: serializer.fromJson<String>(
+        json['reminderMinutesBeforeList'],
+      ),
       recurrenceFrequency: serializer.fromJson<String>(
         json['recurrenceFrequency'],
       ),
@@ -798,6 +833,9 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       'category': serializer.toJson<String>(category),
       'colorValue': serializer.toJson<int>(colorValue),
       'reminderMinutesBefore': serializer.toJson<int?>(reminderMinutesBefore),
+      'reminderMinutesBeforeList': serializer.toJson<String>(
+        reminderMinutesBeforeList,
+      ),
       'recurrenceFrequency': serializer.toJson<String>(recurrenceFrequency),
       'recurrenceInterval': serializer.toJson<int>(recurrenceInterval),
       'recurrenceUntil': serializer.toJson<DateTime?>(recurrenceUntil),
@@ -828,6 +866,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     String? category,
     int? colorValue,
     Value<int?> reminderMinutesBefore = const Value.absent(),
+    String? reminderMinutesBeforeList,
     String? recurrenceFrequency,
     int? recurrenceInterval,
     Value<DateTime?> recurrenceUntil = const Value.absent(),
@@ -855,6 +894,8 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     reminderMinutesBefore: reminderMinutesBefore.present
         ? reminderMinutesBefore.value
         : this.reminderMinutesBefore,
+    reminderMinutesBeforeList:
+        reminderMinutesBeforeList ?? this.reminderMinutesBeforeList,
     recurrenceFrequency: recurrenceFrequency ?? this.recurrenceFrequency,
     recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
     recurrenceUntil: recurrenceUntil.present
@@ -891,6 +932,9 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       reminderMinutesBefore: data.reminderMinutesBefore.present
           ? data.reminderMinutesBefore.value
           : this.reminderMinutesBefore,
+      reminderMinutesBeforeList: data.reminderMinutesBeforeList.present
+          ? data.reminderMinutesBeforeList.value
+          : this.reminderMinutesBeforeList,
       recurrenceFrequency: data.recurrenceFrequency.present
           ? data.recurrenceFrequency.value
           : this.recurrenceFrequency,
@@ -933,6 +977,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           ..write('category: $category, ')
           ..write('colorValue: $colorValue, ')
           ..write('reminderMinutesBefore: $reminderMinutesBefore, ')
+          ..write('reminderMinutesBeforeList: $reminderMinutesBeforeList, ')
           ..write('recurrenceFrequency: $recurrenceFrequency, ')
           ..write('recurrenceInterval: $recurrenceInterval, ')
           ..write('recurrenceUntil: $recurrenceUntil, ')
@@ -963,6 +1008,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     category,
     colorValue,
     reminderMinutesBefore,
+    reminderMinutesBeforeList,
     recurrenceFrequency,
     recurrenceInterval,
     recurrenceUntil,
@@ -992,6 +1038,7 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           other.category == this.category &&
           other.colorValue == this.colorValue &&
           other.reminderMinutesBefore == this.reminderMinutesBefore &&
+          other.reminderMinutesBeforeList == this.reminderMinutesBeforeList &&
           other.recurrenceFrequency == this.recurrenceFrequency &&
           other.recurrenceInterval == this.recurrenceInterval &&
           other.recurrenceUntil == this.recurrenceUntil &&
@@ -1019,6 +1066,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
   final Value<String> category;
   final Value<int> colorValue;
   final Value<int?> reminderMinutesBefore;
+  final Value<String> reminderMinutesBeforeList;
   final Value<String> recurrenceFrequency;
   final Value<int> recurrenceInterval;
   final Value<DateTime?> recurrenceUntil;
@@ -1045,6 +1093,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     this.category = const Value.absent(),
     this.colorValue = const Value.absent(),
     this.reminderMinutesBefore = const Value.absent(),
+    this.reminderMinutesBeforeList = const Value.absent(),
     this.recurrenceFrequency = const Value.absent(),
     this.recurrenceInterval = const Value.absent(),
     this.recurrenceUntil = const Value.absent(),
@@ -1072,6 +1121,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     this.category = const Value.absent(),
     required int colorValue,
     this.reminderMinutesBefore = const Value.absent(),
+    this.reminderMinutesBeforeList = const Value.absent(),
     this.recurrenceFrequency = const Value.absent(),
     this.recurrenceInterval = const Value.absent(),
     this.recurrenceUntil = const Value.absent(),
@@ -1105,6 +1155,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Expression<String>? category,
     Expression<int>? colorValue,
     Expression<int>? reminderMinutesBefore,
+    Expression<String>? reminderMinutesBeforeList,
     Expression<String>? recurrenceFrequency,
     Expression<int>? recurrenceInterval,
     Expression<DateTime>? recurrenceUntil,
@@ -1133,6 +1184,8 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       if (colorValue != null) 'color_value': colorValue,
       if (reminderMinutesBefore != null)
         'reminder_minutes_before': reminderMinutesBefore,
+      if (reminderMinutesBeforeList != null)
+        'reminder_minutes_before_list': reminderMinutesBeforeList,
       if (recurrenceFrequency != null)
         'recurrence_frequency': recurrenceFrequency,
       if (recurrenceInterval != null) 'recurrence_interval': recurrenceInterval,
@@ -1164,6 +1217,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Value<String>? category,
     Value<int>? colorValue,
     Value<int?>? reminderMinutesBefore,
+    Value<String>? reminderMinutesBeforeList,
     Value<String>? recurrenceFrequency,
     Value<int>? recurrenceInterval,
     Value<DateTime?>? recurrenceUntil,
@@ -1192,6 +1246,8 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       colorValue: colorValue ?? this.colorValue,
       reminderMinutesBefore:
           reminderMinutesBefore ?? this.reminderMinutesBefore,
+      reminderMinutesBeforeList:
+          reminderMinutesBeforeList ?? this.reminderMinutesBeforeList,
       recurrenceFrequency: recurrenceFrequency ?? this.recurrenceFrequency,
       recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
       recurrenceUntil: recurrenceUntil ?? this.recurrenceUntil,
@@ -1248,6 +1304,11 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     if (reminderMinutesBefore.present) {
       map['reminder_minutes_before'] = Variable<int>(
         reminderMinutesBefore.value,
+      );
+    }
+    if (reminderMinutesBeforeList.present) {
+      map['reminder_minutes_before_list'] = Variable<String>(
+        reminderMinutesBeforeList.value,
       );
     }
     if (recurrenceFrequency.present) {
@@ -1309,6 +1370,7 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
           ..write('category: $category, ')
           ..write('colorValue: $colorValue, ')
           ..write('reminderMinutesBefore: $reminderMinutesBefore, ')
+          ..write('reminderMinutesBeforeList: $reminderMinutesBeforeList, ')
           ..write('recurrenceFrequency: $recurrenceFrequency, ')
           ..write('recurrenceInterval: $recurrenceInterval, ')
           ..write('recurrenceUntil: $recurrenceUntil, ')
@@ -1352,6 +1414,7 @@ typedef $$EventRecordsTableCreateCompanionBuilder =
       Value<String> category,
       required int colorValue,
       Value<int?> reminderMinutesBefore,
+      Value<String> reminderMinutesBeforeList,
       Value<String> recurrenceFrequency,
       Value<int> recurrenceInterval,
       Value<DateTime?> recurrenceUntil,
@@ -1380,6 +1443,7 @@ typedef $$EventRecordsTableUpdateCompanionBuilder =
       Value<String> category,
       Value<int> colorValue,
       Value<int?> reminderMinutesBefore,
+      Value<String> reminderMinutesBeforeList,
       Value<String> recurrenceFrequency,
       Value<int> recurrenceInterval,
       Value<DateTime?> recurrenceUntil,
@@ -1461,6 +1525,11 @@ class $$EventRecordsTableFilterComposer
 
   ColumnFilters<int> get reminderMinutesBefore => $composableBuilder(
     column: $table.reminderMinutesBefore,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reminderMinutesBeforeList => $composableBuilder(
+    column: $table.reminderMinutesBeforeList,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1594,6 +1663,11 @@ class $$EventRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get reminderMinutesBeforeList => $composableBuilder(
+    column: $table.reminderMinutesBeforeList,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get recurrenceFrequency => $composableBuilder(
     column: $table.recurrenceFrequency,
     builder: (column) => ColumnOrderings(column),
@@ -1704,6 +1778,11 @@ class $$EventRecordsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get reminderMinutesBeforeList => $composableBuilder(
+    column: $table.reminderMinutesBeforeList,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get recurrenceFrequency => $composableBuilder(
     column: $table.recurrenceFrequency,
     builder: (column) => column,
@@ -1796,6 +1875,7 @@ class $$EventRecordsTableTableManager
                 Value<String> category = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
                 Value<int?> reminderMinutesBefore = const Value.absent(),
+                Value<String> reminderMinutesBeforeList = const Value.absent(),
                 Value<String> recurrenceFrequency = const Value.absent(),
                 Value<int> recurrenceInterval = const Value.absent(),
                 Value<DateTime?> recurrenceUntil = const Value.absent(),
@@ -1822,6 +1902,7 @@ class $$EventRecordsTableTableManager
                 category: category,
                 colorValue: colorValue,
                 reminderMinutesBefore: reminderMinutesBefore,
+                reminderMinutesBeforeList: reminderMinutesBeforeList,
                 recurrenceFrequency: recurrenceFrequency,
                 recurrenceInterval: recurrenceInterval,
                 recurrenceUntil: recurrenceUntil,
@@ -1850,6 +1931,7 @@ class $$EventRecordsTableTableManager
                 Value<String> category = const Value.absent(),
                 required int colorValue,
                 Value<int?> reminderMinutesBefore = const Value.absent(),
+                Value<String> reminderMinutesBeforeList = const Value.absent(),
                 Value<String> recurrenceFrequency = const Value.absent(),
                 Value<int> recurrenceInterval = const Value.absent(),
                 Value<DateTime?> recurrenceUntil = const Value.absent(),
@@ -1876,6 +1958,7 @@ class $$EventRecordsTableTableManager
                 category: category,
                 colorValue: colorValue,
                 reminderMinutesBefore: reminderMinutesBefore,
+                reminderMinutesBeforeList: reminderMinutesBeforeList,
                 recurrenceFrequency: recurrenceFrequency,
                 recurrenceInterval: recurrenceInterval,
                 recurrenceUntil: recurrenceUntil,

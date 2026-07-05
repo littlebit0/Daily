@@ -81,6 +81,7 @@ class GoogleDriveAuthService {
   GoogleSignInAccount? _currentUser;
   GoogleDriveAccount? _desktopAccount;
   _DesktopTokens? _desktopTokens;
+  Completer<void>? _desktopSignInCancelCompleter;
   var _isAvailable = true;
   var _usesDesktopOAuth = false;
 
@@ -90,6 +91,8 @@ class GoogleDriveAuthService {
       _usesDesktopOAuth ? _desktopAccount : _toDriveAccount(_currentUser);
 
   bool get isAvailable => _isAvailable;
+
+  bool get canCancelPendingSignInOnResume => _usesDesktopOAuth;
 
   String get _configuredDesktopClientId {
     final fromBuild = _desktopClientId.trim();
@@ -375,6 +378,33 @@ class GoogleDriveAuthService {
     }
   }
 
+  Future<GoogleDriveAccount?> restorePreviousSignIn() async {
+    await initialize();
+    if (_usesDesktopOAuth) {
+      await _restoreDesktopSession();
+      return _desktopAccount;
+    }
+    if (!_isAvailable) {
+      return null;
+    }
+
+    try {
+      final user = _currentUser ?? await _attemptLightweightAuthentication();
+      _setCurrentUser(user);
+      return _toDriveAccount(user);
+    } on Object {
+      _setCurrentUser(null);
+      return null;
+    }
+  }
+
+  void cancelPendingSignIn() {
+    final completer = _desktopSignInCancelCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
   Future<void> signOut() async {
     await initialize();
     if (_usesDesktopOAuth) {
@@ -580,6 +610,8 @@ class GoogleDriveAuthService {
   }
 
   Future<_DesktopCodeResponse> _requestDesktopAuthorizationCode() async {
+    final cancelCompleter = Completer<void>();
+    _desktopSignInCancelCompleter = cancelCompleter;
     final redirectHost = _configuredDesktopRedirectHost;
     final server = await HttpServer.bind(
       redirectHost == '::1'
@@ -610,10 +642,19 @@ class GoogleDriveAuthService {
 
     try {
       await _openSystemBrowser(authUri);
-      final request = await server.first.timeout(
-        _desktopUserApprovalTimeout,
-        onTimeout: () => throw TimeoutException('Google Drive 연결이 시간 초과되었습니다.'),
-      );
+      final request = await Future.any<HttpRequest?>([
+        server.first,
+        cancelCompleter.future.then((_) => null),
+        Future<HttpRequest?>.delayed(
+          _desktopUserApprovalTimeout,
+          () => throw TimeoutException('Google Drive 연결이 시간 초과되었습니다.'),
+        ),
+      ]);
+      if (request == null) {
+        throw const GoogleDriveAuthException(
+          'Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.',
+        );
+      }
       final params = request.uri.queryParameters;
       final requestState = params['state'];
       final code = params['code'];
@@ -646,6 +687,9 @@ class GoogleDriveAuthService {
         codeVerifier: verifier,
       );
     } finally {
+      if (identical(_desktopSignInCancelCompleter, cancelCompleter)) {
+        _desktopSignInCancelCompleter = null;
+      }
       await server.close(force: true);
     }
   }

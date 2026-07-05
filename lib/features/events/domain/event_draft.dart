@@ -3,7 +3,7 @@ import 'event_category.dart';
 import 'recurrence_rule.dart';
 
 class EventDraft {
-  const EventDraft({
+  EventDraft({
     required this.title,
     required this.startAt,
     required this.endAt,
@@ -14,11 +14,17 @@ class EventDraft {
     this.allDay = false,
     this.category = EventCategory.other,
     this.colorValue,
-    this.reminderMinutesBefore = 60,
+    int? reminderMinutesBefore = 60,
+    List<int>? reminderMinutesBeforeList,
     this.recurrence = const RecurrenceRule(),
     this.showDday = false,
     this.sensitive = false,
-  });
+  }) : reminderMinutesBeforeList = normalizeReminderMinutes(
+         reminderMinutesBeforeList ??
+             (reminderMinutesBefore == null
+                 ? const <int>[]
+                 : <int>[reminderMinutesBefore]),
+       );
 
   final String title;
   final String? memo;
@@ -30,10 +36,14 @@ class EventDraft {
   final bool allDay;
   final EventCategory category;
   final int? colorValue;
-  final int? reminderMinutesBefore;
+  final List<int> reminderMinutesBeforeList;
   final RecurrenceRule recurrence;
   final bool showDday;
   final bool sensitive;
+
+  int? get reminderMinutesBefore => reminderMinutesBeforeList.isEmpty
+      ? null
+      : reminderMinutesBeforeList.first;
 
   CalendarEvent toEvent({
     required String id,
@@ -53,7 +63,7 @@ class EventDraft {
       allDay: allDay,
       category: category,
       colorValue: resolvedColor,
-      reminderMinutesBefore: reminderMinutesBefore,
+      reminderMinutesBeforeList: reminderMinutesBeforeList,
       recurrence: recurrence,
       createdAt: now,
       updatedAt: now,
@@ -76,6 +86,7 @@ class EventDraft {
     EventCategory? category,
     int? colorValue,
     int? reminderMinutesBefore,
+    List<int>? reminderMinutesBeforeList,
     RecurrenceRule? recurrence,
     bool? showDday,
     bool? sensitive,
@@ -85,6 +96,12 @@ class EventDraft {
     bool clearWeather = false,
     bool clearReminder = false,
   }) {
+    final nextReminderMinutes = clearReminder
+        ? const <int>[]
+        : reminderMinutesBeforeList ??
+              (reminderMinutesBefore == null
+                  ? this.reminderMinutesBeforeList
+                  : <int>[reminderMinutesBefore]);
     return EventDraft(
       title: title ?? this.title,
       memo: clearMemo ? null : memo ?? this.memo,
@@ -96,9 +113,7 @@ class EventDraft {
       allDay: allDay ?? this.allDay,
       category: category ?? this.category,
       colorValue: colorValue ?? this.colorValue,
-      reminderMinutesBefore: clearReminder
-          ? null
-          : reminderMinutesBefore ?? this.reminderMinutesBefore,
+      reminderMinutesBeforeList: nextReminderMinutes,
       recurrence: recurrence ?? this.recurrence,
       showDday: showDday ?? this.showDday,
       sensitive: sensitive ?? this.sensitive,

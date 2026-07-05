@@ -187,9 +187,12 @@ class _AppHomeState extends ConsumerState<_AppHome>
   Future<void> _startSyncIfConnected() async {
     try {
       final auth = ref.read(googleDriveAuthServiceProvider);
-      await auth.initialize();
-      if (auth.currentAccount != null) {
-        _startPostLoginServices();
+      final account = await auth.restorePreviousSignIn();
+      if (account != null) {
+        final headers = await auth.authorizationHeaders();
+        if (headers != null) {
+          _startPostLoginServices();
+        }
         return;
       }
       if (!Platform.isWindows && !Platform.isMacOS) {

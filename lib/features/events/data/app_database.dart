@@ -20,6 +20,8 @@ class EventRecords extends Table {
   TextColumn get category => text().withDefault(const Constant('basic'))();
   IntColumn get colorValue => integer()();
   IntColumn get reminderMinutesBefore => integer().nullable()();
+  TextColumn get reminderMinutesBeforeList =>
+      text().withDefault(const Constant('[]'))();
   TextColumn get recurrenceFrequency =>
       text().withDefault(const Constant('none'))();
   IntColumn get recurrenceInterval =>
@@ -45,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -64,6 +66,15 @@ class AppDatabase extends _$AppDatabase {
           await migrator.addColumn(
             eventRecords,
             eventRecords.recurrenceExcludedDates,
+          );
+        }
+        if (from < 4) {
+          await migrator.addColumn(
+            eventRecords,
+            eventRecords.reminderMinutesBeforeList,
+          );
+          await customStatement(
+            "UPDATE event_records SET reminder_minutes_before_list = '[' || reminder_minutes_before || ']' WHERE reminder_minutes_before IS NOT NULL",
           );
         }
       },

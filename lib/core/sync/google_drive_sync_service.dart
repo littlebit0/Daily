@@ -505,16 +505,24 @@ class GoogleDriveSyncService implements SyncService {
 
   Future<void> _saveSyncedEvent(CalendarEvent event) async {
     final synced = event.copyWith(syncStatus: 'synced');
+    final existing = await _eventRepository.findById(synced.id);
     await _eventRepository.save(synced);
-    await _notificationService.cancelEventReminder(synced.id);
+    await _notificationService.cancelEventReminder(
+      synced.id,
+      reminderMinutesBeforeList: _combinedReminderMinutes(existing, synced),
+    );
     if (synced.deletedAt == null) {
       await _notificationService.scheduleEventReminder(synced);
     }
   }
 
   Future<void> _saveRestoredEvent(CalendarEvent event) async {
+    final existing = await _eventRepository.findById(event.id);
     await _eventRepository.save(event);
-    await _notificationService.cancelEventReminder(event.id);
+    await _notificationService.cancelEventReminder(
+      event.id,
+      reminderMinutesBeforeList: _combinedReminderMinutes(existing, event),
+    );
     if (event.deletedAt == null) {
       await _notificationService.scheduleEventReminder(event);
     }
@@ -819,6 +827,7 @@ class GoogleDriveSyncService implements SyncService {
       'categoryLocked': normalized.category.locked,
       'colorValue': normalized.colorValue,
       'reminderMinutesBefore': normalized.reminderMinutesBefore,
+      'reminderMinutesBeforeList': normalized.reminderMinutesBeforeList,
       'recurrenceFrequency': normalized.recurrence.frequency.name,
       'recurrenceInterval': normalized.recurrence.interval,
       'recurrenceUntil': normalized.recurrence.until?.toUtc().toIso8601String(),
@@ -869,7 +878,7 @@ class GoogleDriveSyncService implements SyncService {
       allDay: allDay,
       category: category,
       colorValue: colorValue ?? category.colorValue,
-      reminderMinutesBefore: json['reminderMinutesBefore'] as int?,
+      reminderMinutesBeforeList: _reminderMinutesFromJson(json),
       recurrence: RecurrenceRule(
         frequency: RecurrenceFrequency.fromName(
           json['recurrenceFrequency'] as String?,
@@ -1045,6 +1054,28 @@ class GoogleDriveSyncService implements SyncService {
     }
     final items = value.whereType<int>().toList();
     return items.isEmpty ? fallback : (items..sort());
+  }
+
+  List<int> _reminderMinutesFromJson(Map<String, Object?> json) {
+    final listValue = json['reminderMinutesBeforeList'];
+    if (listValue is List) {
+      return normalizeReminderMinutes(listValue.whereType<int>());
+    }
+    final legacyValue = json['reminderMinutesBefore'];
+    if (legacyValue is int) {
+      return normalizeReminderMinutes([legacyValue]);
+    }
+    return const <int>[];
+  }
+
+  List<int> _combinedReminderMinutes(
+    CalendarEvent? existing,
+    CalendarEvent updated,
+  ) {
+    return normalizeReminderMinutes([
+      ...?existing?.reminderMinutesBeforeList,
+      ...updated.reminderMinutesBeforeList,
+    ]);
   }
 
   List<String> _stringListValue(Object? value) {

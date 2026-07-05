@@ -129,9 +129,9 @@ class _DraftConfirmationSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheduleTime = _formatScheduleTime(draft);
-    final reminder = draft.reminderMinutesBefore == null
+    final reminder = draft.reminderMinutesBeforeList.isEmpty
         ? '없음'
-        : _minutesLabel(draft.reminderMinutesBefore!);
+        : draft.reminderMinutesBeforeList.map(_minutesLabel).join(', ');
 
     return SafeArea(
       child: Padding(

@@ -3,15 +3,21 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/auth/apple_account.dart';
+import '../../../core/auth/apple_sign_in_service.dart';
 import '../../../core/di/app_providers.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
 import '../../../core/sync/google_drive_sync_service.dart';
+import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 
 enum _GoogleLogoutChoice { continueLocal, syncAndReturnToStart }
+
+const _fallbackAppVersion = '2.5.14';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -20,16 +26,24 @@ class SettingsPage extends ConsumerStatefulWidget {
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends ConsumerState<SettingsPage> {
+class _SettingsPageState extends ConsumerState<SettingsPage>
+    with WidgetsBindingObserver {
   static const _accountActionTimeout = Duration(seconds: 10);
   static const _logoutAccountReserve = Duration(seconds: 3);
+  static const _resetNotificationCleanupTimeout = Duration(seconds: 3);
 
   final _apiKeyController = TextEditingController();
+  late final Future<_AppVersionInfo> _appVersionInfo;
   var _syncMessage = '';
   var _syncBusy = false;
+  var _appleMessage = '';
+  var _appleBusy = false;
   var _notificationMessage = '';
   var _notificationBusy = false;
   String? _driveEmail;
+  AppleAccount? _appleAccount;
+  var _googleDriveConnectAttempt = 0;
+  int? _activeGoogleDriveConnectAttempt;
 
   static const _categoryColors = [
     0xff2563eb,
@@ -45,34 +59,55 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _appVersionInfo = _loadAppVersionInfo();
     Future.microtask(() async {
       final key = await ref.read(settingsRepositoryProvider).geminiApiKey();
       String? driveEmail;
+      AppleAccount? appleAccount;
       try {
-        await ref.read(googleDriveAuthServiceProvider).initialize();
-        driveEmail = ref
+        final driveAccount = await ref
             .read(googleDriveAuthServiceProvider)
-            .currentAccount
-            ?.email;
+            .restorePreviousSignIn();
+        driveEmail = driveAccount?.email;
       } on Object {
         driveEmail = null;
       }
+      try {
+        appleAccount = await ref
+            .read(appleSignInServiceProvider)
+            .refreshCurrentAccount();
+      } on Object {
+        appleAccount = ref.read(appleSignInServiceProvider).currentAccount;
+      }
       if (mounted) {
         _apiKeyController.text = key ?? '';
-        setState(() => _driveEmail = driveEmail);
+        setState(() {
+          _driveEmail = driveEmail;
+          _appleAccount = appleAccount;
+        });
       }
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _apiKeyController.dispose();
     super.dispose();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _cancelDesktopGoogleDriveSignInIfPending();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final settings = ref.watch(appSettingsProvider);
+    final appleSignInService = ref.watch(appleSignInServiceProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('설정')),
@@ -321,6 +356,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               for (final category in settings.categories)
                 _CategoryTile(
                   category: category,
+                  onEdit: category.locked
+                      ? null
+                      : () => _editCategory(settings, category),
                   onDelete: category.locked
                       ? null
                       : () => _deleteCategory(settings, category),
@@ -378,6 +416,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsSection(
             title: '계정',
             children: [
+              if (appleSignInService.isSupportedPlatform) ...[
+                _AppleSignInSettings(
+                  account: _appleAccount,
+                  busy: _appleBusy,
+                  message: _appleMessage,
+                  onSignIn: _connectApple,
+                  onSignOut: _logoutApple,
+                ),
+                const Divider(height: 1),
+              ],
               _SyncStatusTile(
                 notifier: ref
                     .watch(googleDriveSyncServiceProvider)
@@ -395,9 +443,103 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ],
           ),
+          _SettingsSection(
+            title: '앱 정보',
+            children: [_AppVersionTile(versionInfo: _appVersionInfo)],
+          ),
         ],
       ),
     );
+  }
+
+  Future<_AppVersionInfo> _loadAppVersionInfo() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      return _AppVersionInfo(
+        version: info.version.isEmpty ? _fallbackAppVersion : info.version,
+        packageName: info.packageName,
+      );
+    } on Object {
+      return const _AppVersionInfo(version: _fallbackAppVersion);
+    }
+  }
+
+  Future<void> _connectApple() async {
+    setState(() {
+      _appleBusy = true;
+      _appleMessage = 'Apple 로그인 창을 여는 중입니다.';
+    });
+    try {
+      final account = await ref.read(appleSignInServiceProvider).signIn();
+      if (!mounted) {
+        return;
+      }
+      if (account == null) {
+        setState(() => _appleMessage = 'Apple 로그인이 취소되었습니다.');
+        return;
+      }
+      setState(() {
+        _appleAccount = account;
+        _appleMessage = 'Apple 로그인이 완료되었습니다.';
+      });
+    } on AppleSignInException catch (error) {
+      if (mounted) {
+        setState(() => _appleMessage = error.message);
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _appleMessage = '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _appleBusy = false);
+      }
+    }
+  }
+
+  Future<void> _logoutApple() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Apple 로그아웃'),
+        content: const Text('Apple 로그인 상태만 해제합니다. 이 기기의 일정과 설정은 그대로 유지됩니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('로그아웃'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _appleBusy = true;
+      _appleMessage = '';
+    });
+    try {
+      await ref.read(appleSignInServiceProvider).signOut();
+      if (mounted) {
+        setState(() {
+          _appleAccount = null;
+          _appleMessage = 'Apple 로그아웃이 완료되었습니다. 로컬 일정은 그대로 유지됩니다.';
+        });
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _appleMessage = '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _appleBusy = false);
+      }
+    }
   }
 
   Future<void> _save(AppSettings settings) async {
@@ -437,7 +579,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _rescheduleNotifications() async {
     final events = await ref.read(eventRepositoryProvider).allEventsForSync();
     for (final event in events.where((event) => event.deletedAt == null)) {
-      await ref.read(notificationServiceProvider).cancelEventReminder(event.id);
+      await ref
+          .read(notificationServiceProvider)
+          .cancelEventReminder(
+            event.id,
+            reminderMinutesBeforeList: event.reminderMinutesBeforeList,
+          );
       await ref.read(notificationServiceProvider).scheduleEventReminder(event);
     }
   }
@@ -517,6 +664,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  Future<void> _editCategory(
+    AppSettings settings,
+    EventCategory category,
+  ) async {
+    final updatedCategory = await _showCategoryDialog(
+      context,
+      initialCategory: category,
+    );
+    if (updatedCategory == null) {
+      return;
+    }
+    final categories = settings.categories
+        .map((item) => item.id == category.id ? updatedCategory : item)
+        .toList();
+    await _save(
+      settings.copyWith(categories: _normalizeCategories(categories)),
+    );
+  }
+
   Future<void> _deleteCategory(
     AppSettings settings,
     EventCategory category,
@@ -559,6 +725,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _connectGoogleDrive() async {
+    final attempt = ++_googleDriveConnectAttempt;
+    _activeGoogleDriveConnectAttempt = attempt;
     setState(() {
       _syncBusy = true;
       _syncMessage = '';
@@ -566,9 +734,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     try {
       final authService = ref.read(googleDriveAuthServiceProvider);
       final account = await authService.signIn(forceAccountSelection: true);
+      if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
+        return;
+      }
       final headers = await authService.authorizationHeaders(
         promptIfNecessary: true,
       );
+      if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
+        return;
+      }
       if (headers == null) {
         throw const GoogleDriveAuthException(
           'Google Drive 권한 승인이 완료되지 않았습니다. 다시 연결해 주세요.',
@@ -576,10 +750,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       }
       final syncService = ref.read(googleDriveSyncServiceProvider);
       await syncService.startListeningOnly(flushPendingChanges: false);
+      if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
+        return;
+      }
       await syncService.syncPendingChangesNow(
         promptIfNecessary: false,
         restoreAfterBackup: true,
       );
+      if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
+        return;
+      }
       if (!mounted) {
         return;
       }
@@ -591,13 +771,40 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _syncMessage = 'Google Drive 연결이 완료되었습니다.';
       });
     } on Object catch (error) {
-      if (mounted) {
+      if (mounted && _isCurrentGoogleDriveConnectAttempt(attempt)) {
         setState(() => _syncMessage = _googleAccountErrorMessage(error));
       }
     } finally {
-      if (mounted) {
-        setState(() => _syncBusy = false);
+      if (mounted && _isCurrentGoogleDriveConnectAttempt(attempt)) {
+        setState(() {
+          _activeGoogleDriveConnectAttempt = null;
+          _syncBusy = false;
+        });
       }
+    }
+  }
+
+  bool _isCurrentGoogleDriveConnectAttempt(int attempt) {
+    return _googleDriveConnectAttempt == attempt;
+  }
+
+  void _cancelDesktopGoogleDriveSignInIfPending() {
+    final attempt = _activeGoogleDriveConnectAttempt;
+    if (attempt == null || !_isCurrentGoogleDriveConnectAttempt(attempt)) {
+      return;
+    }
+    final authService = ref.read(googleDriveAuthServiceProvider);
+    if (!authService.canCancelPendingSignInOnResume) {
+      return;
+    }
+    authService.cancelPendingSignIn();
+    _googleDriveConnectAttempt += 1;
+    if (mounted) {
+      setState(() {
+        _activeGoogleDriveConnectAttempt = null;
+        _syncBusy = false;
+        _syncMessage = 'Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.';
+      });
     }
   }
 
@@ -707,7 +914,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final title = hasGoogleAccount ? 'Drive 백업 삭제' : '로컬 데이터 초기화';
     final content = hasGoogleAccount
         ? 'Google Drive의 Daily 백업과 이 기기의 모든 일정, 설정을 삭제하고 시작 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.'
-        : '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다. Google 계정 백업은 삭제하지 않습니다.';
+        : '이 기기의 모든 일정과 설정, Apple 로그인 상태를 삭제하고 시작 화면으로 돌아갑니다. Google Drive 백업은 삭제하지 않습니다.';
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -737,12 +944,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     });
     try {
       final events = await ref.read(eventRepositoryProvider).allEventsForSync();
-      for (final event in events) {
-        await ref
-            .read(notificationServiceProvider)
-            .cancelEventReminder(event.id);
-      }
-      await ref.read(notificationServiceProvider).cancelMorningBriefing();
+      await _tryCancelNotificationsBeforeReset(events);
       if (hasGoogleAccount) {
         await ref
             .read(googleDriveSyncServiceProvider)
@@ -757,6 +959,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (mounted) {
         setState(() {
           _driveEmail = null;
+          _appleAccount = null;
           _syncMessage = hasGoogleAccount
               ? 'Drive 백업 삭제가 완료되었습니다.'
               : '로컬 데이터 초기화가 완료되었습니다.';
@@ -771,6 +974,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (mounted) {
         setState(() => _syncBusy = false);
       }
+    }
+  }
+
+  Future<void> _tryCancelNotificationsBeforeReset(
+    List<CalendarEvent> events,
+  ) async {
+    try {
+      await Future<void>(() async {
+        final notificationService = ref.read(notificationServiceProvider);
+        for (final event in events) {
+          await notificationService.cancelEventReminder(
+            event.id,
+            reminderMinutesBeforeList: event.reminderMinutesBeforeList,
+          );
+        }
+        await notificationService.cancelMorningBriefing();
+      }).timeout(_resetNotificationCleanupTimeout);
+    } on Object {
+      // Local data reset must not be blocked by OS notification permission,
+      // signing, or notification-center state. Stale reminders are resynced or
+      // cleared on the next successful notification initialization.
     }
   }
 
@@ -857,6 +1081,39 @@ class _SettingsSection extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AppVersionInfo {
+  const _AppVersionInfo({required this.version, this.packageName = ''});
+
+  final String version;
+  final String packageName;
+}
+
+class _AppVersionTile extends StatelessWidget {
+  const _AppVersionTile({required this.versionInfo});
+
+  final Future<_AppVersionInfo> versionInfo;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_AppVersionInfo>(
+      future: versionInfo,
+      builder: (context, snapshot) {
+        final info = snapshot.data;
+        final version = info?.version ?? '확인 중';
+        final packageName = info?.packageName ?? '';
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.info_outline),
+          title: const Text('Daily 버전'),
+          subtitle: Text(
+            packageName.isEmpty ? '버전 $version' : '버전 $version · $packageName',
+          ),
+        );
+      },
     );
   }
 }
@@ -1055,9 +1312,14 @@ class _NotificationTestTile extends StatelessWidget {
 }
 
 class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({required this.category, required this.onDelete});
+  const _CategoryTile({
+    required this.category,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final EventCategory category;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
   @override
@@ -1073,19 +1335,29 @@ class _CategoryTile extends StatelessWidget {
         ),
       ),
       title: Text(category.label),
-      subtitle: Text(category.locked ? '삭제 불가' : '사용자 분류'),
+      subtitle: Text(category.locked ? '수정 불가' : '사용자 분류'),
       trailing: category.locked
           ? Tooltip(
-              message: '삭제 불가',
+              message: '수정 불가',
               child: Icon(
                 Icons.lock_outline,
                 color: Theme.of(context).disabledColor,
               ),
             )
-          : IconButton(
-              tooltip: '분류 삭제',
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: '분류 수정',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+                IconButton(
+                  tooltip: '분류 삭제',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
             ),
     );
   }
@@ -1169,6 +1441,75 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
   }
 }
 
+class _AppleSignInSettings extends StatelessWidget {
+  const _AppleSignInSettings({
+    required this.account,
+    required this.busy,
+    required this.message,
+    required this.onSignIn,
+    required this.onSignOut,
+  });
+
+  final AppleAccount? account;
+  final bool busy;
+  final String message;
+  final VoidCallback onSignIn;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final connected = account != null;
+    final title = connected
+        ? account!.displayName ?? account!.email ?? 'Apple로 로그인됨'
+        : 'Apple 로그인';
+    final subtitle = connected
+        ? [
+            if (account!.email != null) account!.email!,
+            'Apple 로그인 상태입니다. Google Drive 백업과 동기화는 별도로 선택합니다.',
+          ].join('\n')
+        : '이메일 비공개 옵션을 사용할 수 있는 Apple 로그인으로 Daily를 시작할 수 있습니다.';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.apple),
+          title: Text(title),
+          subtitle: Text(subtitle),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: busy ? null : (connected ? onSignOut : onSignIn),
+                style: connected
+                    ? null
+                    : FilledButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                      ),
+                icon: busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(connected ? Icons.logout : Icons.apple),
+                label: Text(connected ? 'Apple 로그아웃' : 'Apple로 계속'),
+              ),
+            ),
+          ],
+        ),
+        if (message.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text(message, style: Theme.of(context).textTheme.labelMedium),
+        ],
+      ],
+    );
+  }
+}
+
 class _SyncStatusTile extends StatelessWidget {
   const _SyncStatusTile({required this.notifier});
 
@@ -1199,20 +1540,86 @@ class _SyncStatusTile extends StatelessWidget {
   }
 }
 
-Future<EventCategory?> _showCategoryDialog(BuildContext context) async {
-  final controller = TextEditingController();
-  var selectedColor = _SettingsPageState._categoryColors.first;
-  final category = await showDialog<EventCategory>(
+Future<EventCategory?> _showCategoryDialog(
+  BuildContext context, {
+  EventCategory? initialCategory,
+}) async {
+  return showDialog<EventCategory>(
     context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('분류 추가'),
-        content: Column(
+    builder: (context) => _CategoryDialog(initialCategory: initialCategory),
+  );
+}
+
+Future<int?> _showNumberDialog({
+  required BuildContext context,
+  required String title,
+  required String label,
+  required int initialValue,
+}) async {
+  return showDialog<int>(
+    context: context,
+    builder: (context) =>
+        _NumberDialog(title: title, label: label, initialValue: initialValue),
+  );
+}
+
+Future<String?> _showPinDialog({
+  required BuildContext context,
+  required String title,
+  required String label,
+}) async {
+  return showDialog<String>(
+    context: context,
+    builder: (context) => _PinDialog(title: title, label: label),
+  );
+}
+
+class _CategoryDialog extends StatefulWidget {
+  const _CategoryDialog({required this.initialCategory});
+
+  final EventCategory? initialCategory;
+
+  @override
+  State<_CategoryDialog> createState() => _CategoryDialogState();
+}
+
+class _CategoryDialogState extends State<_CategoryDialog> {
+  late final TextEditingController _controller;
+  late int _selectedColor;
+  late final List<int> _colorValues;
+
+  bool get _editing => widget.initialCategory != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final initialCategory = widget.initialCategory;
+    _controller = TextEditingController(text: initialCategory?.label ?? '');
+    _selectedColor =
+        initialCategory?.colorValue ?? _SettingsPageState._categoryColors.first;
+    _colorValues = {
+      _selectedColor,
+      ..._SettingsPageState._categoryColors,
+    }.toList();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_editing ? '분류 수정' : '분류 추가'),
+      content: SingleChildScrollView(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TextField(
-              controller: controller,
+              controller: _controller,
               autofocus: true,
               decoration: const InputDecoration(labelText: '이름'),
             ),
@@ -1223,113 +1630,176 @@ Future<EventCategory?> _showCategoryDialog(BuildContext context) async {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final colorValue in _SettingsPageState._categoryColors)
+                for (final colorValue in _colorValues)
                   ChoiceChip(
-                    selected: selectedColor == colorValue,
+                    selected: _selectedColor == colorValue,
                     label: const SizedBox.shrink(),
                     avatar: CircleAvatar(
                       radius: 8,
                       backgroundColor: Color(colorValue),
                     ),
                     onSelected: (_) =>
-                        setState(() => selectedColor = colorValue),
+                        setState(() => _selectedColor = colorValue),
                   ),
               ],
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final label = controller.text.trim();
-              if (label.isEmpty) {
-                return;
-              }
-              Navigator.of(context).pop(
-                EventCategory.custom(label: label, colorValue: selectedColor),
-              );
-            },
-            child: const Text('추가'),
-          ),
-        ],
-      ),
-    ),
-  );
-  controller.dispose();
-  return category;
-}
-
-Future<int?> _showNumberDialog({
-  required BuildContext context,
-  required String title,
-  required String label,
-  required int initialValue,
-}) async {
-  final controller = TextEditingController(text: '$initialValue');
-  final result = await showDialog<int>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(labelText: label),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            Navigator.of(context).pop();
+          },
           child: const Text('취소'),
         ),
         FilledButton(
           onPressed: () {
-            final value = int.tryParse(controller.text.trim());
+            final label = _controller.text.trim();
+            if (label.isEmpty) {
+              return;
+            }
+            FocusManager.instance.primaryFocus?.unfocus();
+            final initialCategory = widget.initialCategory;
+            Navigator.of(context).pop(
+              initialCategory == null
+                  ? EventCategory.custom(
+                      label: label,
+                      colorValue: _selectedColor,
+                    )
+                  : initialCategory.copyWith(
+                      label: label,
+                      colorValue: _selectedColor,
+                    ),
+            );
+          },
+          child: Text(_editing ? '저장' : '추가'),
+        ),
+      ],
+    );
+  }
+}
+
+class _NumberDialog extends StatefulWidget {
+  const _NumberDialog({
+    required this.title,
+    required this.label,
+    required this.initialValue,
+  });
+
+  final String title;
+  final String label;
+  final int initialValue;
+
+  @override
+  State<_NumberDialog> createState() => _NumberDialogState();
+}
+
+class _NumberDialogState extends State<_NumberDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: '${widget.initialValue}');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SingleChildScrollView(
+        child: TextField(
+          controller: _controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(labelText: widget.label),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            Navigator.of(context).pop();
+          },
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final value = int.tryParse(_controller.text.trim());
+            FocusManager.instance.primaryFocus?.unfocus();
             Navigator.of(context).pop(value);
           },
           child: const Text('적용'),
         ),
       ],
-    ),
-  );
-  controller.dispose();
-  return result;
+    );
+  }
 }
 
-Future<String?> _showPinDialog({
-  required BuildContext context,
-  required String title,
-  required String label,
-}) async {
-  final controller = TextEditingController();
-  final result = await showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        obscureText: true,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(labelText: label),
+class _PinDialog extends StatefulWidget {
+  const _PinDialog({required this.title, required this.label});
+
+  final String title;
+  final String label;
+
+  @override
+  State<_PinDialog> createState() => _PinDialogState();
+}
+
+class _PinDialogState extends State<_PinDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SingleChildScrollView(
+        child: TextField(
+          controller: _controller,
+          autofocus: true,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(labelText: widget.label),
+        ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            Navigator.of(context).pop();
+          },
           child: const Text('취소'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+          onPressed: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            Navigator.of(context).pop(_controller.text.trim());
+          },
           child: const Text('적용'),
         ),
       ],
-    ),
-  );
-  controller.dispose();
-  return result;
+    );
+  }
 }
 
 String _minutesLabel(int minutes) {

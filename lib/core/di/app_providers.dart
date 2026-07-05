@@ -11,6 +11,7 @@ import '../../features/events/data/app_database.dart';
 import '../../features/events/data/drift_event_repository.dart';
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
+import '../auth/apple_sign_in_service.dart';
 import '../calendar/korean_holiday_service.dart';
 import '../notifications/local_notification_service.dart';
 import '../notifications/notification_service.dart';
@@ -65,6 +66,12 @@ final koreanHolidayServiceProvider = Provider<KoreanHolidayService>((ref) {
 
 final googleDriveAuthServiceProvider = Provider<GoogleDriveAuthService>((ref) {
   return GoogleDriveAuthService();
+});
+
+final appleSignInServiceProvider = Provider<AppleSignInService>((ref) {
+  return AppleSignInService(
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+  );
 });
 
 final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {

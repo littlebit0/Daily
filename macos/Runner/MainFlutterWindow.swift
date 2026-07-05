@@ -50,6 +50,8 @@ private final class DailyNativeNotifications {
         schedule(call, result)
       case "cancel":
         cancel(call, result)
+      case "cancelPending":
+        cancelPending(call, result)
       case "pendingCount":
         pendingCount(result)
       case "deliveredCount":
@@ -134,6 +136,16 @@ private final class DailyNativeNotifications {
     let center = UNUserNotificationCenter.current()
     center.removePendingNotificationRequests(withIdentifiers: identifiers)
     center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    result(nil)
+  }
+
+  private static func cancelPending(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+    guard let arguments = call.arguments as? [String: Any],
+          let id = intValue(arguments["id"]) else {
+      result(FlutterError(code: "bad_arguments", message: "Invalid notification id", details: nil))
+      return
+    }
+    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [String(id)])
     result(nil)
   }
 

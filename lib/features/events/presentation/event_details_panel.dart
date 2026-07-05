@@ -67,6 +67,7 @@ class EventDetailsPanel extends ConsumerWidget {
             else
               Expanded(
                 child: ListView.separated(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   itemBuilder: (context, index) {
                     final event = dayEvents[index];
                     return _EventTile(
@@ -237,7 +238,7 @@ class EventDetailsPanel extends ConsumerWidget {
       allDay: draft.allDay,
       category: draft.category,
       colorValue: draft.colorValue ?? draft.category.colorValue,
-      reminderMinutesBefore: draft.reminderMinutesBefore,
+      reminderMinutesBeforeList: draft.reminderMinutesBeforeList,
       recurrence: draft.recurrence,
       showDday: draft.showDday,
       sensitive: draft.sensitive,
@@ -245,7 +246,7 @@ class EventDetailsPanel extends ConsumerWidget {
       clearLocation: draft.location == null,
       clearUrl: draft.url == null,
       clearWeather: draft.weather == null,
-      clearReminder: draft.reminderMinutesBefore == null,
+      clearReminder: draft.reminderMinutesBeforeList.isEmpty,
     );
   }
 

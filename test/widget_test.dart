@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:daily/app/daily_app.dart';
+import 'package:daily/core/auth/apple_sign_in_service.dart';
 import 'package:daily/core/di/app_providers.dart';
 import 'package:daily/core/notifications/notification_service.dart';
 import 'package:daily/core/settings/settings_repository.dart';
@@ -8,11 +11,13 @@ import 'package:daily/core/sync/sync_service.dart';
 import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_category.dart';
 import 'package:daily/features/events/domain/event_repository.dart';
+import 'package:daily/features/settings/presentation/settings_page.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -22,6 +27,8 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'onboardingCompleted': true,
         'defaultReminderMinutes': 10,
+        'appleUserIdentifier': 'apple-user',
+        'appleEmail': 'apple@example.com',
       });
       final preferences = await SharedPreferences.getInstance();
       final settingsRepository = SettingsRepository(
@@ -33,6 +40,120 @@ void main() {
 
       expect(settingsRepository.load().onboardingCompleted, isFalse);
       expect(settingsRepository.load().defaultReminderMinutes, 60);
+      expect(settingsRepository.appleAccount(), isNull);
+    },
+  );
+
+  testWidgets('Apple sign-in starts Daily on Apple platforms', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final appleSignInService = AppleSignInService(
+      settingsRepository: settingsRepository,
+      targetPlatform: TargetPlatform.iOS,
+      availabilityChecker: () async => true,
+      credentialRequester: ({required scopes}) async {
+        expect(scopes, contains(AppleIDAuthorizationScopes.email));
+        expect(scopes, contains(AppleIDAuthorizationScopes.fullName));
+        return const AuthorizationCredentialAppleID(
+          userIdentifier: 'apple-user',
+          givenName: 'Hwi',
+          familyName: 'Kim',
+          authorizationCode: 'auth-code',
+          email: 'hwi@example.com',
+          identityToken: 'identity-token',
+          state: null,
+        );
+      },
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(_FakeNotification()),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(account: null),
+          ),
+          appleSignInServiceProvider.overrideWithValue(appleSignInService),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Apple로 계속'), findsOneWidget);
+
+    await tester.tap(find.text('Apple로 계속'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(settingsRepository.load().onboardingCompleted, isTrue);
+    expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
+    expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'welcome Google Drive button re-enables after desktop auth close',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      final authService = _FakeGoogleDriveAuthService(
+        account: null,
+        signInCompleter: Completer<GoogleDriveAccount?>(),
+        canCancelOnResume: true,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(_FakeNotification()),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+            eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+            googleDriveAuthServiceProvider.overrideWithValue(authService),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Google Drive 백업 복원'));
+      await tester.pump();
+
+      expect(authService.signInCalls, 1);
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Google Drive 백업 복원'),
+            )
+            .onPressed,
+        isNull,
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+
+      expect(authService.cancelPendingSignInCalls, 1);
+      expect(
+        find.text('Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Google Drive 백업 복원'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 
@@ -59,7 +180,89 @@ void main() {
 
     expect(find.byType(PageView), findsNothing);
     expect(find.text('일정 없음'), findsWidgets);
-    expect(find.text('일정을 입력하세요'), findsOneWidget);
+    expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'Daily restores saved Google Drive session and starts sync without prompt',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      final authService = _FakeGoogleDriveAuthService(
+        account: null,
+        restoredAccount: const GoogleDriveAccount(
+          email: 'restored@example.com',
+        ),
+      );
+      final syncService = _FakeSync();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(_FakeNotification()),
+            syncServiceProvider.overrideWithValue(syncService),
+            eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+            googleDriveAuthServiceProvider.overrideWithValue(authService),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(authService.restorePreviousSignInCalls, 1);
+      expect(authService.authorizationHeadersCalls, 1);
+      expect(authService.signInCalls, 0);
+      expect(syncService.startCalls, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('settings shows restored Google Drive account after restart', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    FlutterSecureStorage.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final authService = _FakeGoogleDriveAuthService(
+      account: null,
+      restoredAccount: const GoogleDriveAccount(email: 'restored@example.com'),
+    );
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: authService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(authService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+        ],
+        child: const MaterialApp(home: SettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(authService.currentAccount?.email, 'restored@example.com');
+    await tester.drag(find.byType(ListView), const Offset(0, -1600));
+    await tester.pumpAndSettle();
+
+    expect(find.text('restored@example.com'), findsOneWidget);
+    expect(authService.signInCalls, 0);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -204,6 +407,148 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('local data reset continues when notification cleanup fails', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    FlutterSecureStorage.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final authService = _FakeGoogleDriveAuthService(account: null);
+    final notificationService = _FakeNotification(
+      failCancelEventReminder: true,
+      failCancelMorningBriefing: true,
+    );
+    final eventRepository = _FakeEventRepository(
+      events: [
+        CalendarEvent(
+          id: 'reset-event',
+          title: '초기화 테스트',
+          startAt: DateTime.now().add(const Duration(hours: 1)),
+          endAt: DateTime.now().add(const Duration(hours: 2)),
+          allDay: false,
+          category: EventCategory.basic,
+          colorValue: EventCategory.basic.colorValue,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      ],
+    );
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: authService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(authService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('설정'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -2200));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('로컬 데이터 초기화'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('초기화'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Daily 시작하기'), findsOneWidget);
+    expect(eventRepository.clearAllCalls, 1);
+    expect(settingsRepository.load().onboardingCompleted, isFalse);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'settings Google Drive connect re-enables after desktop auth close',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+      FlutterSecureStorage.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      final authService = _FakeGoogleDriveAuthService(
+        account: null,
+        signInCompleter: Completer<GoogleDriveAccount?>(),
+        canCancelOnResume: true,
+      );
+      final notificationService = _FakeNotification();
+      final eventRepository = _FakeEventRepository();
+      final driveSyncService = _FakeGoogleDriveSyncService(
+        authService: authService,
+        eventRepository: eventRepository,
+        notificationService: notificationService,
+        settingsRepository: settingsRepository,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(notificationService),
+            eventRepositoryProvider.overrideWithValue(eventRepository),
+            googleDriveAuthServiceProvider.overrideWithValue(authService),
+            googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('설정'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, -1600));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Google Drive 연결'));
+      await tester.pump();
+
+      expect(authService.signInCalls, 1);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Google Drive 연결'),
+            )
+            .onPressed,
+        isNull,
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+
+      expect(authService.cancelPendingSignInCalls, 1);
+      expect(
+        find.text('Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Google Drive 연결'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets(
     'Google Drive disconnect can keep using local mode without syncing',
     (tester) async {
@@ -322,16 +667,52 @@ void main() {
 class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
   _FakeGoogleDriveAuthService({
     this.account = const GoogleDriveAccount(email: 'tester@example.com'),
+    this.restoredAccount,
+    this.signInCompleter,
+    this.canCancelOnResume = false,
   });
 
-  final GoogleDriveAccount? account;
+  GoogleDriveAccount? account;
+  final GoogleDriveAccount? restoredAccount;
+  final Completer<GoogleDriveAccount?>? signInCompleter;
+  final bool canCancelOnResume;
+  var cancelPendingSignInCalls = 0;
+  var authorizationHeadersCalls = 0;
+  var restorePreviousSignInCalls = 0;
+  var signInCalls = 0;
   var signOutCalls = 0;
 
   @override
   GoogleDriveAccount? get currentAccount => account;
 
   @override
+  bool get canCancelPendingSignInOnResume => canCancelOnResume;
+
+  @override
   Future<void> initialize() async {}
+
+  @override
+  Future<GoogleDriveAccount?> restorePreviousSignIn() async {
+    restorePreviousSignInCalls += 1;
+    account ??= restoredAccount;
+    return account;
+  }
+
+  @override
+  Future<GoogleDriveAccount?> signIn({
+    bool forceAccountSelection = false,
+  }) async {
+    signInCalls += 1;
+    if (signInCompleter != null) {
+      return signInCompleter!.future;
+    }
+    return account;
+  }
+
+  @override
+  void cancelPendingSignIn() {
+    cancelPendingSignInCalls += 1;
+  }
 
   @override
   Future<void> signOut() async {
@@ -342,6 +723,7 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
   Future<Map<String, String>?> authorizationHeaders({
     bool promptIfNecessary = false,
   }) async {
+    authorizationHeadersCalls += 1;
     if (account == null) {
       return null;
     }
@@ -381,6 +763,13 @@ class _FakeGoogleDriveSyncService extends GoogleDriveSyncService {
 }
 
 class _FakeNotification implements NotificationService {
+  _FakeNotification({
+    this.failCancelEventReminder = false,
+    this.failCancelMorningBriefing = false,
+  });
+
+  final bool failCancelEventReminder;
+  final bool failCancelMorningBriefing;
   var cancelMorningBriefingCalls = 0;
   var initializeCalls = 0;
   var showTestNotificationCalls = 0;
@@ -390,10 +779,20 @@ class _FakeNotification implements NotificationService {
   @override
   Future<void> cancelMorningBriefing() async {
     cancelMorningBriefingCalls += 1;
+    if (failCancelMorningBriefing) {
+      throw Exception('cancel morning briefing failed');
+    }
   }
 
   @override
-  Future<void> cancelEventReminder(String eventId) async {}
+  Future<void> cancelEventReminder(
+    String eventId, {
+    List<int> reminderMinutesBeforeList = const [],
+  }) async {
+    if (failCancelEventReminder) {
+      throw Exception('cancel event reminder failed');
+    }
+  }
 
   @override
   Future<void> initialize() async {
@@ -428,6 +827,8 @@ class _FakeNotification implements NotificationService {
 }
 
 class _FakeSync implements SyncService {
+  var startCalls = 0;
+
   @override
   Future<void> queueEventDelete(String eventId) async {}
 
@@ -435,7 +836,9 @@ class _FakeSync implements SyncService {
   Future<void> queueEventUpsert(CalendarEvent event) async {}
 
   @override
-  Future<void> start() async {}
+  Future<void> start() async {
+    startCalls += 1;
+  }
 }
 
 class _FakeEventRepository implements EventRepository {

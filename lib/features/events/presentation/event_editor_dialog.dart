@@ -48,7 +48,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   late TimeOfDay _endTime;
   late bool _allDay;
   late EventCategory _category;
-  late int? _reminder;
+  late List<int> _reminders;
   late RecurrenceFrequency _frequency;
   late int _recurrenceInterval;
   late _RecurrenceEndMode _recurrenceEndMode;
@@ -103,7 +103,9 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
       (category) => category.id == event?.category.id,
       orElse: () => usableCategories.first,
     );
-    _reminder = event?.reminderMinutesBefore ?? widget.defaultReminderMinutes;
+    _reminders =
+        event?.reminderMinutesBeforeList ??
+        normalizeReminderMinutes([widget.defaultReminderMinutes]);
     _frequency = event?.recurrence.frequency ?? RecurrenceFrequency.none;
     _recurrenceInterval = event?.recurrence.interval ?? 1;
     _recurrenceUntil = event?.recurrence.until;
@@ -264,29 +266,35 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                         },
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<int?>(
-                              key: ValueKey(_reminder),
-                              initialValue: _reminder,
-                              decoration: const InputDecoration(
-                                labelText: '알림',
-                              ),
-                              items: _reminderItems(),
-                              onChanged: (value) {
+                      InputDecorator(
+                        decoration: const InputDecoration(labelText: '알림'),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            FilterChip(
+                              label: const Text('없음'),
+                              selected: _reminders.isEmpty,
+                              onSelected: (_) {
                                 _clearValidation();
-                                setState(() => _reminder = value);
+                                setState(() => _reminders = const <int>[]);
                               },
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton.outlined(
-                            tooltip: '알림 직접 입력',
-                            onPressed: _pickCustomReminder,
-                            icon: const Icon(Icons.edit_outlined),
-                          ),
-                        ],
+                            for (final minutes in _reminderOptions())
+                              FilterChip(
+                                label: Text(_label(minutes)),
+                                selected: _reminders.contains(minutes),
+                                onSelected: (selected) =>
+                                    _toggleReminder(minutes, selected),
+                              ),
+                            IconButton.outlined(
+                              tooltip: '알림 직접 입력',
+                              onPressed: _pickCustomReminder,
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
+                          ],
+                        ),
                       ),
                       if (_allDay)
                         Align(
@@ -462,16 +470,19 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     );
   }
 
-  List<DropdownMenuItem<int?>> _reminderItems() {
-    final values = <int?>[null, 0, 10, 30, 60, 1440];
-    if (_reminder != null && !values.contains(_reminder)) {
-      values.add(_reminder);
+  List<int> _reminderOptions() {
+    return normalizeReminderMinutes([0, 10, 30, 60, 1440, ..._reminders]);
+  }
+
+  void _toggleReminder(int minutes, bool selected) {
+    _clearValidation();
+    final values = _reminders.toSet();
+    if (selected) {
+      values.add(minutes);
+    } else {
+      values.remove(minutes);
     }
-    return values
-        .map(
-          (value) => DropdownMenuItem(value: value, child: Text(_label(value))),
-        )
-        .toList();
+    setState(() => _reminders = normalizeReminderMinutes(values));
   }
 
   String _label(int? minutes) {
@@ -498,12 +509,14 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
       context: context,
       title: '알림 직접 입력',
       label: '몇 분 전에 알릴까요?',
-      initialValue: _reminder ?? 0,
+      initialValue: _reminders.isEmpty ? 0 : _reminders.first,
       minValue: 0,
     );
     if (picked != null) {
       _clearValidation();
-      setState(() => _reminder = picked);
+      setState(
+        () => _reminders = normalizeReminderMinutes([..._reminders, picked]),
+      );
     }
   }
 
@@ -680,7 +693,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
       allDay: _allDay,
       category: _category,
       colorValue: _category.colorValue,
-      reminderMinutesBefore: _reminder,
+      reminderMinutesBeforeList: _reminders,
       recurrence: RecurrenceRule(
         frequency: _frequency,
         interval: _frequency == RecurrenceFrequency.none

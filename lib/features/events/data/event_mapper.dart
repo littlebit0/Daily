@@ -24,7 +24,10 @@ extension EventRecordMapper on EventRecord {
       allDay: allDay,
       category: EventCategory.fromStored(category, colorValue: colorValue),
       colorValue: colorValue,
-      reminderMinutesBefore: reminderMinutesBefore,
+      reminderMinutesBeforeList: _reminderMinutesFromJson(
+        reminderMinutesBeforeList,
+        reminderMinutesBefore,
+      ),
       recurrence: RecurrenceRule(
         frequency: RecurrenceFrequency.fromName(recurrenceFrequency),
         interval: recurrenceInterval,
@@ -57,5 +60,22 @@ extension EventRecordMapper on EventRecord {
     } on Object {
       return const [];
     }
+  }
+
+  List<int> _reminderMinutesFromJson(String raw, int? legacyValue) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final values = normalizeReminderMinutes(decoded.whereType<int>());
+        if (values.isNotEmpty || legacyValue == null) {
+          return values;
+        }
+      }
+    } on Object {
+      // Fall back to the legacy single reminder column below.
+    }
+    return legacyValue == null
+        ? const <int>[]
+        : normalizeReminderMinutes([legacyValue]);
   }
 }

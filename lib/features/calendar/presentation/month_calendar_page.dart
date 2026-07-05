@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -10,15 +13,33 @@ import '../../events/domain/event_category.dart';
 import '../../events/domain/event_draft.dart';
 import '../../events/presentation/event_details_panel.dart';
 import '../../events/presentation/event_editor_dialog.dart';
-import '../../search/presentation/search_page.dart';
 import '../../settings/presentation/settings_page.dart';
 import '../widgets/calendar_month_grid.dart';
 
-class MonthCalendarPage extends ConsumerWidget {
+class MonthCalendarPage extends ConsumerStatefulWidget {
   const MonthCalendarPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MonthCalendarPage> createState() => _MonthCalendarPageState();
+}
+
+class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
+  final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
+  Timer? _searchDebounce;
+  Future<List<CalendarEvent>>? _searchResults;
+  var _searchOpen = false;
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(appSettingsProvider);
     final month = ref.watch(visibleMonthProvider);
     final selectedDate = ref.watch(selectedDateProvider);
@@ -47,6 +68,24 @@ class MonthCalendarPage extends ConsumerWidget {
               selectedDate: selectedDate,
               viewMode: viewMode,
               searchQuery: searchQuery,
+              searchOpen: _searchOpen,
+              onSearchPressed: _toggleSearch,
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: _searchOpen
+                  ? _InlineSearchPanel(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      results: _searchResults,
+                      onChanged: _handleSearchChanged,
+                      onSubmitted: _runSearch,
+                      onClose: _closeSearch,
+                      onEventSelected: _selectSearchResult,
+                    )
+                  : const SizedBox(width: double.infinity),
             ),
             Expanded(
               child: viewMode == CalendarViewMode.day
@@ -118,11 +157,199 @@ class MonthCalendarPage extends ConsumerWidget {
                       },
                     ),
             ),
-            const ChatInputBar(),
+            _CalendarBottomBar(
+              viewMode: viewMode,
+              onQuickAccessPressed: () => _showQuickAccessSheet(context, ref),
+              onLlmPressed: () => _showLlmSheet(context),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  void _toggleSearch() {
+    setState(() => _searchOpen = !_searchOpen);
+    if (_searchOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _searchFocusNode.requestFocus();
+        }
+      });
+    }
+  }
+
+  void _closeSearch() {
+    _searchDebounce?.cancel();
+    setState(() {
+      _searchOpen = false;
+      _searchResults = null;
+    });
+    _searchController.clear();
+    _searchFocusNode.unfocus();
+  }
+
+  void _handleSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    final query = value.trim();
+    if (query.isEmpty) {
+      setState(() => _searchResults = null);
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 260), () {
+      _runSearch();
+    });
+  }
+
+  void _runSearch() {
+    final query = _searchController.text.trim();
+    setState(() {
+      _searchResults = query.isEmpty
+          ? null
+          : ref.read(eventRepositoryProvider).search(query);
+    });
+  }
+
+  void _selectSearchResult(CalendarEvent event) {
+    ref.read(visibleMonthProvider.notifier).state = DateTime(
+      event.startAt.year,
+      event.startAt.month,
+    );
+    ref.read(selectedDateProvider.notifier).state = DateTime(
+      event.startAt.year,
+      event.startAt.month,
+      event.startAt.day,
+    );
+    _closeSearch();
+  }
+
+  void _showLlmSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: const ChatInputBar(),
+      ),
+    );
+  }
+
+  Future<void> _showQuickAccessSheet(BuildContext context, WidgetRef ref) {
+    final settings = ref.read(appSettingsProvider);
+    final query = ref.read(calendarSearchQueryProvider);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final currentMonth = ref.read(visibleMonthProvider);
+    final range = _monthRangeFor(currentMonth, settings.weekStartsOnMonday);
+    final eventsAsync = ref.read(eventsInRangeProvider(range));
+
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+        child: eventsAsync.when(
+          data: (events) {
+            final visibleEvents = _filterVisibleEvents(events, settings, query);
+            final todayEvents = _eventsForDay(visibleEvents, today);
+            final ddayEvents =
+                visibleEvents.where((event) => event.showDday).toList()
+                  ..sort((a, b) => a.startAt.compareTo(b.startAt));
+            return ListView(
+              shrinkWrap: true,
+              children: [
+                Text('빠른 보기', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                _QuickAccessCard(
+                  icon: Icons.calendar_month_outlined,
+                  title: '월간 미니 캘린더',
+                  subtitle: '${currentMonth.year}년 ${currentMonth.month}월',
+                  items: _monthSummary(visibleEvents),
+                  onTap: () {
+                    ref.read(calendarViewModeProvider.notifier).state =
+                        CalendarViewMode.month;
+                    Navigator.of(context).pop();
+                  },
+                ),
+                const SizedBox(height: 10),
+                _QuickAccessCard(
+                  icon: Icons.today_outlined,
+                  title: '오늘 일정',
+                  subtitle: '${today.month}월 ${today.day}일',
+                  items: todayEvents.isEmpty
+                      ? const ['일정 없음']
+                      : todayEvents
+                            .take(4)
+                            .map((event) => _eventPreview(event, settings))
+                            .toList(),
+                  onTap: () {
+                    ref.read(selectedDateProvider.notifier).state = today;
+                    ref.read(visibleMonthProvider.notifier).state = DateTime(
+                      today.year,
+                      today.month,
+                    );
+                    ref.read(calendarViewModeProvider.notifier).state =
+                        CalendarViewMode.day;
+                    Navigator.of(context).pop();
+                  },
+                ),
+                const SizedBox(height: 10),
+                _QuickAccessCard(
+                  icon: Icons.flag_outlined,
+                  title: 'D-day',
+                  subtitle: '중요한 날짜',
+                  items: ddayEvents.isEmpty
+                      ? const ['D-day 일정 없음']
+                      : ddayEvents
+                            .take(4)
+                            .map((event) => _eventPreview(event, settings))
+                            .toList(),
+                  onTap: () async {
+                    final updated = settings.copyWith(calendarDdayOnly: true);
+                    await ref.read(settingsRepositoryProvider).save(updated);
+                    if (!context.mounted) {
+                      return;
+                    }
+                    ref.read(appSettingsProvider.notifier).state = updated;
+                    ref.read(calendarViewModeProvider.notifier).state =
+                        CalendarViewMode.month;
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
+          error: (error, stackTrace) => Text('$error'),
+          loading: () => const SizedBox(
+            height: 140,
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<String> _monthSummary(List<CalendarEvent> events) {
+    final normalCount = events.where((event) => !event.holiday).length;
+    final ddayCount = events.where((event) => event.showDday).length;
+    return [
+      '일정 $normalCount개',
+      'D-day $ddayCount개',
+      '공휴일 ${events.where((event) => event.holiday).length}개',
+    ];
+  }
+
+  String _eventPreview(CalendarEvent event, AppSettings settings) {
+    final title = settings.hideSensitiveEvents && event.sensitive
+        ? '비공개 일정'
+        : event.title;
+    if (event.allDay) {
+      return title;
+    }
+    return '$title  ${DateFormat('HH:mm').format(event.startAt)}';
   }
 
   void _showDaySheet(
@@ -150,6 +377,139 @@ class MonthCalendarPage extends ConsumerWidget {
       ref,
       DateTime(currentMonth.year, currentMonth.month + delta),
       selectedDate,
+    );
+  }
+}
+
+class _InlineSearchPanel extends StatelessWidget {
+  const _InlineSearchPanel({
+    required this.controller,
+    required this.focusNode,
+    required this.results,
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.onClose,
+    required this.onEventSelected,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final Future<List<CalendarEvent>>? results;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onSubmitted;
+  final VoidCallback onClose;
+  final ValueChanged<CalendarEvent> onEventSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xffedf0f5))),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: controller,
+            focusNode: focusNode,
+            textInputAction: TextInputAction.search,
+            onChanged: onChanged,
+            onSubmitted: (_) => onSubmitted(),
+            decoration: InputDecoration(
+              hintText: '제목, 메모, 장소 검색',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: '검색',
+                    onPressed: onSubmitted,
+                    icon: const Icon(Icons.arrow_forward),
+                  ),
+                  IconButton(
+                    tooltip: '닫기',
+                    onPressed: onClose,
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          FutureBuilder<List<CalendarEvent>>(
+            future: results,
+            builder: (context, snapshot) {
+              if (results == null) {
+                return const SizedBox.shrink();
+              }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: LinearProgressIndicator(minHeight: 2),
+                );
+              }
+              final events = snapshot.data ?? const <CalendarEvent>[];
+              if (events.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '검색 결과가 없습니다.',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ),
+                );
+              }
+              return ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 260),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.only(top: 10),
+                  itemBuilder: (context, index) => _InlineSearchResultTile(
+                    event: events[index],
+                    onTap: () => onEventSelected(events[index]),
+                  ),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 8),
+                  itemCount: events.length,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineSearchResultTile extends StatelessWidget {
+  const _InlineSearchResultTile({required this.event, required this.onTap});
+
+  final CalendarEvent event;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final date = DateFormat('yyyy년 M월 d일').format(event.startAt);
+    final time = event.allDay
+        ? '종일'
+        : DateFormat('HH:mm').format(event.startAt);
+    return ListTile(
+      dense: true,
+      onTap: onTap,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xffedf0f5)),
+      ),
+      leading: CircleAvatar(
+        backgroundColor: Color(event.colorValue).withValues(alpha: 0.12),
+        child: Icon(Icons.flag, color: Color(event.colorValue)),
+      ),
+      title: Text(event.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text('$date  $time'),
     );
   }
 }
@@ -277,6 +637,7 @@ class _MonthPageViewState extends State<_MonthPageView> {
   late final DateTime _anchorMonth;
   var _currentPage = _initialPage;
   var _applyingExternalMonth = false;
+  DateTime? _lastPointerMonthMoveAt;
 
   @override
   void initState() {
@@ -308,28 +669,68 @@ class _MonthPageViewState extends State<_MonthPageView> {
 
   @override
   Widget build(BuildContext context) {
-    return PageView.builder(
-      controller: _controller,
-      allowImplicitScrolling: true,
-      physics: const _ResponsiveMonthPagePhysics(),
-      onPageChanged: (index) {
-        if (_applyingExternalMonth || index == _currentPage) {
-          return;
-        }
-        final delta = index - _currentPage;
-        _currentPage = index;
-        widget.onMonthDelta(delta);
-      },
-      itemBuilder: (context, index) {
-        final pageMonth = _monthForPage(index);
-        return _CalendarMonthPage(
-          month: pageMonth,
-          selectedDate: widget.selectedDate,
-          settings: widget.settings,
-          searchQuery: widget.searchQuery,
-          onDateSelected: widget.onDateSelected,
-        );
-      },
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(
+        dragDevices: const {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.stylus,
+          PointerDeviceKind.invertedStylus,
+        },
+      ),
+      child: Listener(
+        onPointerSignal: _handlePointerSignal,
+        child: PageView.builder(
+          controller: _controller,
+          allowImplicitScrolling: true,
+          physics: const _ResponsiveMonthPagePhysics(),
+          onPageChanged: (index) {
+            if (_applyingExternalMonth || index == _currentPage) {
+              return;
+            }
+            final delta = index - _currentPage;
+            _currentPage = index;
+            widget.onMonthDelta(delta);
+          },
+          itemBuilder: (context, index) {
+            final pageMonth = _monthForPage(index);
+            return _CalendarMonthPage(
+              month: pageMonth,
+              selectedDate: widget.selectedDate,
+              settings: widget.settings,
+              searchQuery: widget.searchQuery,
+              onDateSelected: widget.onDateSelected,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (Theme.of(context).platform != TargetPlatform.macOS ||
+        event is! PointerScrollEvent ||
+        !_controller.hasClients) {
+      return;
+    }
+    final primaryDelta =
+        event.scrollDelta.dx.abs() >= event.scrollDelta.dy.abs()
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
+    if (primaryDelta.abs() < 18) {
+      return;
+    }
+    final now = DateTime.now();
+    final lastMoveAt = _lastPointerMonthMoveAt;
+    if (lastMoveAt != null &&
+        now.difference(lastMoveAt) < const Duration(milliseconds: 280)) {
+      return;
+    }
+    _lastPointerMonthMoveAt = now;
+    final nextPage = _currentPage + (primaryDelta > 0 ? 1 : -1);
+    _controller.animateToPage(
+      nextPage,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -462,25 +863,28 @@ class _CalendarMonthPage extends ConsumerWidget {
   }
 }
 
-enum _CalendarHeaderAction { quickAccess, filter, search, settings }
-
 class _CalendarHeader extends ConsumerWidget {
   const _CalendarHeader({
     required this.month,
     required this.selectedDate,
     required this.viewMode,
     required this.searchQuery,
+    required this.searchOpen,
+    required this.onSearchPressed,
   });
 
   final DateTime month;
   final DateTime selectedDate;
   final CalendarViewMode viewMode;
   final String searchQuery;
+  final bool searchOpen;
+  final VoidCallback onSearchPressed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final label = '${month.year}년 ${month.month}월';
     final compact = MediaQuery.sizeOf(context).width < 680;
+    final ios = Theme.of(context).platform == TargetPlatform.iOS;
     final monthButton = TextButton.icon(
       onPressed: () => _showMonthPicker(context, ref),
       icon: const Icon(Icons.calendar_month_outlined, size: 20),
@@ -498,26 +902,7 @@ class _CalendarHeader extends ConsumerWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
-    final viewSwitch = SegmentedButton<CalendarViewMode>(
-      selected: {viewMode},
-      showSelectedIcon: false,
-      style: ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        padding: WidgetStateProperty.all(
-          const EdgeInsets.symmetric(horizontal: 8),
-        ),
-        minimumSize: WidgetStateProperty.all(const Size(34, 34)),
-      ),
-      segments: const [
-        ButtonSegment(value: CalendarViewMode.week, label: Text('주')),
-        ButtonSegment(value: CalendarViewMode.month, label: Text('월')),
-        ButtonSegment(value: CalendarViewMode.day, label: Text('일')),
-      ],
-      onSelectionChanged: (selection) {
-        ref.read(calendarViewModeProvider.notifier).state = selection.first;
-      },
-    );
-    final actions = [
+    final navigationActions = [
       IconButton(
         tooltip: '이전',
         onPressed: () => _moveVisibleRange(ref, -1),
@@ -533,22 +918,22 @@ class _CalendarHeader extends ConsumerWidget {
         onPressed: () => _goToday(ref),
         icon: const Icon(Icons.today_outlined),
       ),
+    ];
+    final utilityActions = [
       IconButton(
         tooltip: '빠른 보기',
         onPressed: () => _showQuickAccessSheet(context, ref),
         icon: const Icon(Icons.dashboard_outlined),
       ),
       IconButton(
+        tooltip: searchOpen ? '검색 닫기' : '검색',
+        onPressed: onSearchPressed,
+        icon: Icon(searchOpen ? Icons.search_off : Icons.search),
+      ),
+      IconButton(
         tooltip: '검색/필터',
         onPressed: () => _showFilterSheet(context, ref),
         icon: Icon(searchQuery.isEmpty ? Icons.filter_list : Icons.filter_alt),
-      ),
-      IconButton(
-        tooltip: '전체 검색',
-        onPressed: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const SearchPage())),
-        icon: const Icon(Icons.search),
       ),
       IconButton(
         tooltip: '설정',
@@ -559,51 +944,6 @@ class _CalendarHeader extends ConsumerWidget {
       ),
     ];
 
-    final compactViewSwitch = PopupMenuButton<CalendarViewMode>(
-      tooltip: '보기 변경',
-      initialValue: viewMode,
-      onSelected: (value) {
-        ref.read(calendarViewModeProvider.notifier).state = value;
-      },
-      itemBuilder: (context) => [
-        for (final mode in CalendarViewMode.values)
-          PopupMenuItem(value: mode, child: Text(_viewModeLabel(mode))),
-      ],
-      child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xffc5cad3)),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _viewModeLabel(viewMode),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(width: 2),
-            const Icon(Icons.expand_more, size: 18),
-          ],
-        ),
-      ),
-    );
-    final compactMoreActions = PopupMenuButton<_CalendarHeaderAction>(
-      tooltip: '더보기',
-      icon: const Icon(Icons.more_horiz),
-      onSelected: (value) => _handleHeaderAction(context, ref, value),
-      itemBuilder: (context) => const [
-        PopupMenuItem(
-          value: _CalendarHeaderAction.quickAccess,
-          child: Text('빠른 보기'),
-        ),
-        PopupMenuItem(value: _CalendarHeaderAction.filter, child: Text('필터')),
-        PopupMenuItem(value: _CalendarHeaderAction.search, child: Text('검색')),
-        PopupMenuItem(value: _CalendarHeaderAction.settings, child: Text('설정')),
-      ],
-    );
-
     if (compact) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
@@ -611,10 +951,10 @@ class _CalendarHeader extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(child: monthButton),
-            actions[0],
-            actions[1],
-            compactViewSwitch,
-            compactMoreActions,
+            if (!ios) ...navigationActions.take(2),
+            utilityActions[1],
+            utilityActions[2],
+            utilityActions[3],
           ],
         ),
       );
@@ -626,41 +966,11 @@ class _CalendarHeader extends ConsumerWidget {
         children: [
           monthButton,
           const Spacer(),
-          viewSwitch,
-          const SizedBox(width: 6),
-          ...actions,
+          if (!ios) ...[...navigationActions, const SizedBox(width: 6)],
+          ...utilityActions,
         ],
       ),
     );
-  }
-
-  String _viewModeLabel(CalendarViewMode mode) {
-    return switch (mode) {
-      CalendarViewMode.week => '주',
-      CalendarViewMode.month => '월',
-      CalendarViewMode.day => '일',
-    };
-  }
-
-  void _handleHeaderAction(
-    BuildContext context,
-    WidgetRef ref,
-    _CalendarHeaderAction action,
-  ) {
-    switch (action) {
-      case _CalendarHeaderAction.quickAccess:
-        _showQuickAccessSheet(context, ref);
-      case _CalendarHeaderAction.filter:
-        _showFilterSheet(context, ref);
-      case _CalendarHeaderAction.search:
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const SearchPage()));
-      case _CalendarHeaderAction.settings:
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
-    }
   }
 
   Future<void> _showMonthPicker(BuildContext context, WidgetRef ref) async {
@@ -724,129 +1034,148 @@ class _CalendarHeader extends ConsumerWidget {
 
     return showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              Text('검색/필터', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              TextField(
-                controller: queryController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: '현재 보기에서 검색',
-                  prefixIcon: Icon(Icons.search),
-                ),
-                onChanged: (value) =>
-                    ref.read(calendarSearchQueryProvider.notifier).state = value
-                        .trim(),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<CalendarDensity>(
-                initialValue: density,
-                decoration: const InputDecoration(labelText: '일정 표시 밀도'),
-                items: CalendarDensity.values
-                    .map(
-                      (item) => DropdownMenuItem(
-                        value: item,
-                        child: Text(item.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) async {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() => density = value);
-                  final updated = ref
-                      .read(appSettingsProvider)
-                      .copyWith(calendarDensity: value);
-                  await ref.read(settingsRepositoryProvider).save(updated);
-                  ref.read(appSettingsProvider.notifier).state = updated;
-                },
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: ddayOnly,
-                title: const Text('D-day 일정만 보기'),
-                onChanged: (value) async {
-                  setState(() => ddayOnly = value);
-                  final updated = ref
-                      .read(appSettingsProvider)
-                      .copyWith(calendarDdayOnly: value);
-                  await ref.read(settingsRepositoryProvider).save(updated);
-                  ref.read(appSettingsProvider.notifier).state = updated;
-                },
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: showHolidays,
-                title: const Text('공휴일 표시'),
-                onChanged: (value) async {
-                  setState(() => showHolidays = value);
-                  final updated = ref
-                      .read(appSettingsProvider)
-                      .copyWith(calendarShowHolidays: value);
-                  await ref.read(settingsRepositoryProvider).save(updated);
-                  ref.read(appSettingsProvider.notifier).state = updated;
-                },
-              ),
-              const SizedBox(height: 8),
-              Text('분류 표시', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
+        builder: (context, setState) {
+          final viewInsets = MediaQuery.viewInsetsOf(context);
+          final maxHeight = MediaQuery.sizeOf(context).height * 0.86;
+          return Padding(
+            padding: EdgeInsets.only(bottom: viewInsets.bottom),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxHeight),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                shrinkWrap: true,
                 children: [
-                  for (final category in settings.categories)
-                    FilterChip(
-                      label: Text(category.label),
-                      selected: !hidden.contains(category.id),
-                      onSelected: (selected) async {
-                        setState(() {
-                          if (selected) {
-                            hidden.remove(category.id);
-                          } else {
-                            hidden.add(category.id);
-                          }
-                        });
-                        final updated = ref
-                            .read(appSettingsProvider)
-                            .copyWith(hiddenCategoryIds: hidden.toList());
-                        await ref
-                            .read(settingsRepositoryProvider)
-                            .save(updated);
-                        ref.read(appSettingsProvider.notifier).state = updated;
-                      },
+                  Text('검색/필터', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: queryController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: '현재 보기에서 검색',
+                      prefixIcon: Icon(Icons.search),
                     ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      queryController.clear();
-                      ref.read(calendarSearchQueryProvider.notifier).state = '';
+                    onChanged: (value) =>
+                        ref.read(calendarSearchQueryProvider.notifier).state =
+                            value.trim(),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<CalendarDensity>(
+                    initialValue: density,
+                    decoration: const InputDecoration(labelText: '일정 표시 밀도'),
+                    items: CalendarDensity.values
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(item.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) async {
+                      if (value == null) {
+                        return;
+                      }
+                      setState(() => density = value);
+                      final updated = ref
+                          .read(appSettingsProvider)
+                          .copyWith(calendarDensity: value);
+                      await ref.read(settingsRepositoryProvider).save(updated);
+                      ref.read(appSettingsProvider.notifier).state = updated;
                     },
-                    icon: const Icon(Icons.clear),
-                    label: const Text('검색어 지우기'),
                   ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('완료'),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: ddayOnly,
+                    title: const Text('D-day 일정만 보기'),
+                    onChanged: (value) async {
+                      setState(() => ddayOnly = value);
+                      final updated = ref
+                          .read(appSettingsProvider)
+                          .copyWith(calendarDdayOnly: value);
+                      await ref.read(settingsRepositoryProvider).save(updated);
+                      ref.read(appSettingsProvider.notifier).state = updated;
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: showHolidays,
+                    title: const Text('공휴일 표시'),
+                    onChanged: (value) async {
+                      setState(() => showHolidays = value);
+                      final updated = ref
+                          .read(appSettingsProvider)
+                          .copyWith(calendarShowHolidays: value);
+                      await ref.read(settingsRepositoryProvider).save(updated);
+                      ref.read(appSettingsProvider.notifier).state = updated;
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text('분류 표시', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      for (final category in settings.categories)
+                        FilterChip(
+                          label: Text(category.label),
+                          selected: !hidden.contains(category.id),
+                          onSelected: (selected) async {
+                            setState(() {
+                              if (selected) {
+                                hidden.remove(category.id);
+                              } else {
+                                hidden.add(category.id);
+                              }
+                            });
+                            final updated = ref
+                                .read(appSettingsProvider)
+                                .copyWith(hiddenCategoryIds: hidden.toList());
+                            await ref
+                                .read(settingsRepositoryProvider)
+                                .save(updated);
+                            ref.read(appSettingsProvider.notifier).state =
+                                updated;
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          queryController.clear();
+                          ref.read(calendarSearchQueryProvider.notifier).state =
+                              '';
+                        },
+                        icon: const Icon(Icons.clear),
+                        label: const Text('검색어 지우기'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('완료'),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
-    ).whenComplete(queryController.dispose);
+    ).whenComplete(
+      () => WidgetsBinding.instance.addPostFrameCallback(
+        (_) => queryController.dispose(),
+      ),
+    );
   }
 
   Future<void> _showQuickAccessSheet(BuildContext context, WidgetRef ref) {
@@ -962,6 +1291,121 @@ class _CalendarHeader extends ConsumerWidget {
       return title;
     }
     return '$title  ${DateFormat('HH:mm').format(event.startAt)}';
+  }
+}
+
+class _CalendarBottomBar extends ConsumerWidget {
+  const _CalendarBottomBar({
+    required this.viewMode,
+    required this.onQuickAccessPressed,
+    required this.onLlmPressed,
+  });
+
+  final CalendarViewMode viewMode;
+  final VoidCallback onQuickAccessPressed;
+  final VoidCallback onLlmPressed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Color(0xffedf0f5))),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final barWidth = constraints.maxWidth;
+            final sideSize = (barWidth * 0.13).clamp(44.0, 64.0);
+            final segmentWidth = (barWidth * 0.31).clamp(104.0, 168.0);
+            final controlHeight = (barWidth * 0.092).clamp(34.0, 42.0);
+            final iconSize = (sideSize * 0.43).clamp(19.0, 24.0);
+            final segmentPadding = (segmentWidth * 0.07).clamp(7.0, 12.0);
+
+            return Row(
+              children: [
+                SizedBox.square(
+                  dimension: sideSize,
+                  child: Tooltip(
+                    message: '빠른 보기',
+                    child: IconButton(
+                      onPressed: onQuickAccessPressed,
+                      icon: Icon(Icons.dashboard_outlined, size: iconSize),
+                      style: IconButton.styleFrom(
+                        fixedSize: Size.square(sideSize),
+                        minimumSize: Size.square(sideSize),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                SizedBox(
+                  width: segmentWidth,
+                  height: controlHeight,
+                  child: SegmentedButton<CalendarViewMode>(
+                    selected: {viewMode},
+                    showSelectedIcon: false,
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      padding: WidgetStateProperty.all(
+                        EdgeInsets.symmetric(horizontal: segmentPadding),
+                      ),
+                      minimumSize: WidgetStateProperty.all(
+                        Size(segmentWidth / 3, controlHeight),
+                      ),
+                      textStyle: WidgetStateProperty.all(
+                        TextStyle(
+                          fontSize: (barWidth * 0.029).clamp(11.0, 13.0),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    segments: const [
+                      ButtonSegment(
+                        value: CalendarViewMode.week,
+                        label: Text('주'),
+                      ),
+                      ButtonSegment(
+                        value: CalendarViewMode.month,
+                        label: Text('월'),
+                      ),
+                      ButtonSegment(
+                        value: CalendarViewMode.day,
+                        label: Text('일'),
+                      ),
+                    ],
+                    onSelectionChanged: (selection) {
+                      ref.read(calendarViewModeProvider.notifier).state =
+                          selection.first;
+                    },
+                  ),
+                ),
+                const Spacer(),
+                SizedBox.square(
+                  dimension: sideSize,
+                  child: Tooltip(
+                    message: 'LLM',
+                    child: IconButton(
+                      onPressed: onLlmPressed,
+                      icon: Icon(Icons.auto_awesome_outlined, size: iconSize),
+                      style: IconButton.styleFrom(
+                        fixedSize: Size.square(sideSize),
+                        minimumSize: Size.square(sideSize),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 }
 
@@ -1299,7 +1743,7 @@ class _WeekDayPanel extends StatelessWidget {
               else
                 Expanded(
                   child: ListView.separated(
-                    physics: const NeverScrollableScrollPhysics(),
+                    physics: const AlwaysScrollableScrollPhysics(),
                     itemBuilder: (context, index) => _WeekEventFlag(
                       event: events[index],
                       hideSensitiveEvents: hideSensitiveEvents,
