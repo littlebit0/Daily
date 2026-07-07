@@ -57,6 +57,7 @@ final eventRepositoryProvider = Provider<EventRepository>((ref) {
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   return LocalNotificationService(
     settingsRepository: ref.watch(settingsRepositoryProvider),
+    eventRepository: ref.watch(eventRepositoryProvider),
   );
 });
 

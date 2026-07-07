@@ -631,6 +631,46 @@ class _MemoryEventRepository implements EventRepository {
   Future<List<CalendarEvent>> allEventsForSync() async => events;
 
   @override
+  Future<List<CalendarEvent>> updateCategoryReferences({
+    required EventCategory previous,
+    required EventCategory updated,
+    required DateTime updatedAt,
+  }) async {
+    final affected = <CalendarEvent>[];
+    for (final entry in _events.entries.toList()) {
+      final event = entry.value;
+      if (event.deletedAt != null || event.category.id != previous.id) {
+        continue;
+      }
+      final next = event.copyWith(
+        category: updated,
+        colorValue: updated.colorValue,
+        updatedAt: updatedAt,
+        syncStatus: 'pending',
+        holiday: updated.id == EventCategory.holiday.id,
+      );
+      _events[entry.key] = next;
+      affected.add(next);
+    }
+    return affected;
+  }
+
+  @override
+  Future<List<CalendarEvent>> eventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) async {
+    return events
+        .where(
+          (event) =>
+              event.deletedAt == null &&
+              event.startAt.isBefore(rangeEnd) &&
+              event.endAt.isAfter(rangeStart),
+        )
+        .toList();
+  }
+
+  @override
   Future<void> clearAll() async {
     _events.clear();
   }

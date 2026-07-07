@@ -9,6 +9,10 @@ extension EventRecordMapper on EventRecord {
   CalendarEvent toDomain({DateTime? occurrenceStart}) {
     final baseStart = occurrenceStart ?? startAt;
     final duration = endAt.difference(startAt);
+    final mappedCategory = EventCategory.fromStored(
+      category,
+      colorValue: colorValue,
+    );
     return CalendarEvent(
       id: id,
       occurrenceId: occurrenceStart == null
@@ -22,7 +26,7 @@ extension EventRecordMapper on EventRecord {
       startAt: baseStart,
       endAt: baseStart.add(duration),
       allDay: allDay,
-      category: EventCategory.fromStored(category, colorValue: colorValue),
+      category: mappedCategory,
       colorValue: colorValue,
       reminderMinutesBeforeList: _reminderMinutesFromJson(
         reminderMinutesBeforeList,
@@ -42,6 +46,7 @@ extension EventRecordMapper on EventRecord {
       syncStatus: syncStatus,
       showDday: showDday,
       sensitive: sensitive,
+      holiday: mappedCategory.id == EventCategory.holiday.id,
     ).normalizeAllDayBounds();
   }
 

@@ -124,10 +124,13 @@ class AppleSignInService {
     }
     try {
       final state = await _credentialStateChecker(account.userIdentifier);
-      if (state == CredentialState.revoked ||
-          state == CredentialState.notFound) {
-        await signOut();
-        return null;
+      // Daily treats Sign in with Apple as the user's app account marker.
+      // iOS can report a transient non-authorized state after simulator resets,
+      // device account changes, or credential-state lookup failures. Do not
+      // erase the local app login state unless the user explicitly logs out or
+      // withdraws membership from Daily.
+      if (state == CredentialState.revoked) {
+        return account;
       }
       return currentAccount;
     } on Object {

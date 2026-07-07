@@ -7,6 +7,7 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../features/events/domain/calendar_event.dart';
+import '../../features/events/domain/event_repository.dart';
 import '../settings/app_settings.dart';
 import '../settings/settings_repository.dart';
 import '../time/korea_time.dart';
@@ -16,11 +17,14 @@ import 'reminder_delivery_plan.dart';
 class LocalNotificationService implements NotificationService {
   LocalNotificationService({
     required SettingsRepository settingsRepository,
+    required EventRepository eventRepository,
     FlutterLocalNotificationsPlugin? plugin,
   }) : _settingsRepository = settingsRepository,
+       _eventRepository = eventRepository,
        _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   static const _briefingId = 800000;
+  static const _briefingScheduleDays = 14;
   static const _testNotificationIdSeed = 800001;
   static const _androidChannelId = 'daily_reminders';
   static const _androidChannelName = 'Daily reminders';
@@ -47,6 +51,7 @@ class LocalNotificationService implements NotificationService {
   ];
 
   final SettingsRepository _settingsRepository;
+  final EventRepository _eventRepository;
   final FlutterLocalNotificationsPlugin _plugin;
   var _initialized = false;
 
@@ -202,20 +207,27 @@ class LocalNotificationService implements NotificationService {
       scheduled = scheduled.add(const Duration(days: 1));
     }
 
-    await _scheduleNotification(
-      id: _briefingId,
-      title: '오늘의 일정',
-      body: '오늘 일정을 확인할 시간입니다.',
-      scheduled: scheduled,
-      repeatsDaily: true,
-      payload: 'morning_briefing',
-    );
+    for (var dayOffset = 0; dayOffset < _briefingScheduleDays; dayOffset++) {
+      final briefingAt = scheduled.add(Duration(days: dayOffset));
+      await _scheduleNotification(
+        id: _morningBriefingNotificationId(dayOffset),
+        title: '오늘의 일정',
+        body: await _morningBriefingBody(briefingAt),
+        scheduled: briefingAt,
+        payload: 'morning_briefing',
+      );
+    }
   }
 
   @override
   Future<void> cancelMorningBriefing() async {
     await initialize();
     await _cancelPendingNotification(_briefingId);
+    for (var dayOffset = 0; dayOffset < _briefingScheduleDays; dayOffset++) {
+      await _cancelPendingNotification(
+        _morningBriefingNotificationId(dayOffset),
+      );
+    }
   }
 
   @override
@@ -227,6 +239,49 @@ class LocalNotificationService implements NotificationService {
       body: '이 알림이 보이면 Daily의 알림 표시 권한은 정상입니다.',
       payload: 'notification_test',
     );
+  }
+
+  Future<String> _morningBriefingBody(DateTime briefingDate) async {
+    final today = DateTime(
+      briefingDate.year,
+      briefingDate.month,
+      briefingDate.day,
+    );
+    final tomorrow = today.add(const Duration(days: 1));
+    final settings = _settingsRepository.load();
+    final events =
+        (await _eventRepository.eventsInRange(
+          today,
+          tomorrow,
+        )).where((event) => !event.isDeleted).toList()..sort((a, b) {
+          if (a.allDay != b.allDay) {
+            return a.allDay ? -1 : 1;
+          }
+          return a.startAt.compareTo(b.startAt);
+        });
+    if (events.isEmpty) {
+      return '오늘 등록된 일정이 없습니다.';
+    }
+
+    const maxItems = 4;
+    final visible = events
+        .take(maxItems)
+        .map((event) => _briefingEventLabel(event, settings));
+    final hiddenCount = events.length - maxItems;
+    final suffix = hiddenCount > 0 ? ' 외 $hiddenCount개 더 있습니다.' : '';
+    return '${visible.join(' · ')}$suffix';
+  }
+
+  String _briefingEventLabel(CalendarEvent event, AppSettings settings) {
+    final title = settings.hideSensitiveNotifications && event.sensitive
+        ? '비공개 일정'
+        : event.title;
+    if (event.allDay) {
+      return '종일 $title';
+    }
+    final hour = event.startAt.hour.toString().padLeft(2, '0');
+    final minute = event.startAt.minute.toString().padLeft(2, '0');
+    return '$hour:$minute $title';
   }
 
   @override
@@ -506,6 +561,10 @@ class LocalNotificationService implements NotificationService {
   int _testNotificationId() {
     return _testNotificationIdSeed +
         DateTime.now().millisecondsSinceEpoch.remainder(1000000);
+  }
+
+  int _morningBriefingNotificationId(int dayOffset) {
+    return _briefingId + 100 + dayOffset;
   }
 
   int _eventDdayNotificationId(String eventId, int offset) {

@@ -43,7 +43,11 @@ class GoogleDriveAuthService {
   static const _appleClientId = String.fromEnvironment(
     'GOOGLE_APPLE_CLIENT_ID',
   );
-  static const _iosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+  static const _iosClientId = String.fromEnvironment(
+    'GOOGLE_IOS_CLIENT_ID',
+    defaultValue:
+        '234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com',
+  );
   static const _macosClientId = String.fromEnvironment(
     'GOOGLE_MACOS_CLIENT_ID',
     defaultValue:
@@ -73,6 +77,7 @@ class GoogleDriveAuthService {
   static const _mobileSignOutTimeout = Duration(seconds: 3);
   static const _desktopUserApprovalTimeout = Duration(minutes: 2);
   static const _desktopNetworkTimeout = Duration(seconds: 10);
+  static const _iosOAuthChannel = MethodChannel('daily/google_oauth');
 
   final FlutterSecureStorage _secureStorage;
   final http.Client _httpClient;
@@ -82,6 +87,7 @@ class GoogleDriveAuthService {
   GoogleDriveAccount? _desktopAccount;
   _DesktopTokens? _desktopTokens;
   Completer<void>? _desktopSignInCancelCompleter;
+  Future<void>? _mobileSignInOperation;
   var _isAvailable = true;
   var _usesDesktopOAuth = false;
 
@@ -92,7 +98,23 @@ class GoogleDriveAuthService {
 
   bool get isAvailable => _isAvailable;
 
-  bool get canCancelPendingSignInOnResume => _usesDesktopOAuth;
+  bool get canCancelPendingSignInOnResume =>
+      _usesDesktopOAuth && !Platform.isIOS;
+
+  String get _configuredOAuthClientId =>
+      Platform.isIOS ? _configuredAppleClientId : _configuredDesktopClientId;
+
+  String get _configuredOAuthClientSecret =>
+      Platform.isIOS ? '' : _configuredDesktopClientSecret;
+
+  String get _configuredIosRedirectScheme {
+    final clientId = _configuredAppleClientId;
+    const suffix = '.apps.googleusercontent.com';
+    if (clientId.endsWith(suffix)) {
+      return 'com.googleusercontent.apps.${clientId.substring(0, clientId.length - suffix.length)}';
+    }
+    return '';
+  }
 
   String get _configuredDesktopClientId {
     final fromBuild = _desktopClientId.trim();
@@ -334,6 +356,9 @@ class GoogleDriveAuthService {
     if (_usesDesktopOAuth) {
       try {
         return await _signInWithDesktopOAuth();
+      } on PlatformException catch (error) {
+        _setDesktopAccount(null);
+        throw GoogleDriveAuthException(_platformAuthMessage(error));
       } on TimeoutException {
         _setDesktopAccount(null);
         throw const GoogleDriveAuthException(
@@ -348,33 +373,61 @@ class GoogleDriveAuthService {
       throw UnsupportedError('현재 플랫폼에서는 Google Drive 연결을 지원하지 않습니다.');
     }
 
-    try {
-      if (forceAccountSelection && _currentUser != null) {
-        await _clearMobileAccountForSelection();
+    return _runSerializedMobileSignIn(() async {
+      try {
+        if (forceAccountSelection && _currentUser != null) {
+          await _clearMobileAccountForSelection();
+          _setCurrentUser(null);
+        }
+
+        final existing = _currentUser;
+        if (existing != null) {
+          return _toDriveAccount(existing);
+        }
+
+        final user = await GoogleSignIn.instance
+            .authenticate(scopeHint: scopes)
+            .timeout(_mobileUserApprovalTimeout);
+        _setCurrentUser(user);
+        return _toDriveAccount(user);
+      } on GoogleSignInException catch (error) {
         _setCurrentUser(null);
+        throw GoogleDriveAuthException(_googleSignInMessage(error));
+      } on PlatformException catch (error) {
+        _setCurrentUser(null);
+        throw GoogleDriveAuthException(_platformAuthMessage(error));
+      } on TimeoutException {
+        _setCurrentUser(null);
+        throw const GoogleDriveAuthException(
+          'Google Drive 연결 승인이 완료되지 않았습니다. 연결 창을 닫았다면 다시 연결 버튼을 눌러 주세요.',
+        );
       }
+    });
+  }
 
-      final existing = _currentUser;
-      if (existing != null) {
-        return _toDriveAccount(existing);
+  Future<GoogleDriveAccount?> _runSerializedMobileSignIn(
+    Future<GoogleDriveAccount?> Function() operation,
+  ) async {
+    final previous = _mobileSignInOperation;
+    if (previous != null) {
+      try {
+        await previous;
+      } on Object {
+        // A previous failed sign-in should not block a new user-initiated try.
       }
+    }
 
-      final user = await GoogleSignIn.instance
-          .authenticate(scopeHint: scopes)
-          .timeout(_mobileUserApprovalTimeout);
-      _setCurrentUser(user);
-      return _toDriveAccount(user);
-    } on GoogleSignInException catch (error) {
-      _setCurrentUser(null);
-      throw GoogleDriveAuthException(_googleSignInMessage(error));
-    } on PlatformException catch (error) {
-      _setCurrentUser(null);
-      throw GoogleDriveAuthException(_platformAuthMessage(error));
-    } on TimeoutException {
-      _setCurrentUser(null);
-      throw const GoogleDriveAuthException(
-        'Google Drive 연결 승인이 완료되지 않았습니다. 연결 창을 닫았다면 다시 연결 버튼을 눌러 주세요.',
-      );
+    final completer = Completer<void>();
+    _mobileSignInOperation = completer.future;
+    try {
+      return await operation();
+    } finally {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+      if (identical(_mobileSignInOperation, completer.future)) {
+        _mobileSignInOperation = null;
+      }
     }
   }
 
@@ -485,9 +538,11 @@ class GoogleDriveAuthService {
   }
 
   Future<void> _initialize() async {
-    if (Platform.isWindows || _shouldUseMacosDesktopOAuth) {
+    _usesDesktopOAuth =
+        Platform.isIOS || Platform.isWindows || _shouldUseMacosDesktopOAuth;
+    if (_usesDesktopOAuth) {
       _usesDesktopOAuth = true;
-      if (_configuredDesktopClientId.isEmpty) {
+      if (_configuredOAuthClientId.isEmpty) {
         _isAvailable = false;
         _setDesktopAccount(null);
         return;
@@ -564,7 +619,7 @@ class GoogleDriveAuthService {
       '새 빌드에서도 같은 오류가 나면 Apple 개발 팀 서명 설정을 확인해 주세요.';
 
   Future<GoogleDriveAccount?> _signInWithDesktopOAuth() async {
-    if (_configuredDesktopClientId.isEmpty) {
+    if (_configuredOAuthClientId.isEmpty) {
       throw UnsupportedError(
         'Google Drive 연결 설정이 아직 완료되지 않았습니다. 앱 업데이트 후 다시 시도해 주세요.',
       );
@@ -581,7 +636,7 @@ class GoogleDriveAuthService {
   Future<Map<String, String>?> _desktopAuthorizationHeaders({
     required bool promptIfNecessary,
   }) async {
-    if (_configuredDesktopClientId.isEmpty) {
+    if (_configuredOAuthClientId.isEmpty) {
       return null;
     }
     await _restoreDesktopSession();
@@ -610,6 +665,9 @@ class GoogleDriveAuthService {
   }
 
   Future<_DesktopCodeResponse> _requestDesktopAuthorizationCode() async {
+    if (Platform.isIOS) {
+      return _requestIosAuthorizationCode();
+    }
     final cancelCompleter = Completer<void>();
     _desktopSignInCancelCompleter = cancelCompleter;
     final redirectHost = _configuredDesktopRedirectHost;
@@ -628,7 +686,7 @@ class GoogleDriveAuthService {
     final challenge = _pkceChallenge(verifier);
     final state = _randomUrlSafeString(24);
     final authUri = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
-      'client_id': _configuredDesktopClientId,
+      'client_id': _configuredOAuthClientId,
       'redirect_uri': redirectUri,
       'response_type': 'code',
       'scope': _desktopScopes.join(' '),
@@ -694,6 +752,57 @@ class GoogleDriveAuthService {
     }
   }
 
+  Future<_DesktopCodeResponse> _requestIosAuthorizationCode() async {
+    final redirectScheme = _configuredIosRedirectScheme;
+    if (redirectScheme.isEmpty) {
+      throw const GoogleDriveAuthException(
+        'iOS Google Drive 연결 리디렉션 설정이 올바르지 않습니다. OAuth 클라이언트 설정을 확인해 주세요.',
+      );
+    }
+    final redirectUri = '$redirectScheme:/oauth2redirect/google';
+    final verifier = _randomUrlSafeString(64);
+    final challenge = _pkceChallenge(verifier);
+    final state = _randomUrlSafeString(24);
+    final authUri = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
+      'client_id': _configuredOAuthClientId,
+      'redirect_uri': redirectUri,
+      'response_type': 'code',
+      'scope': _desktopScopes.join(' '),
+      'access_type': 'offline',
+      'include_granted_scopes': 'true',
+      'prompt': 'consent',
+      'code_challenge': challenge,
+      'code_challenge_method': 'S256',
+      'state': state,
+    });
+
+    final callbackUrl = await _iosOAuthChannel
+        .invokeMethod<String>('authorize', {
+          'authorizationUrl': authUri.toString(),
+          'callbackUrlScheme': redirectScheme,
+        })
+        .timeout(_desktopUserApprovalTimeout);
+    final callbackUri = Uri.tryParse(callbackUrl ?? '');
+    if (callbackUri == null) {
+      throw const GoogleDriveAuthException('Google Drive 연결 응답이 올바르지 않습니다.');
+    }
+    final params = callbackUri.queryParameters;
+    final requestState = params['state'];
+    final code = params['code'];
+    final error = params['error'];
+    if (error != null) {
+      throw GoogleDriveAuthException(_desktopAuthorizationErrorMessage(error));
+    }
+    if (requestState != state || code == null || code.isEmpty) {
+      throw const GoogleDriveAuthException('Google Drive 연결 응답이 올바르지 않습니다.');
+    }
+    return _DesktopCodeResponse(
+      code: code,
+      redirectUri: redirectUri,
+      codeVerifier: verifier,
+    );
+  }
+
   Future<_DesktopTokens> _exchangeAuthorizationCode(
     _DesktopCodeResponse codeResponse,
   ) async {
@@ -702,7 +811,7 @@ class GoogleDriveAuthService {
           Uri.https('oauth2.googleapis.com', '/token'),
           headers: {'Content-Type': 'application/x-www-form-urlencoded'},
           body: _withDesktopClientSecret({
-            'client_id': _configuredDesktopClientId,
+            'client_id': _configuredOAuthClientId,
             'code': codeResponse.code,
             'code_verifier': codeResponse.codeVerifier,
             'grant_type': 'authorization_code',
@@ -730,7 +839,7 @@ class GoogleDriveAuthService {
           Uri.https('oauth2.googleapis.com', '/token'),
           headers: {'Content-Type': 'application/x-www-form-urlencoded'},
           body: _withDesktopClientSecret({
-            'client_id': _configuredDesktopClientId,
+            'client_id': _configuredOAuthClientId,
             'refresh_token': refreshToken,
             'grant_type': 'refresh_token',
           }),
@@ -746,7 +855,7 @@ class GoogleDriveAuthService {
   }
 
   Map<String, String> _withDesktopClientSecret(Map<String, String> body) {
-    final clientSecret = _configuredDesktopClientSecret;
+    final clientSecret = _configuredOAuthClientSecret;
     if (clientSecret.isEmpty) {
       return body;
     }
@@ -1108,7 +1217,8 @@ class GoogleDriveAuthService {
       return '$_appleClientConfigurationMessage'
           '${detail.isEmpty ? '' : ' ($detail)'}';
     }
-    return 'Google Drive 연결 처리 중 문제가 발생했습니다. 앱을 다시 열고 연결 버튼을 다시 눌러 주세요.';
+    return 'Google Drive 연결 처리 중 문제가 발생했습니다.'
+        '${detail.isEmpty ? '' : ' ($detail)'}';
   }
 }
 

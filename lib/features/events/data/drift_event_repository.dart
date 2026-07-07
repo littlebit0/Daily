@@ -6,6 +6,7 @@ import 'app_database.dart';
 import 'event_mapper.dart';
 import 'recurrence_expander.dart';
 import '../domain/calendar_event.dart';
+import '../domain/event_category.dart';
 import '../domain/event_repository.dart';
 
 class DriftEventRepository implements EventRepository {
@@ -35,6 +36,27 @@ class DriftEventRepository implements EventRepository {
             ..sort((a, b) => a.startAt.compareTo(b.startAt));
       return events;
     });
+  }
+
+  @override
+  Future<List<CalendarEvent>> eventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) async {
+    final rows =
+        await (_database.select(_database.eventRecords)
+              ..where((table) => table.deletedAt.isNull())
+              ..orderBy([(table) => OrderingTerm.asc(table.startAt)]))
+            .get();
+    final events =
+        rows
+            .expand(
+              (record) =>
+                  _expander.expand(record.toDomain(), rangeStart, rangeEnd),
+            )
+            .toList()
+          ..sort((a, b) => a.startAt.compareTo(b.startAt));
+    return events;
   }
 
   @override
@@ -131,6 +153,62 @@ class DriftEventRepository implements EventRepository {
             sensitive: Value(normalized.sensitive),
           ),
         );
+  }
+
+  @override
+  Future<List<CalendarEvent>> updateCategoryReferences({
+    required EventCategory previous,
+    required EventCategory updated,
+    required DateTime updatedAt,
+  }) async {
+    final previousStoredValues = {
+      previous.id,
+      previous.label,
+    }.where((value) => value.trim().isNotEmpty).toList();
+    if (previousStoredValues.isEmpty) {
+      return const [];
+    }
+
+    final affectedRows =
+        await (_database.select(_database.eventRecords)..where(
+              (table) =>
+                  table.deletedAt.isNull() &
+                  table.category.isIn(previousStoredValues),
+            ))
+            .get();
+    if (affectedRows.isEmpty) {
+      return const [];
+    }
+
+    final affected = affectedRows
+        .map((record) {
+          final event = record.toDomain();
+          return event.copyWith(
+            category: updated,
+            colorValue: updated.colorValue,
+            updatedAt: updatedAt,
+            syncStatus: 'pending',
+            holiday: updated.id == EventCategory.holiday.id,
+          );
+        })
+        .toList(growable: false);
+
+    await _database.batch((batch) {
+      for (final event in affected) {
+        final normalized = event.normalizeAllDayBounds();
+        batch.update(
+          _database.eventRecords,
+          EventRecordsCompanion(
+            category: Value(_storedCategoryValue(normalized)),
+            colorValue: Value(normalized.colorValue),
+            updatedAt: Value(normalized.updatedAt),
+            syncStatus: const Value('pending'),
+          ),
+          where: (table) => table.id.equals(normalized.id),
+        );
+      }
+    });
+    return affected;
   }
 
   @override

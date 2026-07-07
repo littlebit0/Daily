@@ -42,6 +42,7 @@ class SettingsRepository {
   static const _hideSensitiveEventsKey = 'hideSensitiveEvents';
   static const _hideSensitiveNotificationsKey = 'hideSensitiveNotifications';
   static const _appLockEnabledKey = 'appLockEnabled';
+  static const _use24HourTimeKey = 'use24HourTime';
   static const _deviceIdKey = 'deviceId';
   static const _appleUserIdentifierKey = 'appleUserIdentifier';
   static const _appleEmailKey = 'appleEmail';
@@ -82,6 +83,7 @@ class SettingsRepository {
       hideSensitiveNotifications:
           _preferences.getBool(_hideSensitiveNotificationsKey) ?? false,
       appLockEnabled: _preferences.getBool(_appLockEnabledKey) ?? false,
+      use24HourTime: _preferences.getBool(_use24HourTimeKey) ?? true,
     );
   }
 
@@ -158,6 +160,7 @@ class SettingsRepository {
       settings.hideSensitiveNotifications,
     );
     await _preferences.setBool(_appLockEnabledKey, settings.appLockEnabled);
+    await _preferences.setBool(_use24HourTimeKey, settings.use24HourTime);
   }
 
   Future<void> completeOnboarding() async {
@@ -252,6 +255,7 @@ class SettingsRepository {
     await _preferences.remove(_hideSensitiveEventsKey);
     await _preferences.remove(_hideSensitiveNotificationsKey);
     await _preferences.remove(_appLockEnabledKey);
+    await _preferences.remove(_use24HourTimeKey);
     await _preferences.remove(_deviceIdKey);
     await deleteAppleAccount();
     await deleteGeminiApiKey();

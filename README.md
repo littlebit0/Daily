@@ -6,26 +6,26 @@ Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로�
 
 ## 현재 버전
 
-- 앱 버전: `2.5.14`
+- 앱 버전: `2.5.15`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 최신 공개 배포: [Daily 2.0.4](https://github.com/littlebit0/Daily/releases/tag/v2.0.4)
-- 다음 Android Play 배포 준비 버전: `2.5.14`
+- 다음 릴리스 후보: `2.5.15`
 - 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
 
 ## 배포 파일
 
-GitHub Release에서 최신 설치 파일을 받을 수 있습니다.
+GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 
-- Android 직접 설치용 APK: `daily-android-2.0.4.apk`
-- Windows 권장 배포 파일: `daily-windows-2.0.4.zip`
-- macOS/iOS: 이번 2.0.4 릴리스에서는 신규 산출물을 만들지 않았습니다. macOS/iOS 작업자는 동일한 공유 Flutter 변경 적용 여부와 실제 UX/UI 시연 테스트를 별도로 진행해야 합니다.
+이번 iOS 계정/Google Drive 동기화 수정 릴리스는 사용자의 지시에 따라
+GitHub Release 파일을 iOS IPA 하나로 제한합니다.
 
-Windows는 ZIP 사용을 권장합니다. Flutter Windows 앱은 실행 파일 외에도 DLL과 `data` 폴더가 필요하므로 일반 배포에는 `daily-windows-2.0.4.zip`을 사용해야 합니다.
+- GitHub Release 업로드용 IPA: `dist/release-2.5.15/daily-ios-2.5.15.ipa`
+- App Store Connect Transporter 업로드용 IPA: `dist/transporter-upload/Daily-iOS-Transporter-2.5.15.ipa`
+- 실사용 iPhone 설치 확인용 IPA: `dist/device-install/Daily-iOS-Device-2.5.15.ipa`
+- SHA-256: `859cf47d0b7cf503d5695f21ed98099fb6bf42ce98d0a258656c54cf262486ae`
 
-SHA-256:
-
-- `daily-android-2.0.4.apk`: `18080e2fedebbc48a2e685e8d7a529930125b26e795c1af31fc8732b72385681`
-- `daily-windows-2.0.4.zip`: `5f465ed937a2afd9079ff7c62b78a68890bc11686073261031fcf4d042faec87`
+macOS, Android, Windows 산출물은 이번 IPA 전용 릴리스에는 포함하지 않습니다.
+다만 macOS, Android, Windows도 다음 플랫폼 빌드 전에 iOS와 동일한 계정 UX와
+동기화 정책을 적용하고 검증해야 합니다.
 
 ## 지원 플랫폼
 
@@ -34,7 +34,18 @@ SHA-256:
 - iOS
 - macOS
 
-Android와 Windows 산출물은 2.0.4 릴리스에 포함되어 있습니다. iOS/macOS는 같은 Flutter 기능 세트와 동기화 구조를 기준으로 유지되어야 하며, 이번 Windows/Android 작업에서 확인한 항목 중 Android/Windows에만 고질적으로 발생한 현상을 제외하고 동일하게 검토해야 합니다. 실제 App Store/TestFlight/Developer ID 배포에는 Apple Developer 서명과 provisioning 설정이 필요합니다.
+실제 App Store/TestFlight/Developer ID 배포에는 Apple Developer 서명과 provisioning 설정이 필요합니다. Android와 Windows 릴리스 산출물은 이번 IPA 전용 릴리스에 포함하지 않지만, 다음 플랫폼 빌드 전에는 아래 계정/동기화 정책을 동일하게 적용해야 합니다.
+
+현재 계정/동기화 정책은 다음과 같습니다.
+
+- Apple 로그인 지원 플랫폼: iOS, macOS
+- Google Drive AppData 동기화 지원 플랫폼: Android, Windows, iOS, macOS
+- Apple 로그인 후 저장된 Google Drive 세션이 있으면 자동으로 복원
+- 저장된 Google Drive 세션이 없으면 Apple 로그인 직후 Google Drive 권한 연결을 진행
+- Google 로그인 후 이미 저장된 Apple 계정 표시가 있으면 Apple 연결 상태를 유지
+- 설정의 계정 섹션은 Apple/Google 상태를 분리해서 보여주되 `로그아웃` 버튼은 하나만 표시
+- 일반 `로그아웃`은 pending 변경을 동기화하고 시작화면으로 돌아가며 Apple/Google 연결 상태는 보존
+- `회원탈퇴`는 로컬 데이터, Apple/Google 연결 상태, Google Drive AppData 백업을 삭제하는 파괴적 경로
 
 ## 핵심 기능
 
@@ -62,7 +73,10 @@ Android와 Windows 산출물은 2.0.4 릴리스에 포함되어 있습니다. iO
 - Windows 트레이 미니 캘린더
 - macOS 마지막 창 닫기 후 앱 유지
 - iOS/macOS 빠른 접근 패널
+- Apple 로그인
 - Google 계정 로그인
+- Apple/Google 계정 연결 상태 자동 복원
+- 설정의 통합 로그아웃과 회원탈퇴
 - Google Drive AppData 기반 백업, 복원, 자동 동기화
 
 ## 동기화 구조
@@ -104,6 +118,10 @@ daily-sync-v2-settings.json
 - Windows Desktop OAuth client: `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
 - iOS OAuth client: `234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com`
 - OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
+
+iOS Google Drive 연결은 `ASWebAuthenticationSession` 기반 인앱 인증 시트를
+사용합니다. 앱 밖 Safari로 완전히 전환하지 않고 Daily 위에 인증 화면을 띄우며,
+Google callback URL은 iOS 네이티브 브리지에서 처리합니다.
 
 Windows/macOS Desktop OAuth는 PKCE loopback callback을 사용합니다. 현재 Windows Desktop OAuth client는 token exchange에 client secret을 요구하므로 secret은 Git에 커밋하지 않고 로컬 환경 변수 또는 로컬 OAuth JSON 파일로만 공급합니다.
 
@@ -180,39 +198,48 @@ Windows release:
 
 ## 검증 상태
 
-2.0.0 기준 확인한 항목:
+최근 iOS 계정/동기화 수정 기준 확인한 항목:
 
-- `.\tool\flutter.ps1 analyze --no-pub`: 통과
-- `.\tool\flutter.ps1 test --no-pub`: 통과
-- Google Drive v2 동기화 테스트 통과
-- Android debug APK 빌드, 에뮬레이터 삭제 후 재설치/실행 확인
-- Android release APK 빌드 통과
-- Android release AAB 빌드 통과
-- Android APK badging 확인
-  - package: `com.littlebit0.dailycalendar`
-  - versionName: `2.0.0`
-  - versionCode: `4`
-- Windows debug/release 빌드 통과
-- Windows release 실행 확인
-- GitHub Release 2.0.0 업로드 확인
+- `./tool/flutter.sh analyze --no-pub`: 통과
+- `./tool/flutter.sh test --no-pub test/widget_test.dart`: 통과
+- `./tool/flutter.sh build ios --simulator --debug --no-pub`: 통과
+- iPhone 17 시뮬레이터 설치 확인
+- Apple 로그인 후 Google Drive 자동 연결/복원 흐름 회귀 테스트 통과
+- Google 로그인 후 Apple 연결 표시 보존 회귀 테스트 통과
+- 설정 통합 로그아웃 정책 회귀 테스트 통과
+
+macOS, Android, Windows는 같은 공유 Flutter 계정/동기화 정책을 따라야 합니다.
+다음 각 플랫폼 작업자는 실제 기기 또는 해당 OS에서 아래 항목을 다시 확인해야 합니다.
+
+- fresh install 후 Apple/Google/local 시작 흐름
+- Apple 로그인 후 Google Drive 자동 복원 또는 최초 연결
+- Google 로그인 후 기존 Apple 연결 표시 유지
+- 일반 로그아웃 후 재로그인 시 저장된 계정 연결 자동 복원
+- 회원탈퇴 후 로컬 데이터, 계정 표시, Drive 백업 삭제
+- 일정 생성/수정/삭제 v2 AppData 동기화
 
 ## 스토어 배포 상태
 
-GitHub Release 배포는 완료했습니다.
+현재 우선순위는 Apple App Store/TestFlight 제출입니다.
 
-Android Play Store 배포는 보류 상태입니다. 업로드 파일은 준비되어 있습니다.
+App Store Connect에서 확인 또는 수정할 항목:
 
-```plain text
-dist/daily-android-2.0.0.aab
-```
+- App Review Notes:
+  - Apple과 Google 로그인이 모두 제공됨
+  - Google Drive 권한은 Google Drive AppData의 Daily 전용 백업/동기화에만 사용됨
+  - 일반 Google Drive 파일은 읽거나 수정하지 않음
+  - 광고, IDFA, 앱/웹사이트 간 사용자 추적, 데이터 브로커 공유 없음
+- App Privacy:
+  - 추적 목적 데이터 수집으로 표시하지 않기
+  - 실제 사용하는 데이터 유형만 표시
+  - Google Drive AppData 동기화와 Apple/Google 로그인은 앱 기능 목적
+- Encryption:
+  - 별도 독자 암호화 알고리즘을 구현하지 않았다면 해당 없음으로 답변
+- Build:
+  - Transporter로 업로드한 최신 iOS IPA 빌드를 선택
 
-Play Console 업로드 후 Play App Signing SHA-1이 기존 OAuth Android client와 다르면 Google Cloud Console에 Android OAuth client를 추가해야 합니다.
-
-Microsoft Store 배포도 보류 상태입니다. Store 제출용 MSIX를 만들려면 Partner Center의 Product identity 값이 필요합니다.
-
-- Package/Identity/Name
-- Package/Properties/Publisher
-- PublisherDisplayName
+Android Play Store와 Microsoft Store 배포는 보류 상태입니다. 다음 플랫폼 릴리스
+전에는 macOS, Android, Windows 계정 UX가 iOS와 동일한지 먼저 검증해야 합니다.
 
 ## 보안과 로컬 비밀값
 

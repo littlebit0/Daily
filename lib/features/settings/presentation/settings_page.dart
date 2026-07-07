@@ -15,8 +15,6 @@ import '../../../core/sync/google_drive_sync_service.dart';
 import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 
-enum _GoogleLogoutChoice { continueLocal, syncAndReturnToStart }
-
 const _fallbackAppVersion = '2.5.14';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -108,6 +106,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   Widget build(BuildContext context) {
     final settings = ref.watch(appSettingsProvider);
     final appleSignInService = ref.watch(appleSignInServiceProvider);
+    final hasAccountConnection = _appleAccount != null || _driveEmail != null;
+    final accountBusy = _appleBusy || _syncBusy;
 
     return Scaffold(
       appBar: AppBar(title: const Text('설정')),
@@ -160,12 +160,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                 subtitle: '종일 일정의 알림 기준 시간',
                 hour: settings.allDayReminderHour,
                 minute: settings.allDayReminderMinute,
+                use24HourTime: settings.use24HourTime,
                 onChanged: (time) => _save(
                   settings.copyWith(
                     allDayReminderHour: time.hour,
                     allDayReminderMinute: time.minute,
                   ),
                 ),
+              ),
+              const Divider(height: 1),
+              _TimeFormatTile(
+                use24HourTime: settings.use24HourTime,
+                onChanged: (value) =>
+                    _save(settings.copyWith(use24HourTime: value)),
               ),
               const Divider(height: 1),
               SwitchListTile(
@@ -198,6 +205,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                   subtitle: '브리핑을 받을 시간',
                   hour: settings.morningBriefingHour,
                   minute: settings.morningBriefingMinute,
+                  use24HourTime: settings.use24HourTime,
                   onChanged: (time) async {
                     final updated = settings.copyWith(
                       morningBriefingHour: time.hour,
@@ -422,7 +430,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                   busy: _appleBusy,
                   message: _appleMessage,
                   onSignIn: _connectApple,
-                  onSignOut: _logoutApple,
                 ),
                 const Divider(height: 1),
               ],
@@ -438,9 +445,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                 message: _syncMessage,
                 onConnect: _connectGoogleDrive,
                 onSyncNow: _syncGoogleDriveNow,
-                onDisconnect: _logoutGoogleDrive,
                 onDeleteAccount: _deleteAccount,
               ),
+              if (hasAccountConnection) ...[
+                const SizedBox(height: 8),
+                _AccountLogoutButton(
+                  busy: accountBusy,
+                  onPressed: _logoutAccount,
+                ),
+              ],
             ],
           ),
           _SettingsSection(
@@ -480,56 +493,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       }
       setState(() {
         _appleAccount = account;
-        _appleMessage = 'Apple 로그인이 완료되었습니다.';
+        _appleMessage = 'Apple 로그인이 완료되었습니다. 기존 Google Drive 연결을 확인합니다.';
       });
+      await _connectGoogleDrive(preferSilentRestore: true);
+      if (mounted) {
+        setState(() {
+          _appleMessage =
+              ref.read(googleDriveAuthServiceProvider).currentAccount == null
+              ? 'Apple 로그인이 완료되었습니다. Google Drive 연결이 필요합니다.'
+              : 'Apple 로그인과 Google Drive 동기화 연결이 완료되었습니다.';
+        });
+      }
     } on AppleSignInException catch (error) {
       if (mounted) {
         setState(() => _appleMessage = error.message);
-      }
-    } on Object catch (error) {
-      if (mounted) {
-        setState(() => _appleMessage = '$error');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _appleBusy = false);
-      }
-    }
-  }
-
-  Future<void> _logoutApple() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Apple 로그아웃'),
-        content: const Text('Apple 로그인 상태만 해제합니다. 이 기기의 일정과 설정은 그대로 유지됩니다.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('로그아웃'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      return;
-    }
-
-    setState(() {
-      _appleBusy = true;
-      _appleMessage = '';
-    });
-    try {
-      await ref.read(appleSignInServiceProvider).signOut();
-      if (mounted) {
-        setState(() {
-          _appleAccount = null;
-          _appleMessage = 'Apple 로그아웃이 완료되었습니다. 로컬 일정은 그대로 유지됩니다.';
-        });
       }
     } on Object catch (error) {
       if (mounted) {
@@ -678,9 +655,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     final categories = settings.categories
         .map((item) => item.id == category.id ? updatedCategory : item)
         .toList();
+    final hiddenCategoryIds = settings.hiddenCategoryIds
+        .map((id) => id == category.id ? updatedCategory.id : id)
+        .toSet()
+        .toList();
     await _save(
-      settings.copyWith(categories: _normalizeCategories(categories)),
+      settings.copyWith(
+        categories: _normalizeCategories(categories),
+        hiddenCategoryIds: hiddenCategoryIds,
+      ),
     );
+    await ref
+        .read(eventCommandServiceProvider)
+        .updateCategoryUsage(previous: category, updated: updatedCategory);
   }
 
   Future<void> _deleteCategory(
@@ -724,7 +711,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     return normalized;
   }
 
-  Future<void> _connectGoogleDrive() async {
+  Future<void> _connectGoogleDrive({bool preferSilentRestore = false}) async {
     final attempt = ++_googleDriveConnectAttempt;
     _activeGoogleDriveConnectAttempt = attempt;
     setState(() {
@@ -733,7 +720,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     });
     try {
       final authService = ref.read(googleDriveAuthServiceProvider);
-      final account = await authService.signIn(forceAccountSelection: true);
+      var account = preferSilentRestore
+          ? await authService.restorePreviousSignIn()
+          : null;
+      if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
+        return;
+      }
+      if (account == null && preferSilentRestore) {
+        if (mounted) {
+          setState(() {
+            _syncMessage = 'Google 로그인 창을 여는 중입니다.';
+          });
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 1100));
+        if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
+          return;
+        }
+      }
+      account ??= await authService.signIn(forceAccountSelection: true);
       if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
         return;
       }
@@ -834,67 +838,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     }
   }
 
-  Future<void> _logoutGoogleDrive() async {
-    final choice = await showDialog<_GoogleLogoutChoice>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Google Drive 연결 해제'),
-        content: const Text(
-          'Google Drive 연결을 해제하기 전에 먼저 선택하세요. 기존 일정을 남긴 채 바로 로컬로 전환하거나, 마지막으로 동기화한 뒤 연결을 해제하고 시작 화면으로 돌아갈 수 있습니다.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소'),
-          ),
-          OutlinedButton(
-            onPressed: () =>
-                Navigator.of(context).pop(_GoogleLogoutChoice.continueLocal),
-            child: const Text('로컬로 전환'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(
-              context,
-            ).pop(_GoogleLogoutChoice.syncAndReturnToStart),
-            child: const Text('동기화 후 시작 화면'),
-          ),
-        ],
-      ),
-    );
-    if (choice == null) {
-      return;
-    }
-
+  Future<void> _logoutAccount() async {
     setState(() {
       _syncBusy = true;
       _syncMessage = '';
+      _appleMessage = '';
     });
     try {
-      if (choice == _GoogleLogoutChoice.syncAndReturnToStart) {
-        await _tryFlushPendingBeforeLogout(Stopwatch()..start());
-      }
-      await ref.read(googleDriveAuthServiceProvider).signOut();
+      await _tryFlushPendingBeforeLogout(Stopwatch()..start());
       if (mounted) {
-        if (choice == _GoogleLogoutChoice.syncAndReturnToStart) {
-          final updated = ref
-              .read(appSettingsProvider)
-              .copyWith(onboardingCompleted: false);
-          await ref.read(settingsRepositoryProvider).save(updated);
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _driveEmail = null;
-            _syncMessage = '마지막 동기화 후 연결을 해제하고 시작 화면으로 돌아갑니다.';
-          });
-          ref.read(appSettingsProvider.notifier).state = updated;
-          Navigator.of(context).popUntil((route) => route.isFirst);
+        final updated = ref
+            .read(appSettingsProvider)
+            .copyWith(onboardingCompleted: false);
+        await ref.read(settingsRepositoryProvider).save(updated);
+        if (!mounted) {
           return;
         }
         setState(() {
           _driveEmail = null;
-          _syncMessage = 'Google 동기화를 해제했습니다. 로컬 일정은 그대로 유지됩니다.';
+          _syncMessage = '로그아웃했습니다.';
         });
+        ref.read(appSettingsProvider.notifier).state = updated;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        return;
       }
     } on Object catch (error) {
       if (mounted) {
@@ -911,10 +877,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     final authService = ref.read(googleDriveAuthServiceProvider);
     final hasGoogleAccount =
         _driveEmail != null || authService.currentAccount != null;
-    final title = hasGoogleAccount ? 'Drive 백업 삭제' : '로컬 데이터 초기화';
-    final content = hasGoogleAccount
-        ? 'Google Drive의 Daily 백업과 이 기기의 모든 일정, 설정을 삭제하고 시작 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.'
-        : '이 기기의 모든 일정과 설정, Apple 로그인 상태를 삭제하고 시작 화면으로 돌아갑니다. Google Drive 백업은 삭제하지 않습니다.';
+    final hasSignedInAccount = hasGoogleAccount || _appleAccount != null;
+    final title = hasSignedInAccount ? '회원탈퇴' : '로컬 데이터 초기화';
+    final content = hasSignedInAccount
+        ? 'Google Drive의 Daily 백업, 이 기기의 모든 일정과 설정, Apple/Google 로그인 정보를 삭제하고 시작 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.'
+        : '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다.';
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -929,7 +896,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(hasGoogleAccount ? '삭제' : '초기화'),
+            child: Text(hasSignedInAccount ? '회원탈퇴' : '초기화'),
           ),
         ],
       ),
@@ -955,13 +922,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       if (hasGoogleAccount) {
         await authService.signOut();
       }
+      await ref.read(appleSignInServiceProvider).signOut();
       ref.read(appSettingsProvider.notifier).state = const AppSettings();
       if (mounted) {
         setState(() {
           _driveEmail = null;
           _appleAccount = null;
-          _syncMessage = hasGoogleAccount
-              ? 'Drive 백업 삭제가 완료되었습니다.'
+          _syncMessage = hasSignedInAccount
+              ? '회원탈퇴가 완료되었습니다.'
               : '로컬 데이터 초기화가 완료되었습니다.';
         });
         Navigator.of(context).popUntil((route) => route.isFirst);
@@ -1168,6 +1136,7 @@ class _TimeTile extends StatelessWidget {
     required this.subtitle,
     required this.hour,
     required this.minute,
+    required this.use24HourTime,
     required this.onChanged,
   });
 
@@ -1175,12 +1144,13 @@ class _TimeTile extends StatelessWidget {
   final String subtitle;
   final int hour;
   final int minute;
+  final bool use24HourTime;
   final ValueChanged<TimeOfDay> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final time = TimeOfDay(hour: hour, minute: minute);
-    final label = _timeLabel(hour, minute);
+    final label = _timeLabel(hour, minute, use24HourTime: use24HourTime);
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(title),
@@ -1191,12 +1161,64 @@ class _TimeTile extends StatelessWidget {
           final picked = await showTimePicker(
             context: context,
             initialTime: time,
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(alwaysUse24HourFormat: use24HourTime),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
           );
           if (picked != null) {
             onChanged(picked);
           }
         },
         icon: const Icon(Icons.schedule),
+      ),
+    );
+  }
+}
+
+class _TimeFormatTile extends StatelessWidget {
+  const _TimeFormatTile({required this.use24HourTime, required this.onChanged});
+
+  final bool use24HourTime;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('시간 표시 방식'),
+                SizedBox(height: 2),
+                Text(
+                  '시간 선택 화면의 기본 표시 방식을 정합니다.',
+                  style: TextStyle(fontSize: 12, color: Color(0xff64748b)),
+                ),
+              ],
+            ),
+          ),
+          SegmentedButton<bool>(
+            selected: {use24HourTime},
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              minimumSize: WidgetStateProperty.all(const Size(50, 34)),
+            ),
+            segments: const [
+              ButtonSegment(value: false, label: Text('12h')),
+              ButtonSegment(value: true, label: Text('24h')),
+            ],
+            onSelectionChanged: (selection) => onChanged(selection.first),
+          ),
+        ],
       ),
     );
   }
@@ -1370,7 +1392,6 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
     required this.message,
     required this.onConnect,
     required this.onSyncNow,
-    required this.onDisconnect,
     required this.onDeleteAccount,
   });
 
@@ -1379,7 +1400,6 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
   final String message;
   final VoidCallback onConnect;
   final VoidCallback onSyncNow;
-  final VoidCallback onDisconnect;
   final VoidCallback onDeleteAccount;
 
   @override
@@ -1391,11 +1411,19 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.account_circle_outlined),
-          title: Text(connected ? email! : '로컬 모드 사용 중'),
+          title: const Text('Google 계정'),
+          subtitle: Text(
+            connected ? email! : 'Google로 로그인하면 Drive 동기화를 함께 사용할 수 있습니다.',
+          ),
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.cloud_sync_outlined),
+          title: const Text('Google Drive 동기화'),
           subtitle: Text(
             connected
-                ? '이 계정으로 모든 기기의 일정을 백업하고 복원합니다.'
-                : '계정 없이 모든 캘린더 기능을 이 기기에 저장합니다. Google Drive를 연결하면 백업과 동기화를 사용할 수 있습니다.',
+                ? '이 계정의 Google Drive AppData에 일정을 백업하고 복원합니다.'
+                : 'Google 계정 로그인 후 자동으로 연결됩니다.',
           ),
         ),
         Row(
@@ -1410,23 +1438,16 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Icon(connected ? Icons.sync : Icons.cloud_outlined),
-                label: Text(connected ? '지금 동기화' : 'Google Drive 연결'),
+                label: Text(connected ? '지금 동기화' : 'Google로 계속'),
               ),
             ),
-            if (connected) ...[
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: busy ? null : onDisconnect,
-                child: const Text('연결 해제'),
-              ),
-            ],
           ],
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: busy ? null : onDeleteAccount,
           icon: const Icon(Icons.person_remove_outlined),
-          label: Text(connected ? 'Drive 백업 삭제' : '로컬 데이터 초기화'),
+          label: Text(connected ? '회원탈퇴' : '로컬 데이터 초기화'),
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.red,
             side: const BorderSide(color: Colors.red),
@@ -1447,14 +1468,12 @@ class _AppleSignInSettings extends StatelessWidget {
     required this.busy,
     required this.message,
     required this.onSignIn,
-    required this.onSignOut,
   });
 
   final AppleAccount? account;
   final bool busy;
   final String message;
   final VoidCallback onSignIn;
-  final VoidCallback onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -1465,9 +1484,9 @@ class _AppleSignInSettings extends StatelessWidget {
     final subtitle = connected
         ? [
             if (account!.email != null) account!.email!,
-            'Apple 로그인 상태입니다. Google Drive 백업과 동기화는 별도로 선택합니다.',
+            'Apple 로그인 상태입니다. Google Drive를 통해 백업과 동기화를 진행합니다.',
           ].join('\n')
-        : '이메일 비공개 옵션을 사용할 수 있는 Apple 로그인으로 Daily를 시작할 수 있습니다.';
+        : 'Apple 로그인 후 Google Drive 동기화를 연결합니다.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1478,34 +1497,55 @@ class _AppleSignInSettings extends StatelessWidget {
           title: Text(title),
           subtitle: Text(subtitle),
         ),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: busy ? null : (connected ? onSignOut : onSignIn),
-                style: connected
-                    ? null
-                    : FilledButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                      ),
-                icon: busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(connected ? Icons.logout : Icons.apple),
-                label: Text(connected ? 'Apple 로그아웃' : 'Apple로 계속'),
+        if (!connected)
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: busy ? null : onSignIn,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.apple),
+                  label: const Text('Apple로 계속'),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         if (message.isNotEmpty) ...[
           const SizedBox(height: 10),
           Text(message, style: Theme.of(context).textTheme.labelMedium),
         ],
       ],
+    );
+  }
+}
+
+class _AccountLogoutButton extends StatelessWidget {
+  const _AccountLogoutButton({required this.busy, required this.onPressed});
+
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: busy ? null : onPressed,
+      icon: busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.logout),
+      label: const Text('로그아웃'),
     );
   }
 }
@@ -1662,17 +1702,16 @@ class _CategoryDialogState extends State<_CategoryDialog> {
             }
             FocusManager.instance.primaryFocus?.unfocus();
             final initialCategory = widget.initialCategory;
-            Navigator.of(context).pop(
-              initialCategory == null
-                  ? EventCategory.custom(
-                      label: label,
-                      colorValue: _selectedColor,
-                    )
-                  : initialCategory.copyWith(
-                      label: label,
-                      colorValue: _selectedColor,
-                    ),
-            );
+            final nextCategory =
+                initialCategory == null ||
+                    (initialCategory.id != EventCategory.basic.id &&
+                        initialCategory.id != EventCategory.holiday.id)
+                ? EventCategory.custom(label: label, colorValue: _selectedColor)
+                : initialCategory.copyWith(
+                    label: label,
+                    colorValue: _selectedColor,
+                  );
+            Navigator.of(context).pop(nextCategory);
           },
           child: Text(_editing ? '저장' : '추가'),
         ),
@@ -1825,8 +1864,14 @@ String _ddayLabel(int offset) {
   return offset < 0 ? 'D$offset' : 'D+$offset';
 }
 
-String _timeLabel(int hour, int minute) {
-  return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+String _timeLabel(int hour, int minute, {required bool use24HourTime}) {
+  final paddedMinute = minute.toString().padLeft(2, '0');
+  if (use24HourTime) {
+    return '${hour.toString().padLeft(2, '0')}:$paddedMinute';
+  }
+  final period = hour < 12 ? 'AM' : 'PM';
+  final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+  return '$period $displayHour:$paddedMinute';
 }
 
 String _formatDateTime(DateTime value) {

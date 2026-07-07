@@ -58,6 +58,7 @@ class AppSettings {
     this.hideSensitiveEvents = false,
     this.hideSensitiveNotifications = false,
     this.appLockEnabled = false,
+    this.use24HourTime = true,
   });
 
   static const _defaultCategories = <EventCategory>[
@@ -87,6 +88,7 @@ class AppSettings {
   final bool hideSensitiveEvents;
   final bool hideSensitiveNotifications;
   final bool appLockEnabled;
+  final bool use24HourTime;
 
   AppSettings copyWith({
     int? defaultReminderMinutes,
@@ -111,6 +113,7 @@ class AppSettings {
     bool? hideSensitiveEvents,
     bool? hideSensitiveNotifications,
     bool? appLockEnabled,
+    bool? use24HourTime,
   }) {
     return AppSettings(
       defaultReminderMinutes:
@@ -140,6 +143,7 @@ class AppSettings {
       hideSensitiveNotifications:
           hideSensitiveNotifications ?? this.hideSensitiveNotifications,
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
+      use24HourTime: use24HourTime ?? this.use24HourTime,
     );
   }
 }

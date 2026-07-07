@@ -61,6 +61,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
 
     return Scaffold(
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             _CalendarHeader(
@@ -89,18 +90,22 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
             ),
             Expanded(
               child: viewMode == CalendarViewMode.day
-                  ? eventsAsync.when(
-                      data: (events) => EventDetailsPanel(
-                        date: selectedDate,
-                        events: _eventsForDay(
-                          _filterVisibleEvents(events, settings, searchQuery),
-                          selectedDate,
-                        ),
+                  ? _CalendarMainContent(
+                      month: month,
+                      selectedDate: selectedDate,
+                      viewMode: viewMode,
+                      settings: settings,
+                      searchQuery: searchQuery,
+                      onMonthDelta: (delta) => _moveVisibleRange(
+                        ref,
+                        viewMode,
+                        month,
+                        selectedDate,
+                        delta,
                       ),
-                      error: (error, stackTrace) =>
-                          Center(child: Text('$error')),
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
+                      onDateSelected: (date, events) {
+                        ref.read(selectedDateProvider.notifier).state = date;
+                      },
                     )
                   : wide
                   ? Row(
@@ -112,9 +117,13 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                             viewMode: viewMode,
                             settings: settings,
                             searchQuery: searchQuery,
-                            eventsAsync: eventsAsync,
-                            onMonthDelta: (delta) =>
-                                _moveMonth(ref, month, selectedDate, delta),
+                            onMonthDelta: (delta) => _moveVisibleRange(
+                              ref,
+                              viewMode,
+                              month,
+                              selectedDate,
+                              delta,
+                            ),
                             onDateSelected: (date, events) {
                               ref.read(selectedDateProvider.notifier).state =
                                   date;
@@ -144,9 +153,13 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                       viewMode: viewMode,
                       settings: settings,
                       searchQuery: searchQuery,
-                      eventsAsync: eventsAsync,
-                      onMonthDelta: (delta) =>
-                          _moveMonth(ref, month, selectedDate, delta),
+                      onMonthDelta: (delta) => _moveVisibleRange(
+                        ref,
+                        viewMode,
+                        month,
+                        selectedDate,
+                        delta,
+                      ),
                       onDateSelected: (date, events) {
                         ref.read(selectedDateProvider.notifier).state = date;
                         _showDaySheet(
@@ -367,17 +380,35 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     );
   }
 
-  void _moveMonth(
+  void _moveVisibleRange(
     WidgetRef ref,
+    CalendarViewMode viewMode,
     DateTime currentMonth,
     DateTime selectedDate,
     int delta,
   ) {
-    _setVisibleMonth(
-      ref,
-      DateTime(currentMonth.year, currentMonth.month + delta),
-      selectedDate,
-    );
+    switch (viewMode) {
+      case CalendarViewMode.month:
+        _setVisibleMonth(
+          ref,
+          DateTime(currentMonth.year, currentMonth.month + delta),
+          selectedDate,
+        );
+      case CalendarViewMode.week:
+        final next = selectedDate.add(Duration(days: delta * 7));
+        ref.read(selectedDateProvider.notifier).state = next;
+        ref.read(visibleMonthProvider.notifier).state = DateTime(
+          next.year,
+          next.month,
+        );
+      case CalendarViewMode.day:
+        final next = selectedDate.add(Duration(days: delta));
+        ref.read(selectedDateProvider.notifier).state = next;
+        ref.read(visibleMonthProvider.notifier).state = DateTime(
+          next.year,
+          next.month,
+        );
+    }
   }
 }
 
@@ -557,7 +588,6 @@ class _CalendarMainContent extends StatelessWidget {
     required this.viewMode,
     required this.settings,
     required this.searchQuery,
-    required this.eventsAsync,
     required this.onMonthDelta,
     required this.onDateSelected,
   });
@@ -567,7 +597,6 @@ class _CalendarMainContent extends StatelessWidget {
   final CalendarViewMode viewMode;
   final AppSettings settings;
   final String searchQuery;
-  final AsyncValue<List<CalendarEvent>> eventsAsync;
   final ValueChanged<int> onMonthDelta;
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
 
@@ -582,30 +611,260 @@ class _CalendarMainContent extends StatelessWidget {
         onMonthDelta: onMonthDelta,
         onDateSelected: onDateSelected,
       ),
-      CalendarViewMode.week => eventsAsync.when(
-        data: (events) => _CalendarWeekView(
-          selectedDate: selectedDate,
-          weekStartsOnMonday: settings.weekStartsOnMonday,
-          showLunarDates: settings.showLunarDates,
-          hideSensitiveEvents: settings.hideSensitiveEvents,
-          events: _filterVisibleEvents(events, settings, searchQuery),
-          onDateSelected: onDateSelected,
-        ),
-        error: (error, stackTrace) => Center(child: Text('$error')),
-        loading: () => const Center(child: CircularProgressIndicator()),
+      CalendarViewMode.week => _WeekPageView(
+        selectedDate: selectedDate,
+        settings: settings,
+        searchQuery: searchQuery,
+        onWeekDelta: onMonthDelta,
+        onDateSelected: onDateSelected,
       ),
-      CalendarViewMode.day => eventsAsync.when(
-        data: (events) => EventDetailsPanel(
-          date: selectedDate,
-          events: _eventsForDay(
-            _filterVisibleEvents(events, settings, searchQuery),
-            selectedDate,
-          ),
-        ),
-        error: (error, stackTrace) => Center(child: Text('$error')),
-        loading: () => const Center(child: CircularProgressIndicator()),
+      CalendarViewMode.day => _DayPageView(
+        selectedDate: selectedDate,
+        settings: settings,
+        searchQuery: searchQuery,
+        onDayDelta: onMonthDelta,
       ),
     };
+  }
+}
+
+class _WeekPageView extends StatefulWidget {
+  const _WeekPageView({
+    required this.selectedDate,
+    required this.settings,
+    required this.searchQuery,
+    required this.onWeekDelta,
+    required this.onDateSelected,
+  });
+
+  final DateTime selectedDate;
+  final AppSettings settings;
+  final String searchQuery;
+  final ValueChanged<int> onWeekDelta;
+  final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
+
+  @override
+  State<_WeekPageView> createState() => _WeekPageViewState();
+}
+
+class _WeekPageViewState extends State<_WeekPageView> {
+  static const _initialPage = 12000;
+
+  late final PageController _controller;
+  late final DateTime _anchorDate;
+  var _currentPage = _initialPage;
+  var _applyingExternalDate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _anchorDate = _dateOnly(widget.selectedDate);
+    _controller = PageController(initialPage: _initialPage);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WeekPageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_controller.hasClients) {
+      return;
+    }
+    final targetPage =
+        _initialPage + _weekDelta(_anchorDate, widget.selectedDate);
+    if (targetPage == _currentPage) {
+      return;
+    }
+    _applyingExternalDate = true;
+    _currentPage = targetPage;
+    _controller.jumpToPage(targetPage);
+    _applyingExternalDate = false;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      controller: _controller,
+      allowImplicitScrolling: true,
+      physics: const _ResponsiveMonthPagePhysics(),
+      onPageChanged: (index) {
+        if (_applyingExternalDate || index == _currentPage) {
+          return;
+        }
+        final delta = index - _currentPage;
+        _currentPage = index;
+        widget.onWeekDelta(delta);
+      },
+      itemBuilder: (context, index) {
+        final pageDate = _anchorDate.add(
+          Duration(days: (index - _initialPage) * 7),
+        );
+        return _CalendarWeekPage(
+          selectedDate: pageDate,
+          settings: widget.settings,
+          searchQuery: widget.searchQuery,
+          onDateSelected: widget.onDateSelected,
+        );
+      },
+    );
+  }
+
+  int _weekDelta(DateTime from, DateTime to) {
+    final fromStart = _weekRangeFor(
+      from,
+      widget.settings.weekStartsOnMonday,
+    ).start;
+    final toStart = _weekRangeFor(to, widget.settings.weekStartsOnMonday).start;
+    return toStart.difference(fromStart).inDays ~/ 7;
+  }
+}
+
+class _CalendarWeekPage extends ConsumerWidget {
+  const _CalendarWeekPage({
+    required this.selectedDate,
+    required this.settings,
+    required this.searchQuery,
+    required this.onDateSelected,
+  });
+
+  final DateTime selectedDate;
+  final AppSettings settings;
+  final String searchQuery;
+  final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final range = _weekRangeFor(selectedDate, settings.weekStartsOnMonday);
+    final eventsAsync = ref.watch(eventsInRangeProvider(range));
+    return eventsAsync.when(
+      data: (events) => _CalendarWeekView(
+        selectedDate: selectedDate,
+        weekStartsOnMonday: settings.weekStartsOnMonday,
+        showLunarDates: settings.showLunarDates,
+        hideSensitiveEvents: settings.hideSensitiveEvents,
+        events: _filterVisibleEvents(events, settings, searchQuery),
+        onDateSelected: onDateSelected,
+      ),
+      error: (error, stackTrace) => Center(child: Text('$error')),
+      loading: () => const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _DayPageView extends StatefulWidget {
+  const _DayPageView({
+    required this.selectedDate,
+    required this.settings,
+    required this.searchQuery,
+    required this.onDayDelta,
+  });
+
+  final DateTime selectedDate;
+  final AppSettings settings;
+  final String searchQuery;
+  final ValueChanged<int> onDayDelta;
+
+  @override
+  State<_DayPageView> createState() => _DayPageViewState();
+}
+
+class _DayPageViewState extends State<_DayPageView> {
+  static const _initialPage = 12000;
+
+  late final PageController _controller;
+  late final DateTime _anchorDate;
+  var _currentPage = _initialPage;
+  var _applyingExternalDate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _anchorDate = _dateOnly(widget.selectedDate);
+    _controller = PageController(initialPage: _initialPage);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DayPageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_controller.hasClients) {
+      return;
+    }
+    final targetPage =
+        _initialPage + _dayDelta(_anchorDate, widget.selectedDate);
+    if (targetPage == _currentPage) {
+      return;
+    }
+    _applyingExternalDate = true;
+    _currentPage = targetPage;
+    _controller.jumpToPage(targetPage);
+    _applyingExternalDate = false;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      controller: _controller,
+      allowImplicitScrolling: true,
+      physics: const _ResponsiveMonthPagePhysics(),
+      onPageChanged: (index) {
+        if (_applyingExternalDate || index == _currentPage) {
+          return;
+        }
+        final delta = index - _currentPage;
+        _currentPage = index;
+        widget.onDayDelta(delta);
+      },
+      itemBuilder: (context, index) {
+        final pageDate = _anchorDate.add(Duration(days: index - _initialPage));
+        return _CalendarDayPage(
+          date: pageDate,
+          settings: widget.settings,
+          searchQuery: widget.searchQuery,
+        );
+      },
+    );
+  }
+
+  int _dayDelta(DateTime from, DateTime to) {
+    return _dateOnly(to).difference(_dateOnly(from)).inDays;
+  }
+}
+
+class _CalendarDayPage extends ConsumerWidget {
+  const _CalendarDayPage({
+    required this.date,
+    required this.settings,
+    required this.searchQuery,
+  });
+
+  final DateTime date;
+  final AppSettings settings;
+  final String searchQuery;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventsAsync = ref.watch(eventsInRangeProvider(_dayRangeFor(date)));
+    return eventsAsync.when(
+      data: (events) => EventDetailsPanel(
+        date: date,
+        events: _eventsForDay(
+          _filterVisibleEvents(events, settings, searchQuery),
+          date,
+        ),
+      ),
+      error: (error, stackTrace) => Center(child: Text('$error')),
+      loading: () => const Center(child: CircularProgressIndicator()),
+    );
   }
 }
 
@@ -1307,102 +1566,123 @@ class _CalendarBottomBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xffedf0f5))),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final barWidth = constraints.maxWidth;
-            final sideSize = (barWidth * 0.13).clamp(44.0, 64.0);
-            final segmentWidth = (barWidth * 0.31).clamp(104.0, 168.0);
-            final controlHeight = (barWidth * 0.092).clamp(34.0, 42.0);
-            final iconSize = (sideSize * 0.43).clamp(19.0, 24.0);
-            final segmentPadding = (segmentWidth * 0.07).clamp(7.0, 12.0);
-
-            return Row(
+    const barSurface = Color(0xfff8fbff);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: barSurface,
+        border: const Border(top: BorderSide(color: Color(0xffedf0f5))),
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        minimum: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 2, 18, 0),
+          child: Container(
+            height: 65,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: barSurface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox.square(
-                  dimension: sideSize,
-                  child: Tooltip(
-                    message: '빠른 보기',
-                    child: IconButton(
-                      onPressed: onQuickAccessPressed,
-                      icon: Icon(Icons.dashboard_outlined, size: iconSize),
-                      style: IconButton.styleFrom(
-                        fixedSize: Size.square(sideSize),
-                        minimumSize: Size.square(sideSize),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ),
+                _BottomBarItem(
+                  tooltip: '빠른 보기',
+                  icon: Icons.dashboard_outlined,
+                  onPressed: onQuickAccessPressed,
                 ),
-                const Spacer(),
-                SizedBox(
-                  width: segmentWidth,
-                  height: controlHeight,
-                  child: SegmentedButton<CalendarViewMode>(
-                    selected: {viewMode},
-                    showSelectedIcon: false,
-                    style: ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                      padding: WidgetStateProperty.all(
-                        EdgeInsets.symmetric(horizontal: segmentPadding),
-                      ),
-                      minimumSize: WidgetStateProperty.all(
-                        Size(segmentWidth / 3, controlHeight),
-                      ),
-                      textStyle: WidgetStateProperty.all(
-                        TextStyle(
-                          fontSize: (barWidth * 0.029).clamp(11.0, 13.0),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    segments: const [
-                      ButtonSegment(
-                        value: CalendarViewMode.week,
-                        label: Text('주'),
-                      ),
-                      ButtonSegment(
-                        value: CalendarViewMode.month,
-                        label: Text('월'),
-                      ),
-                      ButtonSegment(
-                        value: CalendarViewMode.day,
-                        label: Text('일'),
-                      ),
-                    ],
-                    onSelectionChanged: (selection) {
+                _BottomBarItem(
+                  tooltip: '주간 보기',
+                  label: '주',
+                  selected: viewMode == CalendarViewMode.week,
+                  onPressed: () =>
                       ref.read(calendarViewModeProvider.notifier).state =
-                          selection.first;
-                    },
-                  ),
+                          CalendarViewMode.week,
                 ),
-                const Spacer(),
-                SizedBox.square(
-                  dimension: sideSize,
-                  child: Tooltip(
-                    message: 'LLM',
-                    child: IconButton(
-                      onPressed: onLlmPressed,
-                      icon: Icon(Icons.auto_awesome_outlined, size: iconSize),
-                      style: IconButton.styleFrom(
-                        fixedSize: Size.square(sideSize),
-                        minimumSize: Size.square(sideSize),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ),
+                _BottomBarItem(
+                  tooltip: '월간 보기',
+                  label: '월',
+                  selected: viewMode == CalendarViewMode.month,
+                  onPressed: () =>
+                      ref.read(calendarViewModeProvider.notifier).state =
+                          CalendarViewMode.month,
+                ),
+                _BottomBarItem(
+                  tooltip: '일간 보기',
+                  label: '일',
+                  selected: viewMode == CalendarViewMode.day,
+                  onPressed: () =>
+                      ref.read(calendarViewModeProvider.notifier).state =
+                          CalendarViewMode.day,
+                ),
+                _BottomBarItem(
+                  tooltip: 'LLM',
+                  icon: Icons.auto_awesome_outlined,
+                  onPressed: onLlmPressed,
                 ),
               ],
-            );
-          },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomBarItem extends StatelessWidget {
+  const _BottomBarItem({
+    required this.tooltip,
+    required this.onPressed,
+    this.icon,
+    this.label,
+    this.selected = false,
+  }) : assert(icon != null || label != null);
+
+  final String tooltip;
+  final IconData? icon;
+  final String? label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected
+        ? const Color(0xff1d4ed8)
+        : const Color(0xff64748b);
+    return Expanded(
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                color: selected ? const Color(0xffdbeafe) : Colors.transparent,
+              ),
+              child: Transform.translate(
+                offset: const Offset(0, -5),
+                child: Center(
+                  child: icon != null
+                      ? Icon(icon, size: 20, color: foreground)
+                      : Text(
+                          label!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1,
+                            fontWeight: FontWeight.w800,
+                            color: foreground,
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -1506,9 +1786,10 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
       title: const Text('연월 선택'),
       content: SizedBox(
-        width: 320,
+        width: 370,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1552,7 +1833,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
                 crossAxisCount: 4,
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
-                childAspectRatio: 1.8,
+                childAspectRatio: 2.55,
               ),
               itemCount: 12,
               itemBuilder: (context, index) {
@@ -1568,7 +1849,12 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
                         ? Theme.of(context).colorScheme.onPrimaryContainer
                         : const Color(0xff1f2937),
                   ),
-                  child: Text('$value월'),
+                  child: Text(
+                    '$value월',
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.visible,
+                  ),
                 );
               },
             ),
@@ -1897,4 +2183,8 @@ List<CalendarEvent> _eventsForDay(List<CalendarEvent> events, DateTime date) {
 
 bool _sameDay(DateTime a, DateTime b) {
   return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+DateTime _dateOnly(DateTime date) {
+  return DateTime(date.year, date.month, date.day);
 }

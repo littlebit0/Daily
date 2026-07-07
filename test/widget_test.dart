@@ -44,6 +44,26 @@ void main() {
     },
   );
 
+  test('Apple account refresh keeps saved app login marker if revoked', () async {
+    SharedPreferences.setMockInitialValues({
+      'appleUserIdentifier': 'apple-user',
+      'appleEmail': 'hwi@example.com',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final appleSignInService = AppleSignInService(
+      settingsRepository: settingsRepository,
+      targetPlatform: TargetPlatform.iOS,
+      availabilityChecker: () async => true,
+      credentialStateChecker: (_) async => CredentialState.revoked,
+    );
+
+    final account = await appleSignInService.refreshCurrentAccount();
+
+    expect(account?.email, 'hwi@example.com');
+    expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
+  });
+
   testWidgets('Apple sign-in starts Daily on Apple platforms', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -66,17 +86,28 @@ void main() {
         );
       },
     );
+    final googleAuthService = _FakeGoogleDriveAuthService(
+      account: null,
+      restoredAccount: const GoogleDriveAccount(email: 'linked@example.com'),
+    );
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: googleAuthService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           settingsRepositoryProvider.overrideWithValue(settingsRepository),
-          notificationServiceProvider.overrideWithValue(_FakeNotification()),
+          notificationServiceProvider.overrideWithValue(notificationService),
           syncServiceProvider.overrideWithValue(_FakeSync()),
-          eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
-          googleDriveAuthServiceProvider.overrideWithValue(
-            _FakeGoogleDriveAuthService(account: null),
-          ),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(googleAuthService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
           appleSignInServiceProvider.overrideWithValue(appleSignInService),
         ],
         child: const DailyApp(),
@@ -92,7 +123,87 @@ void main() {
 
     expect(settingsRepository.load().onboardingCompleted, isTrue);
     expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
+    expect(
+      googleAuthService.restorePreviousSignInCalls,
+      greaterThanOrEqualTo(1),
+    );
+    expect(googleAuthService.signInCalls, 0);
+    expect(driveSyncService.startListeningOnlyCalls, greaterThanOrEqualTo(1));
+    expect(
+      driveSyncService.syncPendingChangesNowCalls,
+      greaterThanOrEqualTo(1),
+    );
     expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Apple sign-in auto-opens Google when no session exists', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final appleSignInService = AppleSignInService(
+      settingsRepository: settingsRepository,
+      targetPlatform: TargetPlatform.iOS,
+      availabilityChecker: () async => true,
+      credentialRequester: ({required scopes}) async {
+        return const AuthorizationCredentialAppleID(
+          userIdentifier: 'apple-user',
+          givenName: 'Hwi',
+          familyName: 'Kim',
+          authorizationCode: 'auth-code',
+          email: 'hwi@example.com',
+          identityToken: 'identity-token',
+          state: null,
+        );
+      },
+    );
+    final googleAuthService = _FakeGoogleDriveAuthService(
+      account: null,
+      signInAccount: const GoogleDriveAccount(email: 'linked@example.com'),
+    );
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: googleAuthService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(googleAuthService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+          appleSignInServiceProvider.overrideWithValue(appleSignInService),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Apple로 계속'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
+    expect(settingsRepository.load().onboardingCompleted, isTrue);
+    expect(
+      googleAuthService.restorePreviousSignInCalls,
+      greaterThanOrEqualTo(1),
+    );
+    expect(googleAuthService.signInCalls, 1);
+    expect(
+      driveSyncService.syncPendingChangesNowCalls,
+      greaterThanOrEqualTo(1),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -123,14 +234,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Google Drive 백업 복원'));
+      await tester.tap(find.text('Google로 계속'));
       await tester.pump();
 
       expect(authService.signInCalls, 1);
       expect(
         tester
             .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Google Drive 백업 복원'),
+              find.widgetWithText(OutlinedButton, 'Google로 계속'),
             )
             .onPressed,
         isNull,
@@ -147,7 +258,7 @@ void main() {
       expect(
         tester
             .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Google Drive 백업 복원'),
+              find.widgetWithText(OutlinedButton, 'Google로 계속'),
             )
             .onPressed,
         isNotNull,
@@ -157,8 +268,14 @@ void main() {
     },
   );
 
-  testWidgets('Daily opens to the weekly calendar shell', (tester) async {
-    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+  testWidgets('Daily opens to the weekly calendar shell and swipes weeks', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'onboardingCompleted': true,
+      'appleUserIdentifier': 'apple-user',
+      'appleEmail': 'hwi@example.com',
+    });
     final preferences = await SharedPreferences.getInstance();
     final settingsRepository = SettingsRepository(preferences: preferences);
 
@@ -178,9 +295,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(PageView), findsNothing);
+    expect(find.byType(PageView), findsOneWidget);
     expect(find.text('일정 없음'), findsWidgets);
     expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(DailyApp)),
+    );
+    final startDate = container.read(selectedDateProvider);
+
+    await tester.drag(find.byType(PageView), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(selectedDateProvider),
+      DateTime(startDate.year, startDate.month, startDate.day + 7),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -512,17 +642,19 @@ void main() {
 
       await tester.tap(find.byTooltip('설정'));
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(ListView), const Offset(0, -1600));
+      await tester.drag(find.byType(ListView), const Offset(0, -2200));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Google로 계속'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Google Drive 연결'));
+      await tester.tap(find.text('Google로 계속'));
       await tester.pump();
 
       expect(authService.signInCalls, 1);
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Google Drive 연결'),
+              find.widgetWithText(FilledButton, 'Google로 계속'),
             )
             .onPressed,
         isNull,
@@ -539,7 +671,7 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Google Drive 연결'),
+              find.widgetWithText(FilledButton, 'Google로 계속'),
             )
             .onPressed,
         isNotNull,
@@ -549,131 +681,74 @@ void main() {
     },
   );
 
-  testWidgets(
-    'Google Drive disconnect can keep using local mode without syncing',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
-      FlutterSecureStorage.setMockInitialValues({});
-      final preferences = await SharedPreferences.getInstance();
-      final settingsRepository = SettingsRepository(preferences: preferences);
-      final authService = _FakeGoogleDriveAuthService();
-      final notificationService = _FakeNotification();
-      final eventRepository = _FakeEventRepository();
-      final driveSyncService = _FakeGoogleDriveSyncService(
-        authService: authService,
-        eventRepository: eventRepository,
-        notificationService: notificationService,
-        settingsRepository: settingsRepository,
-      );
+  testWidgets('Google logout keeps saved Drive session for next login', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'onboardingCompleted': true,
+      'appleUserIdentifier': 'apple-user',
+      'appleEmail': 'hwi@example.com',
+    });
+    FlutterSecureStorage.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final authService = _FakeGoogleDriveAuthService();
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: authService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            settingsRepositoryProvider.overrideWithValue(settingsRepository),
-            notificationServiceProvider.overrideWithValue(notificationService),
-            eventRepositoryProvider.overrideWithValue(eventRepository),
-            googleDriveAuthServiceProvider.overrideWithValue(authService),
-            googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
-            syncServiceProvider.overrideWithValue(_FakeSync()),
-          ],
-          child: const DailyApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(authService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('설정'));
-      await tester.pumpAndSettle();
-      await tester.drag(find.byType(ListView), const Offset(0, -2200));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('설정'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -2200));
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.text('연결 해제'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('로그아웃'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
-      expect(find.text('Google Drive 연결 해제'), findsOneWidget);
-      expect(authService.signOutCalls, 0);
+    expect(authService.signOutCalls, 0);
+    expect(driveSyncService.syncNowCalls, 0);
+    expect(driveSyncService.syncPendingChangesNowCalls, 1);
+    expect(settingsRepository.load().onboardingCompleted, isFalse);
+    expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
+    expect(find.text('Daily 시작하기'), findsOneWidget);
 
-      await tester.tap(find.text('로컬로 전환'));
-      await tester.pumpAndSettle();
-
-      expect(authService.signOutCalls, 1);
-      expect(driveSyncService.syncNowCalls, 0);
-      expect(settingsRepository.load().onboardingCompleted, isTrue);
-      expect(find.text('로컬 모드 사용 중'), findsOneWidget);
-      expect(find.textContaining('로컬 일정은 그대로 유지됩니다'), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
-
-  testWidgets(
-    'Google Drive disconnect can sync once and return to the start screen',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
-      FlutterSecureStorage.setMockInitialValues({});
-      final preferences = await SharedPreferences.getInstance();
-      final settingsRepository = SettingsRepository(preferences: preferences);
-      final authService = _FakeGoogleDriveAuthService();
-      final notificationService = _FakeNotification();
-      final eventRepository = _FakeEventRepository();
-      final driveSyncService = _FakeGoogleDriveSyncService(
-        authService: authService,
-        eventRepository: eventRepository,
-        notificationService: notificationService,
-        settingsRepository: settingsRepository,
-      );
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            settingsRepositoryProvider.overrideWithValue(settingsRepository),
-            notificationServiceProvider.overrideWithValue(notificationService),
-            eventRepositoryProvider.overrideWithValue(eventRepository),
-            googleDriveAuthServiceProvider.overrideWithValue(authService),
-            googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
-            syncServiceProvider.overrideWithValue(_FakeSync()),
-          ],
-          child: const DailyApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byTooltip('설정'));
-      await tester.pumpAndSettle();
-      await tester.drag(find.byType(ListView), const Offset(0, -2200));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('연결 해제'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Google Drive 연결 해제'), findsOneWidget);
-      expect(authService.signOutCalls, 0);
-      expect(driveSyncService.syncNowCalls, 0);
-
-      await tester.tap(find.text('동기화 후 시작 화면'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-
-      expect(authService.signOutCalls, 1);
-      expect(driveSyncService.syncNowCalls, 0);
-      expect(driveSyncService.syncPendingChangesNowCalls, 1);
-      expect(settingsRepository.load().onboardingCompleted, isFalse);
-      expect(find.text('Daily 시작하기'), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
 
 class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
   _FakeGoogleDriveAuthService({
     this.account = const GoogleDriveAccount(email: 'tester@example.com'),
     this.restoredAccount,
+    this.signInAccount,
     this.signInCompleter,
     this.canCancelOnResume = false,
   });
 
   GoogleDriveAccount? account;
   final GoogleDriveAccount? restoredAccount;
+  final GoogleDriveAccount? signInAccount;
   final Completer<GoogleDriveAccount?>? signInCompleter;
   final bool canCancelOnResume;
   var cancelPendingSignInCalls = 0;
@@ -706,6 +781,7 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
     if (signInCompleter != null) {
       return signInCompleter!.future;
     }
+    account ??= signInAccount;
     return account;
   }
 
@@ -740,8 +816,14 @@ class _FakeGoogleDriveSyncService extends GoogleDriveSyncService {
   });
 
   var deleteCloudBackupCalls = 0;
+  var startListeningOnlyCalls = 0;
   var syncNowCalls = 0;
   var syncPendingChangesNowCalls = 0;
+
+  @override
+  Future<void> startListeningOnly({bool flushPendingChanges = true}) async {
+    startListeningOnlyCalls += 1;
+  }
 
   @override
   Future<void> syncNow({bool promptIfNecessary = false}) async {
@@ -865,6 +947,46 @@ class _FakeEventRepository implements EventRepository {
 
   @override
   Future<List<CalendarEvent>> allEventsForSync() async => _events;
+
+  @override
+  Future<List<CalendarEvent>> updateCategoryReferences({
+    required EventCategory previous,
+    required EventCategory updated,
+    required DateTime updatedAt,
+  }) async {
+    final affected = <CalendarEvent>[];
+    for (var index = 0; index < _events.length; index++) {
+      final event = _events[index];
+      if (event.deletedAt != null || event.category.id != previous.id) {
+        continue;
+      }
+      final next = event.copyWith(
+        category: updated,
+        colorValue: updated.colorValue,
+        updatedAt: updatedAt,
+        syncStatus: 'pending',
+        holiday: updated.id == EventCategory.holiday.id,
+      );
+      _events[index] = next;
+      affected.add(next);
+    }
+    return affected;
+  }
+
+  @override
+  Future<List<CalendarEvent>> eventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) async {
+    return _events
+        .where(
+          (event) =>
+              event.deletedAt == null &&
+              event.startAt.isBefore(rangeEnd) &&
+              event.endAt.isAfter(rangeStart),
+        )
+        .toList();
+  }
 
   @override
   Future<void> markSynced(String eventId) async {}

@@ -71,8 +71,8 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Daily는 계정 없이 모든 캘린더 기능을 바로 사용할 수 있습니다. '
-                    'Google Drive 연결은 사용자가 선택한 백업과 기기 간 동기화에만 사용됩니다.',
+                    'Apple 또는 Google로 로그인하면 Google Drive를 통해 기기 간 동기화를 자동으로 사용합니다. '
+                    '계정 없이 로컬로도 시작할 수 있습니다.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: const Color(0xff5f6875),
@@ -121,7 +121,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.login),
-                    label: const Text('Google Drive 백업 복원'),
+                    label: const Text('Google로 계속'),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
@@ -165,6 +165,20 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
         }
         return;
       }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _message = 'Apple 로그인이 완료되었습니다. Google Drive 동기화를 연결하는 중입니다.';
+      });
+      final googleConnected = await _connectGoogleDriveAndRestore(
+        cancelMessage:
+            'Google Drive 연결이 취소되었습니다. Apple로 계속하려면 Google Drive 연결이 필요합니다.',
+        preferSilentRestore: true,
+      );
+      if (!googleConnected) {
+        return;
+      }
       await _completeOnboarding();
     } on AppleSignInException catch (error) {
       if (mounted) {
@@ -182,39 +196,72 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
   }
 
   Future<void> _connectAndRestore() async {
-    final attempt = ++_googleDriveAttempt;
     setState(() {
       _busyAction = _WelcomeAction.googleDrive;
       _message = 'Google Drive 연결 창을 여는 중입니다.';
     });
     try {
-      final account = await ref
-          .read(googleDriveAuthServiceProvider)
-          .signIn(forceAccountSelection: true);
+      final connected = await _connectGoogleDriveAndRestore(
+        cancelMessage: 'Google Drive 연결이 취소되었습니다.',
+        preferSilentRestore: false,
+      );
+      if (connected) {
+        await _completeOnboarding();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busyAction = null);
+      }
+    }
+  }
+
+  Future<bool> _connectGoogleDriveAndRestore({
+    required String cancelMessage,
+    required bool preferSilentRestore,
+  }) async {
+    final attempt = ++_googleDriveAttempt;
+    try {
+      final authService = ref.read(googleDriveAuthServiceProvider);
+      var account = preferSilentRestore
+          ? await authService.restorePreviousSignIn()
+          : null;
       if (!_isCurrentGoogleDriveAttempt(attempt)) {
-        return;
+        return false;
+      }
+      if (account == null && preferSilentRestore) {
+        if (mounted) {
+          setState(() => _message = 'Google 로그인 창을 여는 중입니다.');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 1100));
+        if (!_isCurrentGoogleDriveAttempt(attempt)) {
+          return false;
+        }
+      }
+      account ??= await authService.signIn(forceAccountSelection: true);
+      if (!_isCurrentGoogleDriveAttempt(attempt)) {
+        return false;
       }
       if (account == null) {
         if (mounted) {
-          setState(() => _message = 'Google Drive 연결이 취소되었습니다.');
+          setState(() => _message = cancelMessage);
         }
-        return;
+        return false;
       }
 
       final syncService = ref.read(googleDriveSyncServiceProvider);
       await syncService.startListeningOnly(flushPendingChanges: false);
       if (!_isCurrentGoogleDriveAttempt(attempt)) {
-        return;
+        return false;
       }
       await syncService.syncPendingChangesNow(
         promptIfNecessary: true,
         restoreAfterBackup: true,
       );
       if (!_isCurrentGoogleDriveAttempt(attempt)) {
-        return;
+        return false;
       }
 
-      await _completeOnboarding();
+      return true;
     } on UnsupportedError catch (error) {
       if (mounted && _isCurrentGoogleDriveAttempt(attempt)) {
         setState(() => _message = error.message ?? '$error');
@@ -223,11 +270,8 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
       if (mounted && _isCurrentGoogleDriveAttempt(attempt)) {
         setState(() => _message = '$error');
       }
-    } finally {
-      if (mounted && _isCurrentGoogleDriveAttempt(attempt)) {
-        setState(() => _busyAction = null);
-      }
     }
+    return false;
   }
 
   bool _isCurrentGoogleDriveAttempt(int attempt) {

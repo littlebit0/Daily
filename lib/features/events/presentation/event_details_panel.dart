@@ -242,6 +242,7 @@ class EventDetailsPanel extends ConsumerWidget {
       recurrence: draft.recurrence,
       showDday: draft.showDday,
       sensitive: draft.sensitive,
+      holiday: draft.category.id == EventCategory.holiday.id,
       clearMemo: draft.memo == null,
       clearLocation: draft.location == null,
       clearUrl: draft.url == null,

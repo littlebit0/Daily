@@ -751,9 +751,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   }
 
   List<EventCategory> get _usableCategories {
-    final categories = widget.categories
-        .where((category) => category.id != EventCategory.holiday.id)
-        .toList();
+    final categories = widget.categories.toList();
     return categories.isEmpty ? const [EventCategory.basic] : categories;
   }
 

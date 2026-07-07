@@ -6,6 +6,7 @@ import '../../../core/sync/sync_service.dart';
 import '../../../core/time/korea_time.dart';
 import '../domain/calendar_event.dart';
 import '../domain/event_draft.dart';
+import '../domain/event_category.dart';
 import '../domain/event_repository.dart';
 
 class EventCommandService {
@@ -55,6 +56,7 @@ class EventCommandService {
       updated,
       allowImmediate: true,
     );
+    await _rescheduleMorningBriefingIfNeeded();
     await _syncService.queueEventUpsert(updated);
   }
 
@@ -66,7 +68,32 @@ class EventCommandService {
       reminderMinutesBeforeList:
           existing?.reminderMinutesBeforeList ?? const [],
     );
+    await _rescheduleMorningBriefingIfNeeded();
     await _syncService.queueEventDelete(eventId);
+  }
+
+  Future<void> updateCategoryUsage({
+    required EventCategory previous,
+    required EventCategory updated,
+  }) async {
+    final affected = await _repository.updateCategoryReferences(
+      previous: previous,
+      updated: updated,
+      updatedAt: _clock.now(),
+    );
+    if (affected.isEmpty) {
+      return;
+    }
+
+    for (final event in affected) {
+      await _notificationService.cancelEventReminder(
+        event.id,
+        reminderMinutesBeforeList: event.reminderMinutesBeforeList,
+      );
+      await _notificationService.scheduleEventReminder(event);
+      await _syncService.queueEventUpsert(event);
+    }
+    await _rescheduleMorningBriefingIfNeeded();
   }
 
   List<int> _combinedReminderMinutes(
@@ -77,5 +104,16 @@ class EventCommandService {
       ...?existing?.reminderMinutesBeforeList,
       ...updated.reminderMinutesBeforeList,
     ]);
+  }
+
+  Future<void> _rescheduleMorningBriefingIfNeeded() async {
+    final settings = _settingsRepository.load();
+    if (!settings.morningBriefingEnabled) {
+      return;
+    }
+    await _notificationService.scheduleMorningBriefing(
+      hour: settings.morningBriefingHour,
+      minute: settings.morningBriefingMinute,
+    );
   }
 }

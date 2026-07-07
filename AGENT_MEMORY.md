@@ -837,6 +837,291 @@ Historical app-version notes below `2.0.0` were intentionally removed on
     - On macOS, later resize the month view across narrow and wide widths and
       confirm visible event capacity scales smoothly with no text overlap.
 
+## 2026-07-06 Follow-up Fixes
+
+- Category edit propagation:
+  - When a category label/color is edited in Settings, existing events using
+    that category are now resaved through `EventCommandService` with the updated
+    category and color value.
+  - This should make calendar chips update immediately after category edit
+    instead of waiting until each event is manually edited and saved.
+  - Because the command service save path is used, affected events are marked
+    pending for sync and event notifications are rescheduled normally.
+- User-created holidays:
+  - The event editor now allows selecting the `공휴일` category.
+  - Events created or edited with the holiday category set `holiday: true` while
+    remaining user-editable (`readOnly/systemEvent` are not set by this path).
+  - Stored events whose category is `holiday` are mapped back as holiday events
+    so they render with holiday styling in the calendar.
+- Morning briefing notifications:
+  - The previous fixed body `오늘 일정을 확인할 시간입니다.` was replaced with a
+    schedule summary body.
+  - Daily now schedules the next 14 morning briefing notifications separately,
+    each with that date's event summary. If there are more than four events, the
+    body ends with `외 N개 더 있습니다.`
+  - Event create/update/delete reschedules the morning briefing when it is
+    enabled so changed schedules refresh the notification body.
+- Bottom calendar bar:
+  - The center `주/월/일` segmented control now uses a larger width ratio and
+    the side icon buttons are slightly smaller, reducing the empty-space feeling
+    on iPhone and wider layouts.
+- Verification:
+  - `./tool/flutter.sh analyze --no-pub` passed.
+  - `./tool/flutter.sh test --no-pub` passed.
+- Manual verification still useful:
+  - Edit a custom category color and confirm existing calendar chips repaint
+    immediately.
+  - Add a personal holiday event and confirm it appears as a holiday-colored,
+    editable event.
+  - Create more than four events on a future morning briefing date and confirm
+    the notification body summarizes visible events plus `외 N개 더 있습니다.`
+  - Check iPhone 13 mini / iPhone 17 / Pro Max bottom bar visual balance.
+
+## 2026-07-07 UI and Category Follow-up
+
+- Bottom calendar bar:
+  - Replaced the separated icon/segmented controls with one integrated 5-item
+    capsule: quick view, week, month, day, LLM.
+  - The bar background now extends through the iOS safe-area bottom so the area
+    below the controls no longer looks empty.
+  - Follow-up: removed the gray capsule background because it looked detached
+    from the white toolbar. The bar now uses a white native-toolbar treatment
+    with only a soft selected state per item.
+- Category edit propagation:
+  - Reworked category usage updates to use a repository-level batch update
+    before notification/sync follow-up work.
+  - This should prevent visible one-by-one color changes and make the calendar
+    show the completed color update when returning from Settings.
+  - Custom category edits now normalize to the new label-based custom id so
+    edited categories do not intermittently map back to the old color after
+    reload/sync.
+  - Hidden category filter ids are migrated when a category id changes.
+- Month picker:
+  - Month buttons now use one-line `FittedBox` labels so `1월`, `11월`, and
+    `12월` do not wrap as separate number/text lines.
+  - Follow-up: restored normal month label font size and widened the month
+    picker dialog/content instead of scaling down `10월`/`11월`/`12월`.
+- Time format:
+  - Added a Settings option for 12h/24h time picker display.
+  - Time picker dialogs in Settings now force the selected 12h/24h mode.
+  - The setting is persisted locally and included in Drive settings sync.
+	- Verification:
+	  - `./tool/flutter.sh analyze --no-pub` passed.
+	  - `./tool/flutter.sh test --no-pub` passed.
+	  - `./tool/flutter.sh build ios --simulator --debug --no-pub` passed.
+	  - Installed and launched on iPhone 17 simulator
+	    `BF524643-403E-4212-ACB7-621E11279532`.
+
+## 2026-07-07 Bottom Bar and Period Swipe Follow-up
+
+- Bottom calendar bar:
+  - The active `주/월/일` item background now fills the whole item cell from edge
+    to edge inside the integrated bottom bar instead of leaving side gaps.
+  - The bottom bar content was moved lower by letting the page body extend to
+    the screen bottom and letting the bar own its bottom safe area.
+  - The bottom bar content width was reduced slightly by increasing horizontal
+    inset from 10 to 18.
+  - Follow-up: removed the separate bottom padding/margin and increased the bar
+    height instead, so the selected item background color extends through the
+    lower bar area instead of leaving a blank bottom gap.
+- Week/day navigation:
+  - Weekly and daily calendar views now use PageView-based horizontal paging,
+    matching the monthly calendar swipe animation style.
+  - Swipe left moves to the next week/day and swipe right moves to the previous
+    week/day with the same page physics used by monthly navigation.
+  - The same visible-range update path is used for header navigation and body
+    swipes so selected date and visible month stay in sync.
+- Verification:
+  - `./tool/flutter.sh analyze --no-pub` passed.
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/features/calendar/calendar_month_grid_test.dart` passed.
+  - `./tool/flutter.sh build ios --simulator --debug --no-pub` passed.
+  - Installed and launched on iPhone 17 simulator
+    `BF524643-403E-4212-ACB7-621E11279532`.
+  - Screenshot check confirmed the bottom bar reaches the bottom edge without
+    the previous visible bottom gap.
+- Manual verification still useful:
+  - On iPhone 17 simulator, check that the bottom bar is lower, slightly
+    narrower, and that the active color reaches the full selected item bounds.
+  - Switch to weekly and daily modes, then swipe left/right to confirm period
+    navigation feels correct.
+
+## 2026-07-07 Apple Login Drives Google Sync
+
+- Apple login flow:
+  - Starting with Apple now first attempts silent Google Drive session restore
+    via `restorePreviousSignIn()`.
+  - If a Google Drive account was already connected/restorable on the device,
+    Daily starts Drive sync automatically without showing the Google sign-in
+    account picker.
+  - If no restorable Google Drive session exists, Apple login now continues into
+    the interactive Google login/Drive permission flow automatically after a
+    short sequencing delay. This preserves the requested first-login linkage
+    while reducing iOS back-to-back OAuth URL callback collisions.
+  - Onboarding is completed only after Apple sign-in and Google Drive connection
+    both succeed, preventing an Apple-only state with no Drive sync.
+  - If the Google Drive permission flow is cancelled after Apple sign-in, the
+    user remains on the welcome screen with a message explaining that Google
+    Drive connection is required to continue with Apple.
+- Settings Apple connection:
+  - Connecting Apple from Settings now first attempts silent Google Drive restore
+    and opens the Google login/Drive connection flow automatically if there is
+    no restorable Google session.
+  - Settings text no longer says Google Drive sync is a separate Apple-login
+    choice; it explains that Apple login uses Google Drive for backup/sync.
+- Account UX:
+  - The welcome screen no longer exposes a first-login `Google Drive backup
+    restore` action. It now offers `Google로 계속`, which uses the same
+    login-and-Drive-sync flow as Apple.
+  - `연결 해제` was renamed to `로그아웃`; logout now syncs once, signs out
+    Apple/Google local session state, and returns directly to the welcome screen.
+  - `Drive 백업 삭제` was renamed to `회원탈퇴`; membership withdrawal deletes
+    the Drive AppData backup when available, clears local data/settings, signs
+    out Apple/Google, and returns to the welcome screen.
+- Verification:
+  - `./tool/flutter.sh analyze --no-pub` passed.
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart` passed.
+  - Added regression coverage for Apple first login automatically continuing
+    into Google login when no restorable Google session exists.
+
+## 2026-07-07 iOS Google Auth Crash Follow-up
+
+- Crash diagnosis:
+  - The post-Apple Google link crash was a native iOS Google Sign-In/AppAuth URL
+    callback abort (`OIDAuthorizationSession resumeExternalUserAgentFlowWithURL`),
+    not a catchable Dart exception.
+- iOS auth change:
+  - User clarified the desired Google auth UI: it should feel like an in-app
+    popup/sheet rising over Daily, not a full jump to the Safari app.
+  - iOS Google Drive auth now uses a custom `ASWebAuthenticationSession` method
+    channel (`daily/google_oauth`) instead of `google_sign_in_ios`.
+  - iOS OAuth uses the app's reversed Google client id URL scheme and PKCE
+    redirect URI `com.googleusercontent.apps...:/oauth2redirect/google`; it no
+    longer uses localhost redirects or launches Safari via `open`.
+  - The iOS custom auth session exchanges the returned authorization code in
+    Dart through the existing Google token/userinfo path and stores the refresh
+    token in the existing secure storage-backed Drive session keys.
+  - Fixed a follow-up blocker where iOS was still treated like desktop browser
+    OAuth for lifecycle cancellation. `canCancelPendingSignInOnResume` is now
+    false on iOS so the app returning from the authentication sheet no longer
+    cancels the in-progress Google Drive connection.
+  - Added the iOS OAuth client id from `ios/Runner/GoogleService-Info.plist` as
+    the default `GOOGLE_IOS_CLIENT_ID`, so Google/Apple-to-Google connection
+    does not require an extra build define to open the auth sheet.
+  - Added serialization around mobile Google sign-in so Apple-login-to-Google
+    linking cannot start overlapping interactive Google auth requests.
+  - `SceneDelegate` still swallows Google callback URLs so the registered
+    `google_sign_in_ios` plugin cannot receive duplicate callbacks and crash
+    with AppAuth `resumeExternalUserAgentFlowWithURL`.
+- Settings separation:
+  - Settings now displays `Google 계정` and `Google Drive 동기화` as separate
+    rows so the signed-in Google account and Drive sync status are not conflated.
+- Verification:
+  - `./tool/flutter.sh analyze --no-pub` passed.
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart` passed.
+  - `./tool/flutter.sh build ios --simulator --debug --no-pub` passed after the
+    `ASWebAuthenticationSession` auth path was added.
+  - Installed and launched on iPhone 17 simulator with the new iOS auth path.
+
+## 2026-07-08 iOS Google Auth Presentation Fix
+
+- User-reported iPhone screenshot showed Google Drive linking failing with
+  `com.apple.AuthenticationServices.WebAuthenticationSession error 3`.
+- Root cause candidate fixed in native iOS code: `ASWebAuthenticationSession`
+  could request its presentation anchor before a key window was discoverable,
+  causing the session to fail immediately instead of showing the Google sheet.
+- `DailyGoogleOAuthSession` now resolves a foreground visible window first and
+  retains a clear fallback `UIWindow` tied to the active `UIWindowScene` when no
+  key window is available. The fallback window is released when auth completes
+  or fails.
+- This keeps the Google auth flow as an in-app iOS authentication sheet over
+  Daily rather than opening the standalone Safari app.
+
+## 2026-07-08 Apple/Google Login State Fix
+
+- User confirmed the iOS Google auth sheet opens normally, then reported account
+  state issues after Apple login:
+  - Apple login showed Google-button loading while entering the app.
+  - Settings showed Google connected but Apple disconnected after relaunch.
+  - After a normal logout, Apple login opened the Google popup again instead of
+    silently reusing the previously linked Google Drive account.
+- Behavior changed:
+  - Apple onboarding now keeps the Apple button busy while it silently checks or
+    connects Google Drive. The Google button shows a spinner only when the user
+    explicitly chooses Google.
+  - `AppleSignInService.refreshCurrentAccount()` no longer deletes the saved
+    Daily Apple account marker when iOS reports a revoked/transient credential
+    state. Apple account data is cleared only by explicit Daily logout or
+    membership withdrawal.
+  - Normal account logout no longer clears saved Google Drive auth tokens. It
+    syncs pending changes, returns to the welcome screen, and preserves the
+    saved Apple and Google Drive link markers so the next Apple/Google login can
+    restore the paired account state automatically without prompting.
+  - Membership withdrawal/local reset still clears local data, Apple account
+    data, and Google Drive auth/session data when applicable.
+
+## 2026-07-08 Reciprocal Apple/Google Link Persistence
+
+- User requested the reciprocal path: if Apple was already linked, signing in
+  through Google later should automatically keep Apple linked too.
+- Normal `로그아웃` now preserves both saved Apple and Google Drive account link
+  state and only marks onboarding incomplete to return to the welcome screen.
+- `회원탈퇴` remains the destructive account-removal path and still clears Apple
+  account data plus Google Drive auth/session data when applicable.
+- Added widget coverage confirming Google logout returns to onboarding while
+  preserving the saved Apple account marker for the next Google/Apple login.
+- Follow-up UI cleanup: account settings now exposes a single unified
+  `로그아웃` button for the whole account section. Apple and Google Drive rows keep
+  their sign-in/sync actions, but no longer show separate logout buttons.
+
+## 2026-07-08 Cross-Platform Parity Handoff
+
+- macOS, Android, and Windows must be brought to the same account UX and sync
+  policy as the latest iOS work before their next user-facing build:
+  - Welcome screen should expose Apple where supported, local start, Google
+    continue, and notification permission consistently with iOS wording.
+  - Apple login, where supported, should first restore an existing Google Drive
+    AppData session silently and open Google authorization only when no saved
+    Drive session exists.
+  - Google login should preserve an already linked Apple account marker, so
+    either login path restores the paired account state.
+  - Settings should show Google account and Google Drive sync as separate rows,
+    but only one unified `로그아웃` button for the entire account section.
+  - Normal `로그아웃` must sync pending changes and return to onboarding while
+    preserving saved Apple/Google link state for future automatic restore.
+  - `회원탈퇴` remains the only destructive account removal path and must clear
+    local data/settings plus Apple/Google auth/session state and Drive backup
+    where applicable.
+  - iOS Google auth now uses an in-app `ASWebAuthenticationSession` sheet with a
+    valid presentation anchor and retry handling. macOS should keep equivalent
+    user-visible behavior with its supported auth mechanism; Android/Windows
+    should keep the same account-state semantics even if their native auth UI is
+    different.
+- Required verification for macOS/Android/Windows agents:
+  - Fresh install: Apple/Google/local onboarding paths.
+  - Apple then Google link, app restart, settings account rows.
+  - Logout then Apple login: Google Drive restores without a prompt when saved.
+  - Logout then Google login: Apple marker remains linked when previously saved.
+  - Membership withdrawal clears both account markers and Drive backup.
+  - Manual sync and create/update/delete event sync still use v2 AppData files.
+
+## 2026-07-08 Release 2.5.15 Preparation
+
+- User approved recommended version `2.5.15`.
+- Updated shared Flutter version and Windows MSIX metadata from `2.5.14` to
+  `2.5.15`.
+- Updated stale iOS/macOS Xcode test target marketing/build values to `2.5.15`.
+- GitHub Release should upload only one IPA asset for this release, per user
+  instruction.
+- Prepare two local IPA copies after build:
+  - Transporter/App Store Connect upload IPA.
+  - Physical iPhone install/check IPA for user-side installation.
+- App Store Connect notes to update:
+  - Select the latest uploaded `2.5.15` iOS build.
+  - Review notes should mention Apple and Google login are both available.
+  - Google Drive access is only for Drive AppData Daily backup/sync.
+  - Daily does not access normal Google Drive files.
+  - Daily does not use IDFA, ads, data brokers, or cross-app/site tracking.
+
 ## Security Notes
 
 - The user previously pasted Google OAuth client JSON that included a

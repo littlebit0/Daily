@@ -992,6 +992,7 @@ class GoogleDriveSyncService implements SyncService {
       'calendarDdayOnly': settings.calendarDdayOnly,
       'hideSensitiveEvents': settings.hideSensitiveEvents,
       'hideSensitiveNotifications': settings.hideSensitiveNotifications,
+      'use24HourTime': settings.use24HourTime,
     };
   }
 
@@ -1028,6 +1029,7 @@ class GoogleDriveSyncService implements SyncService {
       hideSensitiveEvents: json['hideSensitiveEvents'] as bool? ?? false,
       hideSensitiveNotifications:
           json['hideSensitiveNotifications'] as bool? ?? false,
+      use24HourTime: json['use24HourTime'] as bool? ?? true,
     );
   }
 

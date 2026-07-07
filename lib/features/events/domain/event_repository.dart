@@ -1,7 +1,13 @@
 import 'calendar_event.dart';
+import 'event_category.dart';
 
 abstract interface class EventRepository {
   Stream<List<CalendarEvent>> watchEventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  );
+
+  Future<List<CalendarEvent>> eventsInRange(
     DateTime rangeStart,
     DateTime rangeEnd,
   );
@@ -13,6 +19,12 @@ abstract interface class EventRepository {
   Future<List<CalendarEvent>> pendingSyncEvents();
 
   Future<List<CalendarEvent>> allEventsForSync();
+
+  Future<List<CalendarEvent>> updateCategoryReferences({
+    required EventCategory previous,
+    required EventCategory updated,
+    required DateTime updatedAt,
+  });
 
   Future<void> save(CalendarEvent event);
 

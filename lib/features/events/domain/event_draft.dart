@@ -71,6 +71,7 @@ class EventDraft {
       syncStatus: 'pending',
       showDday: showDday,
       sensitive: sensitive,
+      holiday: category.id == EventCategory.holiday.id,
     ).normalizeAllDayBounds();
   }
 
