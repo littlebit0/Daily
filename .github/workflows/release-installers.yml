@@ -1,4 +1,4 @@
-name: Release Installers
+name: Release IPA
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v2.0.1"
+        description: "Release tag, for example v2.5.17"
         required: true
         type: string
 
@@ -15,52 +15,8 @@ permissions:
   contents: write
 
 jobs:
-  android:
-    name: Android APK
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: "3.44.0"
-          cache: true
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Build installable APK
-        run: flutter build apk --debug --no-pub
-
-      - name: Stage APK
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            version="${{ inputs.tag }}"
-            version="${version#v}"
-          fi
-          mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-debug.apk "dist/daily-android-${version}.apk"
-
-      - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android
-          path: dist/daily-android-*.apk
-          if-no-files-found: error
-
-  apple:
-    name: macOS DMG and unsigned iOS IPA
+  ios:
+    name: iOS unsigned IPA
     runs-on: macos-latest
     steps:
       - name: Check out repository
@@ -76,13 +32,10 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build macOS app
-        run: flutter build macos --release --no-pub
-
       - name: Build unsigned iOS app
         run: flutter build ios --release --no-codesign --no-pub
 
-      - name: Stage Apple installers
+      - name: Stage IPA
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -90,115 +43,22 @@ jobs:
             version="${{ inputs.tag }}"
             version="${version#v}"
           fi
-          mkdir -p dist
-
-          app_path="build/macos/Build/Products/Release/Daily.app"
-          hdiutil create \
-            -volname "Daily ${version}" \
-            -srcfolder "$app_path" \
-            -ov \
-            -format UDZO \
-            "dist/daily-macos-${version}.dmg"
-
-          rm -rf Payload
-          mkdir -p Payload
+          mkdir -p dist Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           /usr/bin/zip -qry "dist/daily-ios-${version}-unsigned.ipa" Payload
-          rm -rf Payload
 
-      - name: Upload Apple artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: apple
-          path: |
-            dist/daily-macos-*.dmg
-            dist/daily-ios-*-unsigned.ipa
-          if-no-files-found: error
-
-  windows:
-    name: Windows ZIP
-    runs-on: windows-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: "3.44.0"
-          cache: true
-
-      - name: Enable Windows desktop
-        run: flutter config --enable-windows-desktop
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Build Windows app
-        run: flutter build windows --release --no-pub
-
-      - name: Stage Windows ZIP
-        shell: pwsh
-        run: |
-          $version = "${env:GITHUB_REF_NAME}".TrimStart("v")
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = "${{ inputs.tag }}".TrimStart("v")
-          }
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $releaseDir = "build/windows/x64/runner/Release"
-          $packageDir = "dist/windows-package"
-          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $packageDir
-          New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
-          foreach ($item in @("daily.exe", "flutter_windows.dll", "native_assets.json", "data")) {
-            $source = Join-Path $releaseDir $item
-            if (Test-Path $source) {
-              Copy-Item -Recurse -Force $source $packageDir
-            }
-          }
-          Get-ChildItem -Path $releaseDir -File -Filter "*.dll" |
-            Where-Object { $_.Name -ne "flutter_windows.dll" } |
-            Copy-Item -Destination $packageDir -Force
-          Compress-Archive `
-            -Path "$packageDir/*" `
-            -DestinationPath "dist/daily-windows-$version.zip" `
-            -Force
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows
-          path: dist/daily-windows-*.zip
-          if-no-files-found: error
-
-  release:
-    name: Publish GitHub release
-    runs-on: ubuntu-latest
-    needs:
-      - android
-      - apple
-      - windows
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Download installer artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Generate checksums
-        run: |
-          cd dist
-          sha256sum * > SHA256SUMS.txt
-
-      - name: Publish release
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: Daily ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          body_path: docs/RELEASE_NOTES_2.0.4.md
-          files: |
-            dist/*
+          body: |
+            Daily iOS IPA release.
+
+            Changes:
+            - Fixes GitHub issues #15 and #16.
+            - Clarifies Apple login behavior for re-signed IPA installs.
+            - Refreshes restored Google Drive AppData settings immediately.
+            - Keeps this GitHub Release limited to the iOS IPA asset as requested.
+          files: dist/daily-ios-*-unsigned.ipa
           fail_on_unmatched_files: true

@@ -6,9 +6,9 @@ Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로�
 
 ## 현재 버전
 
-- 앱 버전: `2.5.16`
+- 앱 버전: `2.5.17`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 다음 릴리스 후보: `2.5.16`
+- 다음 릴리스 후보: `2.5.17`
 - 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
 
 ## 배포 파일
@@ -18,10 +18,10 @@ GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 이번 iOS 계정/Google Drive 동기화 수정 릴리스는 사용자의 지시에 따라
 GitHub Release 파일을 iOS IPA 하나로 제한합니다.
 
-- GitHub Release 업로드용 IPA: `dist/release-2.5.16/daily-ios-2.5.16.ipa`
-- App Store Connect Transporter 업로드용 IPA: `dist/transporter-upload/Daily-iOS-Transporter-2.5.16.ipa`
-- 실사용 iPhone 설치 확인용 IPA: `dist/device-install/Daily-iOS-Device-2.5.16.ipa`
-- SHA-256: `3e9b157d2c91823cc2b4f846fb9ec8a153b6c18b739f2c1bb958daae337d3ae2`
+- GitHub Release 업로드용 IPA: `dist/release-2.5.17/daily-ios-2.5.17.ipa`
+- App Store Connect Transporter 업로드용 IPA: `dist/transporter-upload/Daily-iOS-Transporter-2.5.17.ipa`
+- 실사용 iPhone 설치 확인용 IPA: `dist/device-install/Daily-iOS-Device-2.5.17.ipa`
+- SHA-256: `13f9fc31fd20bb368704d0b9065b20fe005bb6c3437e234bfdb606bc980b3416`
 
 macOS, Android, Windows 산출물은 이번 IPA 전용 릴리스에는 포함하지 않습니다.
 다만 macOS, Android, Windows도 다음 플랫폼 빌드 전에 iOS와 동일한 계정 UX와

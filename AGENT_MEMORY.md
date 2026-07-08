@@ -1146,6 +1146,27 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Version advanced to `2.5.16` instead of rewriting the already-pushed
   `v2.5.15` tag.
 
+## 2026-07-08 Release 2.5.17 Retry / GitHub Actions Fix
+
+- GitHub check after the `v2.5.16` push showed:
+  - `v2.5.16` tag exists on GitHub.
+  - GitHub Release object for `v2.5.16` was not created.
+  - `Release Installers` failed because the Windows ZIP job failed at
+    `flutter build windows --release --no-pub`.
+  - Android and Apple jobs completed, but the final release publish job was
+    skipped because Windows was in the `needs` list.
+- Likely Windows failure cause: the project now uses user-facing versions like
+  `2.5.16` without a `+build` suffix. Flutter leaves `FLUTTER_VERSION_BUILD`
+  empty on Windows, but `Runner.rc` requires a numeric fourth version segment.
+- Fix applied for Windows: `windows/runner/CMakeLists.txt` now defaults an empty
+  `FLUTTER_VERSION_BUILD` to `FLUTTER_VERSION_PATCH`, preserving the user's
+  no-`+` version convention while keeping Windows resource compilation valid.
+- Release workflow changed from all-platform installers to an iOS-only IPA
+  release workflow, matching the user's instruction that GitHub Release should
+  upload only the IPA for this release.
+- Version advanced to `2.5.17` for the retry instead of rewriting the failed
+  `v2.5.16` tag.
+
 ## Security Notes
 
 - The user previously pasted Google OAuth client JSON that included a
