@@ -159,7 +159,9 @@ class AppleSignInService {
         'Apple 자격 증명 처리 중 오류가 발생했습니다. 다시 시도해 주세요.',
       AuthorizationErrorCode.matchedExcludedCredential ||
       AuthorizationErrorCode.unknown =>
-        'Apple 로그인 중 알 수 없는 오류가 발생했습니다. 다시 시도해 주세요.',
+        'Apple 로그인을 완료하지 못했습니다. SideStore 등으로 재서명한 IPA에서는 '
+        'Sign in with Apple 권한이 제거될 수 있습니다. 이 경우 Google로 계속을 '
+        '사용하거나 TestFlight/App Store 빌드에서 Apple 로그인을 사용해 주세요.',
       AuthorizationErrorCode.canceled => 'Apple 로그인이 취소되었습니다.',
     };
   }

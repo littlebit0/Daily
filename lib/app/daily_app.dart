@@ -150,6 +150,8 @@ class _AppHome extends ConsumerStatefulWidget {
 class _AppHomeState extends ConsumerState<_AppHome>
     with WidgetsBindingObserver {
   var _servicesStarted = false;
+  ValueNotifier<int>? _settingsRevisionNotifier;
+  VoidCallback? _settingsRevisionListener;
 
   @override
   void initState() {
@@ -162,6 +164,11 @@ class _AppHomeState extends ConsumerState<_AppHome>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    final listener = _settingsRevisionListener;
+    final notifier = _settingsRevisionNotifier;
+    if (listener != null) {
+      notifier?.removeListener(listener);
+    }
     super.dispose();
   }
 
@@ -208,6 +215,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
   }
 
   void _startPostLoginServices() {
+    _listenForSyncedSettings();
     if (_servicesStarted) {
       unawaited(
         Future.microtask(() async {
@@ -223,6 +231,19 @@ class _AppHomeState extends ConsumerState<_AppHome>
         _refreshSettingsState();
       }).catchError((_) {}),
     );
+  }
+
+  void _listenForSyncedSettings() {
+    if (_settingsRevisionListener != null) {
+      return;
+    }
+    void listener() => _refreshSettingsState();
+    final notifier = ref
+        .read(googleDriveSyncServiceProvider)
+        .settingsRevisionNotifier;
+    _settingsRevisionNotifier = notifier;
+    _settingsRevisionListener = listener;
+    notifier.addListener(listener);
   }
 
   void _syncBeforeBackgroundOrExit() {

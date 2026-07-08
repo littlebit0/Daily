@@ -1122,6 +1122,30 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   - Daily does not access normal Google Drive files.
   - Daily does not use IDFA, ads, data brokers, or cross-app/site tracking.
 
+## 2026-07-08 Issue #15/#16 Release 2.5.16 Follow-up
+
+- Issue #15 `애플 로그인 오류`:
+  - Report: Apple login fails on a real iPhone when the IPA is installed through
+    SideStore, showing only an unknown Apple login error.
+  - Important limitation: SideStore/re-signed IPAs can lose the Sign in with
+    Apple entitlement. Code cannot make native Apple Sign In succeed without the
+    proper Apple entitlement in the installed app signature.
+  - Fix: Daily now explains this case in the Apple unknown-auth error message
+    and tells the user to use `Google로 계속` for SideStore builds or
+    TestFlight/App Store builds for Apple login.
+  - Regression test added for the SideStore/Google fallback message.
+- Issue #16 `수정 분류 동기화 오류`:
+  - Report: after moving to another iPhone, calendar event colors reflect an
+    edited category, but the category color shown in Settings remains stale.
+  - Fix: `GoogleDriveSyncService` now exposes a `settingsRevisionNotifier` and
+    increments it when remote settings are restored. `_AppHome` listens for that
+    signal and reloads `appSettingsProvider` from `SettingsRepository`, so
+    Settings receives the restored category color immediately.
+  - Regression test added to restore a remote category color and confirm both
+    local settings storage and the revision notifier update.
+- Version advanced to `2.5.16` instead of rewriting the already-pushed
+  `v2.5.15` tag.
+
 ## Security Notes
 
 - The user previously pasted Google OAuth client JSON that included a

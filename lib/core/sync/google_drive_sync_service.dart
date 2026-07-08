@@ -62,6 +62,7 @@ class GoogleDriveSyncService implements SyncService {
   final statusNotifier = ValueNotifier<GoogleDriveSyncStatus>(
     const GoogleDriveSyncStatus(),
   );
+  final settingsRevisionNotifier = ValueNotifier<int>(0);
 
   @override
   Future<void> start() {
@@ -203,6 +204,7 @@ class GoogleDriveSyncService implements SyncService {
     _changeSyncTimer?.cancel();
     unawaited(_accountSubscription?.cancel());
     statusNotifier.dispose();
+    settingsRevisionNotifier.dispose();
     if (_ownsHttpClient) {
       _httpClient.close();
     }
@@ -392,6 +394,7 @@ class GoogleDriveSyncService implements SyncService {
             appLockEnabled: localSettings.appLockEnabled,
           ),
         );
+        settingsRevisionNotifier.value += 1;
       }
     }
   }

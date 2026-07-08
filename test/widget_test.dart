@@ -64,6 +64,34 @@ void main() {
     expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
   });
 
+  test('Apple unknown auth error explains sideloaded IPA limitation', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final appleSignInService = AppleSignInService(
+      settingsRepository: settingsRepository,
+      targetPlatform: TargetPlatform.iOS,
+      availabilityChecker: () async => true,
+      credentialRequester: ({required scopes}) async {
+        throw const SignInWithAppleAuthorizationException(
+          code: AuthorizationErrorCode.unknown,
+          message: 'unknown',
+        );
+      },
+    );
+
+    await expectLater(
+      appleSignInService.signIn(),
+      throwsA(
+        isA<AppleSignInException>().having(
+          (error) => error.message,
+          'message',
+          allOf(contains('SideStore'), contains('Google로 계속')),
+        ),
+      ),
+    );
+  });
+
   testWidgets('Apple sign-in starts Daily on Apple platforms', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
