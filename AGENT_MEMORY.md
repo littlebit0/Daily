@@ -1167,6 +1167,19 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Version advanced to `2.5.17` for the retry instead of rewriting the failed
   `v2.5.16` tag.
 
+## 2026-07-08 Release 2.5.17 Notes Rewrite
+
+- User requested the GitHub Release note text be rewritten by referencing prior
+  uploaded release notes.
+- Added `docs/RELEASE_NOTES_2.5.17.md` using the older release-note structure:
+  적용 범위, 변경 사항, 검증, 배포 파일, SHA-256, 남은 확인 사항.
+- Updated `.github/workflows/release-installers.yml` to use
+  `body_path: docs/RELEASE_NOTES_2.5.17.md` instead of the short inline release
+  body.
+- Important: the already-created GitHub Release `v2.5.17` still has the earlier
+  short body unless it is edited through GitHub web/API or the workflow is
+  manually dispatched with permissions that can update the existing release.
+
 ## Security Notes
 
 - The user previously pasted Google OAuth client JSON that included a

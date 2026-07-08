@@ -52,13 +52,6 @@ jobs:
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: Daily ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          body: |
-            Daily iOS IPA release.
-
-            Changes:
-            - Fixes GitHub issues #15 and #16.
-            - Clarifies Apple login behavior for re-signed IPA installs.
-            - Refreshes restored Google Drive AppData settings immediately.
-            - Keeps this GitHub Release limited to the iOS IPA asset as requested.
+          body_path: docs/RELEASE_NOTES_2.5.17.md
           files: dist/daily-ios-*-unsigned.ipa
           fail_on_unmatched_files: true

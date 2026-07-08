@@ -257,6 +257,7 @@ Android keystore는 이후 Play Store 업데이트에 필요하므로 별도 안
 
 - [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)
 - [릴리스 노트 2.0.4](docs/RELEASE_NOTES_2.0.4.md)
+- [릴리스 노트 2.5.17](docs/RELEASE_NOTES_2.5.17.md)
 - [릴리스 노트 2.0.0](docs/RELEASE_NOTES_2.0.0.md)
 - [현재 진행상태](docs/PROGRESS_STATUS.md)
 - [릴리스 체크리스트](docs/RELEASE_CHECKLIST.md)
