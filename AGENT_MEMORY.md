@@ -1369,6 +1369,21 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   notifications, and morning briefing in the Windows notification center.
 - [ ] Build a release executable or MSIX and confirm its displayed version is
   `2.6.0` with no Flutter `+` suffix.
+
+## 2026-07-15 Release 2.6.0 Published
+
+- Commit `ee0c5dd` (`Release Daily 2.6.0`) and tag `v2.6.0` were pushed to
+  `littlebit0/Daily`.
+- GitHub Actions run `29362235598` completed successfully and created:
+  - Release page: `https://github.com/littlebit0/Daily/releases/tag/v2.6.0`
+  - `daily-ios-2.6.0-unsigned.ipa`
+  - `daily-macos-2.6.0-unsigned.dmg`
+- A locally development-signed macOS DMG and a locally exported iOS IPA also
+  exist under `dist/release-2.6.0/`. They are ignored by Git and must be
+  recreated for a later manual distribution if needed.
+- The iOS App Store version has already completed App Review approval. The
+  GitHub IPA is not an App Store installer and does not replace the approved
+  App Store build.
 - Verification passed:
   - `./tool/flutter.sh analyze --no-pub`
   - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart`

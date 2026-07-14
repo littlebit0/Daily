@@ -18,8 +18,10 @@ GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 이번 2.6.0 릴리스는 iOS 계정/Google Drive 동기화 수정과 macOS 데스크톱
 OAuth 안정화 내용을 포함합니다.
 
-- GitHub Release 업로드용 IPA: `dist/release-2.6.0/daily-ios-2.6.0.ipa`
-- GitHub Release 업로드용 macOS DMG: `dist/release-2.6.0/daily-macos-2.6.0.dmg`
+- GitHub Release IPA: `daily-ios-2.6.0-unsigned.ipa`
+- GitHub Release macOS DMG: `daily-macos-2.6.0-unsigned.dmg`
+- 로컬 GitHub 업로드용 IPA: `dist/release-2.6.0/daily-ios-2.6.0.ipa`
+- 로컬 GitHub 업로드용 macOS DMG: `dist/release-2.6.0/daily-macos-2.6.0.dmg`
 - App Store Connect Transporter 업로드용 IPA: `dist/transporter-upload/Daily-iOS-Transporter-2.6.0.ipa`
 - 실사용 iPhone 설치 확인용 IPA: `dist/device-install/Daily-iOS-Device-2.6.0.ipa`
 - iOS IPA SHA-256: `a748b495d37ff918f5bcd71bcc334a6d4ff12b75b88d139e65645db4a485427c`

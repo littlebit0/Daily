@@ -43,9 +43,13 @@
 
 ## 배포 파일
 
-- GitHub Release 업로드용 IPA:
+- GitHub Release IPA:
+  - `daily-ios-2.6.0-unsigned.ipa`
+- GitHub Release macOS DMG:
+  - `daily-macos-2.6.0-unsigned.dmg`
+- 로컬 GitHub 업로드용 IPA:
   - `dist/release-2.6.0/daily-ios-2.6.0.ipa`
-- GitHub Release 업로드용 macOS DMG:
+- 로컬 GitHub 업로드용 macOS DMG:
   - `dist/release-2.6.0/daily-macos-2.6.0.dmg`
 - App Store Connect Transporter 업로드용 IPA:
   - `dist/transporter-upload/Daily-iOS-Transporter-2.6.0.ipa`
