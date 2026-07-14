@@ -1180,6 +1180,199 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   short body unless it is edited through GitHub web/API or the workflow is
   manually dispatched with permissions that can update the existing release.
 
+## 2026-07-12 App Review 2.6.0 Apple Login Fix / Maps Shortcut
+
+- App Review rejected `2.5.17 (2.5.17)` on 2026-07-09 because `Apple로 계속`
+  completed Apple authentication and then opened a Google login page, blocking
+  review unless Google login was completed.
+- Version advanced to `2.6.0` across shared Flutter metadata, iOS/macOS Xcode
+  project values, Windows MSIX metadata, and README current-version notes.
+- Fixed Apple login onboarding behavior:
+  - `Apple로 계속` no longer opens Google sign-in interactively.
+  - Apple login now completes local app entry even when no Google Drive session
+    exists.
+  - If a previous Google Drive session can be restored silently, Daily starts
+    Google Drive sync without prompting.
+  - If the silent restore fails or the stored session is missing, Daily stays in
+    Apple/local mode and the user can connect Google Drive explicitly.
+- Added Apple-to-Google link persistence in `SettingsRepository`:
+  - `appleLinkedGoogleEmail`
+  - `appleLinkedGoogleDisplayName`
+  - normal logout preserves this link; `resetAll()`/회원탈퇴 clears it.
+  - Explicit Google connection records the Google account when an Apple account
+    is already saved.
+- Settings Apple login flow was corrected the same way:
+  - Apple login in Settings does not force-open Google login.
+  - It only restores an existing Google session silently if available.
+- Added one `지도 바로가기` action for events with a `location`:
+  - Tapping it opens one bottom-sheet chooser.
+  - Supported services: 카카오맵, 네이버지도, Apple 지도.
+  - iOS `LSApplicationQueriesSchemes` now includes `kakaomap` and `nmap`.
+  - Android manifest queries include `kakaomap` and `nmap`.
+- Issue #16 follow-up:
+  - Category add/edit/delete now performs a best-effort awaited `backupNow()`
+    after local settings/event category updates so the remote settings file is
+    less likely to lag behind event color updates on another device.
+- Verification completed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart`
+  - `./tool/flutter.sh build ipa --release --no-pub`
+    - Archive validation: Version Number `2.6.0`, Build Number `2.6.0`,
+      Bundle Identifier `com.littlebit0.daily`.
+- Local 2.6.0 IPA copies:
+  - `dist/release-2.6.0/daily-ios-2.6.0.ipa`
+  - `dist/transporter-upload/Daily-iOS-Transporter-2.6.0.ipa`
+  - `dist/device-install/Daily-iOS-Device-2.6.0.ipa`
+  - SHA-256:
+    `0b2e3fabbdfd7135c757fc697c6673c5466130927a4c0daff83697da65c5e82f`
+- Still verify manually before App Store resubmission:
+  - Fresh iPad/iPhone install: tap `Apple로 계속`; Google login must not appear.
+  - Settings Apple login: Google login must not appear unless the user presses
+    the explicit Google connect button.
+  - With a previously connected Google account: Apple login should restore Drive
+    sync silently when the Google session is still available.
+  - Event with address/location: `지도 바로가기` bottom sheet should open and each
+    map choice should launch or fall back correctly.
+  - macOS/Windows/Android parity should be smoke-tested because shared Flutter
+    account and event-detail code changed.
+
+## 2026-07-15 macOS 2.6.0 Test Build
+
+- The latest shared 2.6.0 Flutter code was built for macOS and installed at
+  `~/Applications/Daily.app` for user testing.
+- The previous Daily process was replaced and the new app was launched.
+- Confirmed installed bundle version and build number are both `2.6.0`.
+- Apple sign-in entitlement and macOS network entitlements remain present.
+  The Apple/Google/local onboarding, saved Google Drive restoration, account
+  settings, and location map chooser use shared Flutter code with iOS.
+- User will perform interactive functional testing; do not continue UI actions
+  unless specifically requested.
+
+## 2026-07-15 Month Event Density Follow-up
+
+- At the current macOS Daily window size (approximately `800 x 720`), month
+  cells had enough vertical space for only one to three event flags even though
+  the width-based density target allowed more.
+- `CalendarMonthGrid` now renders five-week months in five rows rather than
+  always reserving an empty sixth row. Six-week months remain six rows.
+- This gives the current July desktop layout enough vertical space to preserve
+  readable 13px event rows while showing four schedules. The `+N` overflow
+  marker remains below the visible rows.
+- Added a regression test for an `800 x 570` month-grid area, matching the
+  current desktop calendar content height, which requires four visible events.
+- Added a regression test confirming a five-week month does not render an
+  empty sixth week.
+- Verified with the latest installed macOS build: a day containing four
+  schedules renders all four readable flags in the current window size.
+- Verification passed:
+  - `./tool/flutter.sh test --no-pub test/features/calendar/calendar_month_grid_test.dart`
+  - `./tool/flutter.sh analyze --no-pub`
+
+## 2026-07-15 Calendar Navigation Restoration
+
+- Removed the iOS-style fixed bottom navigation bar from the shared calendar
+  screen, including its LLM shortcut.
+- Restored the previous header navigation pattern:
+  - desktop-width screens show the `주 / 월 / 일` segmented view control in
+    the header, together with range navigation and utility actions;
+  - compact screens use the header's view-selection menu and more-actions
+    menu, avoiding a bottom bar.
+- The calendar body now receives the reclaimed bottom-bar height. The shared
+  Flutter change applies to macOS and iOS.
+- macOS visual check passed with the restored header controls visible.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/features/calendar/calendar_month_grid_test.dart`
+
+## 2026-07-15 macOS Google Drive Connection Cancellation Fix
+
+- Root cause of the reported macOS Google Drive connection failure: the
+  onboarding and Settings lifecycle observers treated a browser focus change
+  as an aborted desktop OAuth flow. Daily then cancelled its loopback OAuth
+  listener before Google could return the authorization callback.
+- Removed all lifecycle-driven OAuth cancellation. A Google Drive connection
+  now remains pending while the user completes browser authentication, even
+  when the app becomes inactive and resumes.
+- Added an explicit `연결 취소` action during a pending desktop Google Drive
+  connection. This is the only in-app path that cancels the loopback OAuth
+  listener, so users can deliberately recover without guessing at lifecycle
+  timing.
+- The shared Flutter behavior applies to macOS and Windows desktop OAuth
+  flows. iOS/Android retain their platform-native Google authorization flow.
+- Tests now verify inactive-to-resumed lifecycle transitions do not cancel a
+  pending connection and that the explicit cancellation control does.
+
+## 2026-07-15 Android and Windows Account-Flow Parity
+
+- The latest shared account, onboarding, settings, Google Drive sync, and
+  calendar behavior is applied to Android and Windows through Flutter shared
+  code. No separate platform UI implementation is needed for these changes.
+- Android follows the iOS/mobile pattern:
+  - Google authorization uses the platform-native mobile flow.
+  - The UI shows `Google 연결 중` while authorization is pending and does not
+    expose a desktop-loopback cancellation control.
+- Windows follows the macOS/desktop pattern:
+  - Google authorization opens the system browser and waits for the loopback
+    OAuth callback without lifecycle-driven automatic cancellation.
+  - While it is pending, the user can use the explicit `연결 취소` control.
+  - The desktop OAuth configuration lookup supports
+    `%APPDATA%\\Daily\\google_desktop_oauth.json`,
+    `%LOCALAPPDATA%\\Daily\\google_desktop_oauth.json`, or the
+    `GOOGLE_DESKTOP_OAUTH_CONFIG` override. The JSON may contain a client
+    secret and must remain outside Git.
+- Shared verification passed on macOS:
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart`
+- Android debug build was attempted but this Mac has no Android SDK configured
+  (`ANDROID_HOME` unavailable), so a Windows/Android environment must still
+  perform the following smoke checks before release.
+
+### Android Verification Checklist
+
+- [ ] Install a clean debug or release APK after removing any older Daily app.
+- [ ] Start in `로컬로 시작`; create, edit, delete, and restart to confirm local
+  events and settings persist without a Google account.
+- [ ] Choose `Google로 계속`; complete Android's native Google account and Drive
+  permission flow. While it is open, Daily must show `Google 연결 중`, must not
+  expose `연결 취소`, and must not crash or remain permanently disabled after
+  user cancellation.
+- [ ] Confirm the connected email appears in Settings and that the first
+  Google Drive AppData backup/restore completes.
+- [ ] On a second device signed into the same Google account, create an event
+  on one device and confirm the other device receives the v2 event file after
+  sync/resume. Also verify an edit and deletion propagate correctly.
+- [ ] Sign out, restart, and verify the intended saved Google session behavior
+  is restored without an unwanted account-selection page. Confirm local-only
+  mode remains usable when no Google account is connected.
+- [ ] Check monthly, weekly, and daily calendar navigation; category color
+  changes; holiday event selection; event address map chooser; scheduled event
+  notification; and morning briefing in Android system notifications.
+
+### Windows Verification Checklist
+
+- [ ] Install/run a clean Windows build and confirm `Google로 계속` opens the
+  system browser, not an embedded or blank web view.
+- [ ] Complete browser Google sign-in and Drive AppData approval. Switching to
+  the browser and back must not show `Google Drive 연결이 취소되었습니다.` before
+  the OAuth callback finishes.
+- [ ] During the pending browser flow, confirm `연결 취소` is visible and works
+  only when the user deliberately presses it. Cancelling must re-enable
+  `Google로 계속` and must not leave a blocked connection state.
+- [ ] Confirm the connected email, initial Drive AppData backup/restore, and
+  app restart token restoration. If a local desktop OAuth config is needed,
+  verify it is stored outside Git at the documented APPDATA/LOCALAPPDATA path.
+- [ ] Verify cross-device event create, edit, delete, all-day event date, and
+  category/settings synchronization against the same Google Drive AppData
+  account used by iOS/macOS/Android.
+- [ ] Check local-only start, logout, account deletion/local reset, monthly
+  calendar scrolling, weekly/daily navigation, address map chooser, event
+  notifications, and morning briefing in the Windows notification center.
+- [ ] Build a release executable or MSIX and confirm its displayed version is
+  `2.6.0` with no Flutter `+` suffix.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart`
+
 ## Security Notes
 
 - The user previously pasted Google OAuth client JSON that included a

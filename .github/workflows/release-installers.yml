@@ -1,4 +1,4 @@
-name: Release IPA
+name: Release Apple Installers
 
 on:
   push:
@@ -15,8 +15,8 @@ permissions:
   contents: write
 
 jobs:
-  ios:
-    name: iOS unsigned IPA
+  apple-installers:
+    name: iOS IPA and macOS DMG
     runs-on: macos-latest
     steps:
       - name: Check out repository
@@ -35,7 +35,19 @@ jobs:
       - name: Build unsigned iOS app
         run: flutter build ios --release --no-codesign --no-pub
 
-      - name: Stage IPA
+      - name: Build unsigned macOS app
+        run: |
+          flutter build macos --release --config-only --no-pub
+          xcodebuild \
+            -workspace macos/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk macosx \
+            -derivedDataPath build/macos \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Stage Apple installers
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -46,6 +58,12 @@ jobs:
           mkdir -p dist Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           /usr/bin/zip -qry "dist/daily-ios-${version}-unsigned.ipa" Payload
+          hdiutil create \
+            -volname Daily \
+            -srcfolder build/macos/Build/Products/Release/Daily.app \
+            -ov \
+            -format UDZO \
+            "dist/daily-macos-${version}-unsigned.dmg"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -53,5 +71,7 @@ jobs:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: Daily ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           body_path: docs/RELEASE_NOTES_2.5.17.md
-          files: dist/daily-ios-*-unsigned.ipa
+          files: |
+            dist/daily-ios-*-unsigned.ipa
+            dist/daily-macos-*-unsigned.dmg
           fail_on_unmatched_files: true

@@ -15,7 +15,7 @@ import '../../../core/sync/google_drive_sync_service.dart';
 import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 
-const _fallbackAppVersion = '2.5.14';
+const _fallbackAppVersion = '2.6.0';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -24,8 +24,7 @@ class SettingsPage extends ConsumerStatefulWidget {
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends ConsumerState<SettingsPage>
-    with WidgetsBindingObserver {
+class _SettingsPageState extends ConsumerState<SettingsPage> {
   static const _accountActionTimeout = Duration(seconds: 10);
   static const _logoutAccountReserve = Duration(seconds: 3);
   static const _resetNotificationCleanupTimeout = Duration(seconds: 3);
@@ -42,6 +41,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   AppleAccount? _appleAccount;
   var _googleDriveConnectAttempt = 0;
   int? _activeGoogleDriveConnectAttempt;
+  var _canCancelGoogleDriveConnection = false;
 
   static const _categoryColors = [
     0xff2563eb,
@@ -57,7 +57,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _appVersionInfo = _loadAppVersionInfo();
     Future.microtask(() async {
       final key = await ref.read(settingsRepositoryProvider).geminiApiKey();
@@ -90,16 +89,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _apiKeyController.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _cancelDesktopGoogleDriveSignInIfPending();
-    }
   }
 
   @override
@@ -441,9 +432,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               const Divider(height: 1),
               _GoogleDriveSyncSettings(
                 email: _driveEmail,
+                hasAccountConnection: hasAccountConnection,
                 busy: _syncBusy,
+                canCancelConnect: _canCancelGoogleDriveConnection,
                 message: _syncMessage,
                 onConnect: _connectGoogleDrive,
+                onCancelConnect: _cancelGoogleDriveConnection,
                 onSyncNow: _syncGoogleDriveNow,
                 onDeleteAccount: _deleteAccount,
               ),
@@ -493,15 +487,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       }
       setState(() {
         _appleAccount = account;
-        _appleMessage = 'Apple 로그인이 완료되었습니다. 기존 Google Drive 연결을 확인합니다.';
+        _appleMessage = 'Apple 로그인이 완료되었습니다.';
       });
-      await _connectGoogleDrive(preferSilentRestore: true);
+      await _restoreLinkedGoogleDriveIfAvailable();
       if (mounted) {
         setState(() {
           _appleMessage =
               ref.read(googleDriveAuthServiceProvider).currentAccount == null
-              ? 'Apple 로그인이 완료되었습니다. Google Drive 연결이 필요합니다.'
-              : 'Apple 로그인과 Google Drive 동기화 연결이 완료되었습니다.';
+              ? 'Apple 로그인이 완료되었습니다.'
+              : 'Apple 로그인과 저장된 Google Drive 동기화 연결이 완료되었습니다.';
         });
       }
     } on AppleSignInException catch (error) {
@@ -639,6 +633,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     await _save(
       settings.copyWith(categories: _normalizeCategories(categories)),
     );
+    await _backupCategorySettingsNow();
   }
 
   Future<void> _editCategory(
@@ -668,6 +663,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     await ref
         .read(eventCommandServiceProvider)
         .updateCategoryUsage(previous: category, updated: updatedCategory);
+    await _backupCategorySettingsNow();
   }
 
   Future<void> _deleteCategory(
@@ -701,6 +697,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     await _save(
       settings.copyWith(categories: _normalizeCategories(categories)),
     );
+    await _backupCategorySettingsNow();
+  }
+
+  Future<void> _backupCategorySettingsNow() async {
+    try {
+      await ref.read(googleDriveSyncServiceProvider).backupNow();
+    } on Object {
+      // Category edits are saved locally first. A failed optional cloud backup
+      // is retried by the next manual or lifecycle sync.
+    }
   }
 
   List<EventCategory> _normalizeCategories(List<EventCategory> categories) {
@@ -711,7 +717,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     return normalized;
   }
 
-  Future<void> _connectGoogleDrive({bool preferSilentRestore = false}) async {
+  Future<void> _connectGoogleDrive() async {
     final attempt = ++_googleDriveConnectAttempt;
     _activeGoogleDriveConnectAttempt = attempt;
     setState(() {
@@ -720,24 +726,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     });
     try {
       final authService = ref.read(googleDriveAuthServiceProvider);
-      var account = preferSilentRestore
-          ? await authService.restorePreviousSignIn()
-          : null;
-      if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
-        return;
+      await authService.initialize();
+      if (mounted && _isCurrentGoogleDriveConnectAttempt(attempt)) {
+        setState(
+          () => _canCancelGoogleDriveConnection =
+              authService.canCancelPendingSignInOnResume,
+        );
       }
-      if (account == null && preferSilentRestore) {
-        if (mounted) {
-          setState(() {
-            _syncMessage = 'Google 로그인 창을 여는 중입니다.';
-          });
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 1100));
-        if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
-          return;
-        }
-      }
-      account ??= await authService.signIn(forceAccountSelection: true);
+      final account = await authService.signIn(forceAccountSelection: true);
       if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
         return;
       }
@@ -764,6 +760,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
         return;
       }
+      if (account != null) {
+        await _rememberAppleGoogleLink(account);
+      }
       if (!mounted) {
         return;
       }
@@ -783,16 +782,72 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         setState(() {
           _activeGoogleDriveConnectAttempt = null;
           _syncBusy = false;
+          _canCancelGoogleDriveConnection = false;
         });
       }
     }
+  }
+
+  Future<void> _restoreLinkedGoogleDriveIfAvailable() async {
+    final attempt = ++_googleDriveConnectAttempt;
+    _activeGoogleDriveConnectAttempt = attempt;
+    try {
+      final settingsRepository = ref.read(settingsRepositoryProvider);
+      final linkedEmail = settingsRepository.appleLinkedGoogleEmail();
+      final authService = ref.read(googleDriveAuthServiceProvider);
+      final account = await authService.restorePreviousSignIn();
+      if (!_isCurrentGoogleDriveConnectAttempt(attempt) || account == null) {
+        return;
+      }
+      if (linkedEmail != null && account.email != linkedEmail) {
+        return;
+      }
+      await _rememberAppleGoogleLink(account);
+      final syncService = ref.read(googleDriveSyncServiceProvider);
+      await syncService.startListeningOnly(flushPendingChanges: false);
+      if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
+        return;
+      }
+      await syncService.syncPendingChangesNow(
+        promptIfNecessary: false,
+        restoreAfterBackup: true,
+      );
+      if (!_isCurrentGoogleDriveConnectAttempt(attempt) || !mounted) {
+        return;
+      }
+      ref.read(appSettingsProvider.notifier).state = settingsRepository.load();
+      setState(() {
+        _driveEmail = account.email;
+        _syncMessage = '저장된 Google Drive 연결을 복원했습니다.';
+      });
+    } on Object {
+      // Apple account linking must not be blocked by a missing or expired
+      // Google session. The user can reconnect Google Drive explicitly.
+    } finally {
+      if (mounted && _isCurrentGoogleDriveConnectAttempt(attempt)) {
+        setState(() {
+          _activeGoogleDriveConnectAttempt = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _rememberAppleGoogleLink(GoogleDriveAccount account) async {
+    final settingsRepository = ref.read(settingsRepositoryProvider);
+    if (settingsRepository.appleAccount() == null) {
+      return;
+    }
+    await settingsRepository.saveAppleLinkedGoogleAccount(
+      email: account.email,
+      displayName: account.displayName,
+    );
   }
 
   bool _isCurrentGoogleDriveConnectAttempt(int attempt) {
     return _googleDriveConnectAttempt == attempt;
   }
 
-  void _cancelDesktopGoogleDriveSignInIfPending() {
+  void _cancelGoogleDriveConnection() {
     final attempt = _activeGoogleDriveConnectAttempt;
     if (attempt == null || !_isCurrentGoogleDriveConnectAttempt(attempt)) {
       return;
@@ -807,6 +862,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       setState(() {
         _activeGoogleDriveConnectAttempt = null;
         _syncBusy = false;
+        _canCancelGoogleDriveConnection = false;
         _syncMessage = 'Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.';
       });
     }
@@ -878,9 +934,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     final hasGoogleAccount =
         _driveEmail != null || authService.currentAccount != null;
     final hasSignedInAccount = hasGoogleAccount || _appleAccount != null;
-    final title = hasSignedInAccount ? '회원탈퇴' : '로컬 데이터 초기화';
+    final title = hasSignedInAccount ? '계정 삭제' : '로컬 데이터 초기화';
     final content = hasSignedInAccount
-        ? 'Google Drive의 Daily 백업, 이 기기의 모든 일정과 설정, Apple/Google 로그인 정보를 삭제하고 시작 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.'
+        ? 'Daily 계정 연결, Google Drive AppData 백업, 이 기기의 모든 일정과 설정, Apple/Google 로그인 정보를 삭제하고 시작 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.'
         : '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다.';
 
     final confirmed = await showDialog<bool>(
@@ -896,7 +952,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(hasSignedInAccount ? '회원탈퇴' : '초기화'),
+            child: Text(hasSignedInAccount ? '계정 삭제' : '초기화'),
           ),
         ],
       ),
@@ -929,7 +985,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           _driveEmail = null;
           _appleAccount = null;
           _syncMessage = hasSignedInAccount
-              ? '회원탈퇴가 완료되었습니다.'
+              ? '계정 삭제가 완료되었습니다.'
               : '로컬 데이터 초기화가 완료되었습니다.';
         });
         Navigator.of(context).popUntil((route) => route.isFirst);
@@ -1388,17 +1444,23 @@ class _CategoryTile extends StatelessWidget {
 class _GoogleDriveSyncSettings extends StatelessWidget {
   const _GoogleDriveSyncSettings({
     required this.email,
+    required this.hasAccountConnection,
     required this.busy,
+    required this.canCancelConnect,
     required this.message,
     required this.onConnect,
+    required this.onCancelConnect,
     required this.onSyncNow,
     required this.onDeleteAccount,
   });
 
   final String? email;
+  final bool hasAccountConnection;
   final bool busy;
+  final bool canCancelConnect;
   final String message;
   final VoidCallback onConnect;
+  final VoidCallback onCancelConnect;
   final VoidCallback onSyncNow;
   final VoidCallback onDeleteAccount;
 
@@ -1430,15 +1492,23 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: busy ? null : (connected ? onSyncNow : onConnect),
+                onPressed: busy
+                    ? (connected || !canCancelConnect ? null : onCancelConnect)
+                    : (connected ? onSyncNow : onConnect),
                 icon: busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                    ? Icon(
+                        connected || !canCancelConnect
+                            ? Icons.hourglass_top_outlined
+                            : Icons.close,
                       )
                     : Icon(connected ? Icons.sync : Icons.cloud_outlined),
-                label: Text(connected ? '지금 동기화' : 'Google로 계속'),
+                label: Text(
+                  busy && !connected && canCancelConnect
+                      ? '연결 취소'
+                      : busy
+                      ? 'Google 연결 중'
+                      : (connected ? '지금 동기화' : 'Google로 계속'),
+                ),
               ),
             ),
           ],
@@ -1447,10 +1517,21 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: busy ? null : onDeleteAccount,
           icon: const Icon(Icons.person_remove_outlined),
-          label: Text(connected ? '회원탈퇴' : '로컬 데이터 초기화'),
+          label: Text(hasAccountConnection ? '계정 삭제' : '로컬 데이터 초기화'),
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.red,
             side: const BorderSide(color: Colors.red),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            hasAccountConnection
+                ? '계정 삭제를 누르면 Daily 계정 연결, 이 기기의 일정과 설정, Google Drive AppData 백업을 삭제합니다.'
+                : '로컬 데이터 초기화를 누르면 이 기기의 일정과 설정을 삭제합니다.',
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: const Color(0xff6b7280)),
           ),
         ),
         if (message.isNotEmpty) ...[

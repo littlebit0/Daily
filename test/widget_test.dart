@@ -4,6 +4,7 @@ import 'package:daily/app/daily_app.dart';
 import 'package:daily/core/auth/apple_sign_in_service.dart';
 import 'package:daily/core/di/app_providers.dart';
 import 'package:daily/core/notifications/notification_service.dart';
+import 'package:daily/core/settings/app_settings.dart';
 import 'package:daily/core/settings/settings_repository.dart';
 import 'package:daily/core/sync/google_drive_auth_service.dart';
 import 'package:daily/core/sync/google_drive_sync_service.dart';
@@ -29,6 +30,8 @@ void main() {
         'defaultReminderMinutes': 10,
         'appleUserIdentifier': 'apple-user',
         'appleEmail': 'apple@example.com',
+        'appleLinkedGoogleEmail': 'linked@example.com',
+        'appleLinkedGoogleDisplayName': 'Linked User',
       });
       final preferences = await SharedPreferences.getInstance();
       final settingsRepository = SettingsRepository(
@@ -41,28 +44,32 @@ void main() {
       expect(settingsRepository.load().onboardingCompleted, isFalse);
       expect(settingsRepository.load().defaultReminderMinutes, 60);
       expect(settingsRepository.appleAccount(), isNull);
+      expect(settingsRepository.appleLinkedGoogleEmail(), isNull);
     },
   );
 
-  test('Apple account refresh keeps saved app login marker if revoked', () async {
-    SharedPreferences.setMockInitialValues({
-      'appleUserIdentifier': 'apple-user',
-      'appleEmail': 'hwi@example.com',
-    });
-    final preferences = await SharedPreferences.getInstance();
-    final settingsRepository = SettingsRepository(preferences: preferences);
-    final appleSignInService = AppleSignInService(
-      settingsRepository: settingsRepository,
-      targetPlatform: TargetPlatform.iOS,
-      availabilityChecker: () async => true,
-      credentialStateChecker: (_) async => CredentialState.revoked,
-    );
+  test(
+    'Apple account refresh keeps saved app login marker if revoked',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'appleUserIdentifier': 'apple-user',
+        'appleEmail': 'hwi@example.com',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      final appleSignInService = AppleSignInService(
+        settingsRepository: settingsRepository,
+        targetPlatform: TargetPlatform.iOS,
+        availabilityChecker: () async => true,
+        credentialStateChecker: (_) async => CredentialState.revoked,
+      );
 
-    final account = await appleSignInService.refreshCurrentAccount();
+      final account = await appleSignInService.refreshCurrentAccount();
 
-    expect(account?.email, 'hwi@example.com');
-    expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
-  });
+      expect(account?.email, 'hwi@example.com');
+      expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
+    },
+  );
 
   test('Apple unknown auth error explains sideloaded IPA limitation', () async {
     SharedPreferences.setMockInitialValues({});
@@ -151,6 +158,7 @@ void main() {
 
     expect(settingsRepository.load().onboardingCompleted, isTrue);
     expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
+    expect(settingsRepository.appleLinkedGoogleEmail(), 'linked@example.com');
     expect(
       googleAuthService.restorePreviousSignInCalls,
       greaterThanOrEqualTo(1),
@@ -161,12 +169,17 @@ void main() {
       driveSyncService.syncPendingChangesNowCalls,
       greaterThanOrEqualTo(1),
     );
-    expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SegmentedButton<CalendarViewMode>,
+      ),
+      findsOneWidget,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Apple sign-in auto-opens Google when no session exists', (
+  testWidgets('Apple sign-in does not open Google when no session exists', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -222,22 +235,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
+    expect(settingsRepository.appleLinkedGoogleEmail(), isNull);
     expect(settingsRepository.load().onboardingCompleted, isTrue);
     expect(
       googleAuthService.restorePreviousSignInCalls,
       greaterThanOrEqualTo(1),
     );
-    expect(googleAuthService.signInCalls, 1);
-    expect(
-      driveSyncService.syncPendingChangesNowCalls,
-      greaterThanOrEqualTo(1),
-    );
+    expect(googleAuthService.signInCalls, 0);
+    expect(driveSyncService.syncPendingChangesNowCalls, 0);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets(
-    'welcome Google Drive button re-enables after desktop auth close',
+    'welcome Google Drive connection remains pending across desktop lifecycle changes',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
@@ -266,23 +277,17 @@ void main() {
       await tester.pump();
 
       expect(authService.signInCalls, 1);
-      expect(
-        tester
-            .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Google로 계속'),
-            )
-            .onPressed,
-        isNull,
-      );
-
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump(const Duration(milliseconds: 1300));
+
+      expect(authService.cancelPendingSignInCalls, 0);
+      expect(find.text('연결 취소'), findsOneWidget);
+      await tester.tap(find.text('연결 취소'));
       await tester.pump();
 
       expect(authService.cancelPendingSignInCalls, 1);
-      expect(
-        find.text('Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.'),
-        findsOneWidget,
-      );
       expect(
         tester
             .widget<OutlinedButton>(
@@ -325,7 +330,12 @@ void main() {
 
     expect(find.byType(PageView), findsOneWidget);
     expect(find.text('일정 없음'), findsWidgets);
-    expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SegmentedButton<CalendarViewMode>,
+      ),
+      findsOneWidget,
+    );
 
     final container = ProviderScope.containerOf(
       tester.element(find.byType(DailyApp)),
@@ -633,7 +643,7 @@ void main() {
   });
 
   testWidgets(
-    'settings Google Drive connect re-enables after desktop auth close',
+    'settings Google Drive connection remains pending across lifecycle changes',
     (tester) async {
       SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
       FlutterSecureStorage.setMockInitialValues({});
@@ -679,23 +689,17 @@ void main() {
       await tester.pump();
 
       expect(authService.signInCalls, 1);
-      expect(
-        tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Google로 계속'),
-            )
-            .onPressed,
-        isNull,
-      );
-
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump(const Duration(milliseconds: 1300));
+
+      expect(authService.cancelPendingSignInCalls, 0);
+      expect(find.text('연결 취소'), findsOneWidget);
+      await tester.tap(find.text('연결 취소'));
       await tester.pump();
 
       expect(authService.cancelPendingSignInCalls, 1);
-      expect(
-        find.text('Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.'),
-        findsOneWidget,
-      );
       expect(
         tester
             .widget<FilledButton>(
@@ -760,6 +764,54 @@ void main() {
     expect(settingsRepository.load().onboardingCompleted, isFalse);
     expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
     expect(find.text('Daily 시작하기'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('settings shows account deletion for Apple-only account', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'onboardingCompleted': true,
+      'appleUserIdentifier': 'apple-user',
+      'appleEmail': 'hwi@example.com',
+    });
+    FlutterSecureStorage.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final authService = _FakeGoogleDriveAuthService(account: null);
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: authService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(authService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('설정'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -2200));
+    await tester.pumpAndSettle();
+
+    expect(find.text('계정 삭제'), findsOneWidget);
+    expect(find.textContaining('Daily 계정 연결, 이 기기의 일정과 설정'), findsOneWidget);
+    expect(find.text('로컬 데이터 초기화'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
