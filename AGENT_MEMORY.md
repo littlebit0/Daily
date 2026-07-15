@@ -1384,6 +1384,22 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - The iOS App Store version has already completed App Review approval. The
   GitHub IPA is not an App Store installer and does not replace the approved
   App Store build.
+
+## 2026-07-15 Windows CI Compiler Compatibility
+
+- GitHub Actions Windows debug build in run `29362233895` failed while
+  compiling `flutter_local_notifications_windows 3.0.0` with the hosted
+  Windows Server 2025 / Visual Studio 2026 toolchain. Its deprecated
+  `experimental/coroutine` use now fails with STL1011.
+- Updated `flutter_local_notifications` from `21.0.0` to `22.0.1`, resolving
+  to `flutter_local_notifications_windows 3.1.1` and matching platform
+  interface packages. This replaces the outdated Windows implementation rather
+  than suppressing the compiler error.
+- Local shared verification passed after the upgrade:
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart`
+- The next `Platform Builds` Windows debug run must be checked before making a
+  new Windows-containing release.
 - Verification passed:
   - `./tool/flutter.sh analyze --no-pub`
   - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart`
