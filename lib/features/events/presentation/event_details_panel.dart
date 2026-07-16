@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/app_providers.dart';
+import '../../../core/maps/map_launcher.dart';
 import '../domain/calendar_event.dart';
 import '../domain/event_category.dart';
 import '../domain/event_draft.dart';
@@ -390,6 +391,18 @@ class _EventTile extends StatelessWidget {
                   Text(
                     event.location!,
                     style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                if (event.location != null && event.location!.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () =>
+                        MapLauncher().openLocation(event.location!),
+                    icon: const Icon(Icons.map_outlined, size: 16),
+                    label: const Text('지도 바로가기'),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
                 if (event.weather != null && event.weather!.isNotEmpty)
                   Text(

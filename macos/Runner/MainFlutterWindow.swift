@@ -254,6 +254,45 @@ private final class DailyNativeNotifications {
   }
 }
 
+private final class DailyMapLauncher {
+  static let channelName = "daily/map_launcher"
+
+  static func register(with flutterViewController: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: channelName,
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "openLocation",
+            let arguments = call.arguments as? [String: Any],
+            let location = arguments["location"] as? String,
+            !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      DispatchQueue.main.async {
+        let alert = NSAlert()
+        alert.messageText = "지도에서 열기"
+        alert.informativeText = location
+        alert.addButton(withTitle: "카카오맵")
+        alert.addButton(withTitle: "네이버지도")
+        alert.addButton(withTitle: "Apple 지도")
+        alert.addButton(withTitle: "취소")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+          result("kakao")
+        case .alertSecondButtonReturn:
+          result("naver")
+        case .alertThirdButtonReturn:
+          result("apple")
+        default:
+          result("handled")
+        }
+      }
+    }
+  }
+}
+
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -263,6 +302,7 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     DailyNativeNotifications.register(with: flutterViewController)
+    DailyMapLauncher.register(with: flutterViewController)
     DailyNotificationCenterDelegate.install()
 
     super.awakeFromNib()

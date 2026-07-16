@@ -1471,3 +1471,51 @@ Historical app-version notes below `2.0.0` were intentionally removed on
     to the selected action.
   - Confirm Daily account deletion prompts for Google authorization when the
     stored Google session has expired, then removes cloud and local data.
+
+## 2026-07-17 Category Settings Backup Retry
+
+- Reapplied as the fourth approved post-`2.5.17` item without UI changes.
+- Adding, editing, or deleting an event category now triggers a second
+  best-effort settings backup request after the category operation. For edits,
+  the retry is deliberately queued after existing events have been updated to
+  the new category/color.
+- The existing first settings backup remains in place; GoogleDriveSyncService
+  serializes these requests so the retry follows the first request.
+- Verification:
+  - `flutter analyze --no-pub` passed using an isolated writable Flutter home.
+  - Full Flutter tests could not be rerun in the current restricted environment:
+    the SQLite native-asset hook attempted to download its macOS library from
+  GitHub, but network access is unavailable. Rerun `./tool/flutter.sh test
+    --no-pub` in the normal Mac workspace before release.
+
+## 2026-07-17 Native Map Launcher
+
+- Reapplied as the fifth approved post-`2.5.17` item. Events with a non-empty
+  location show one `지도 바로가기` action.
+- The action does not open a Flutter dialog or bottom sheet. It calls the
+  `daily/map_launcher` native platform channel instead.
+- iOS checks KakaoMap, Naver Map, and Apple Maps URL schemes:
+  - one installed map app opens directly;
+  - two or more installed map apps appear in a native system action sheet;
+  - no installed map app falls back to an Apple Maps web search.
+- Android checks KakaoMap and Naver Map because Apple Maps does not ship as an
+  Android application. One installed app opens directly, two use a native
+  Android dialog, and no installed map app opens the Apple Maps web search.
+- macOS and Windows always show their native system chooser with KakaoMap,
+  Naver Map, and Apple Maps. The selected provider opens in the default web
+  browser; desktop never attempts to detect installed map applications.
+- iOS declares `kakaomap`, `nmap`, and `maps` query schemes. Android declares
+  package-visibility queries for `kakaomap` and `nmap`.
+- Verification:
+  - `flutter analyze --no-pub` passed using an isolated writable Flutter home.
+  - Added `test/core/maps/map_launcher_test.dart`, but Flutter test execution
+    remains blocked before tests start because sqlite3 attempts to download a
+    macOS native library from GitHub and this environment has no network.
+  - An iOS debug build could not start because the restricted environment
+    cannot write Xcode/SwiftPM caches and CoreSimulatorService was unavailable.
+- Required manual verification before release:
+  - iPhone/iPad: test zero, one, two, and three installed map-app states and
+    confirm the action-sheet anchor works on iPad.
+  - Android: test KakaoMap-only, Naver Map-only, both, and neither installed.
+  - macOS/Windows: test all three native chooser actions and confirm each
+    opens the selected provider in the system default browser.

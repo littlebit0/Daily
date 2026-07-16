@@ -201,6 +201,112 @@ private final class DailyNativeNotifications {
   }
 }
 
+private final class DailyMapLauncher {
+  static let channelName = "daily/map_launcher"
+
+  static func register(with binaryMessenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: channelName, binaryMessenger: binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "openLocation",
+            let arguments = call.arguments as? [String: Any],
+            let location = arguments["location"] as? String,
+            !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      DispatchQueue.main.async {
+        open(location: location, result: result)
+      }
+    }
+  }
+
+  private static func open(location: String, result: @escaping FlutterResult) {
+    let candidates = installedCandidates(for: location)
+    if candidates.count == 1, let candidate = candidates.first {
+      open(candidate.url, fallbackLocation: location, result: result)
+      return
+    }
+    guard candidates.count > 1, let presenter = topViewController() else {
+      UIApplication.shared.open(webFallback(for: location), options: [:]) { _ in result("handled") }
+      return
+    }
+
+    let alert = UIAlertController(title: "지도에서 열기", message: location, preferredStyle: .actionSheet)
+    for candidate in candidates {
+      alert.addAction(UIAlertAction(title: candidate.title, style: .default) { _ in
+        open(candidate.url, fallbackLocation: location, result: result)
+      })
+    }
+    alert.addAction(UIAlertAction(title: "취소", style: .cancel) { _ in result("handled") })
+    if let popover = alert.popoverPresentationController {
+      popover.sourceView = presenter.view
+      popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
+      popover.permittedArrowDirections = []
+    }
+    presenter.present(alert, animated: true)
+  }
+
+  private static func open(_ url: URL, fallbackLocation: String, result: @escaping FlutterResult) {
+    UIApplication.shared.open(url, options: [:]) { success in
+      guard !success else {
+        result("handled")
+        return
+      }
+      UIApplication.shared.open(webFallback(for: fallbackLocation), options: [:]) { _ in
+        result("handled")
+      }
+    }
+  }
+
+  private static func installedCandidates(for location: String) -> [(title: String, url: URL)] {
+    [
+      ("카카오맵", url("kakaomap", host: "search", queryName: "q", location: location)),
+      ("네이버지도", naverURL(for: location)),
+      ("Apple 지도", url("maps", host: "", queryName: "q", location: location)),
+    ].compactMap { title, url in
+      guard let url = url, UIApplication.shared.canOpenURL(url) else { return nil }
+      return (title, url)
+    }
+  }
+
+  private static func url(_ scheme: String, host: String, queryName: String, location: String) -> URL? {
+    var components = URLComponents()
+    components.scheme = scheme
+    components.host = host
+    components.queryItems = [URLQueryItem(name: queryName, value: location)]
+    return components.url
+  }
+
+  private static func naverURL(for location: String) -> URL? {
+    var components = URLComponents()
+    components.scheme = "nmap"
+    components.host = "search"
+    components.queryItems = [
+      URLQueryItem(name: "query", value: location),
+      URLQueryItem(name: "appname", value: "com.littlebit0.daily"),
+    ]
+    return components.url
+  }
+
+  private static func webFallback(for location: String) -> URL {
+    var components = URLComponents(string: "https://maps.apple.com/")!
+    components.queryItems = [URLQueryItem(name: "q", value: location)]
+    return components.url!
+  }
+
+  private static func topViewController() -> UIViewController? {
+    let window = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap(\.windows)
+      .first { $0.isKeyWindow }
+    var controller = window?.rootViewController
+    while let presented = controller?.presentedViewController {
+      controller = presented
+    }
+    return controller
+  }
+}
+
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let googleOAuthSession = DailyGoogleOAuthSession()
@@ -216,6 +322,9 @@ private final class DailyNativeNotifications {
     }
     if let registrar = registrar(forPlugin: "DailyGoogleOAuthSession") {
       googleOAuthSession.register(with: registrar.messenger())
+    }
+    if let registrar = registrar(forPlugin: "DailyMapLauncher") {
+      DailyMapLauncher.register(with: registrar.messenger())
     }
     return launched
   }

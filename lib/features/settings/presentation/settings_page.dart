@@ -704,6 +704,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await _save(
       settings.copyWith(categories: _normalizeCategories(categories)),
     );
+    _retrySettingsBackupAfterCategoryChange();
   }
 
   Future<void> _editCategory(
@@ -733,6 +734,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await ref
         .read(eventCommandServiceProvider)
         .updateCategoryUsage(previous: category, updated: updatedCategory);
+    _retrySettingsBackupAfterCategoryChange();
   }
 
   Future<void> _deleteCategory(
@@ -765,6 +767,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         .toList();
     await _save(
       settings.copyWith(categories: _normalizeCategories(categories)),
+    );
+    _retrySettingsBackupAfterCategoryChange();
+  }
+
+  void _retrySettingsBackupAfterCategoryChange() {
+    unawaited(
+      ref.read(googleDriveSyncServiceProvider).backupNow().catchError((_) {}),
     );
   }
 
