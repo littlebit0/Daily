@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/di/app_providers.dart';
+import '../core/auth/google_account.dart';
 import '../features/calendar/presentation/month_calendar_page.dart';
 import '../features/onboarding/presentation/welcome_page.dart';
 import 'daily_theme.dart';
@@ -196,6 +197,24 @@ class _AppHomeState extends ConsumerState<_AppHome>
       final auth = ref.read(googleDriveAuthServiceProvider);
       final account = await auth.restorePreviousSignIn();
       if (account != null) {
+        final settingsRepository = ref.read(settingsRepositoryProvider);
+        var dailyAccount = settingsRepository.dailyAccount();
+        if (!settingsRepository.hasStoredDailyAccount) {
+          // Migrate the pre-Daily-account Google session once. New Apple-only
+          // accounts always persist first, so they never attach Google silently.
+          await settingsRepository.saveGoogleAccount(
+            GoogleAccount(
+              email: account.email,
+              displayName: account.displayName,
+            ),
+          );
+          dailyAccount = settingsRepository.dailyAccount();
+        }
+        final linkedGoogleEmail = dailyAccount?.googleAccount?.email;
+        if (linkedGoogleEmail == null ||
+            linkedGoogleEmail.toLowerCase() != account.email.toLowerCase()) {
+          return;
+        }
         final headers = await auth.authorizationHeaders();
         if (headers != null) {
           _startPostLoginServices();

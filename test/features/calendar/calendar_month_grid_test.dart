@@ -123,63 +123,20 @@ void main() {
       tester,
       width: 375,
       height: 812,
-      eventDay: DateTime(2026, 5, 4),
       expectedVisible: 4,
     );
     await _expectVisibleEventFlags(
       tester,
       width: 430,
       height: 932,
-      eventDay: DateTime(2026, 5, 4),
       expectedVisible: 5,
     );
     await _expectVisibleEventFlags(
       tester,
       width: 440,
       height: 956,
-      eventDay: DateTime(2026, 5, 4),
       expectedVisible: 6,
     );
-  });
-
-  testWidgets('shows four event rows in the current compact macOS window', (
-    tester,
-  ) async {
-    await _expectVisibleEventFlags(
-      tester,
-      width: 800,
-      height: 570,
-      eventDay: DateTime(2026, 7, 12),
-      expectedVisible: 4,
-    );
-  });
-
-  testWidgets('does not add an empty sixth week to a five-week month', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 800,
-            height: 570,
-            child: CalendarMonthGrid(
-              month: DateTime(2026, 7),
-              selectedDate: DateTime(2026, 7, 15),
-              events: const [],
-              weekStartsOnMonday: false,
-              showLunarDates: true,
-              density: CalendarDensity.standard,
-              hideSensitiveEvents: false,
-              onDateSelected: (_) {},
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byKey(const ValueKey('day-number-2026-8-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('day-number-2026-8-2')), findsNothing);
   });
 
   testWidgets('selects a date range with a primary mouse drag', (tester) async {
@@ -269,7 +226,6 @@ Future<void> _expectVisibleEventFlags(
   WidgetTester tester, {
   required double width,
   required double height,
-  required DateTime eventDay,
   required int expectedVisible,
 }) async {
   tester.view.physicalSize = Size(width, height);
@@ -279,16 +235,14 @@ Future<void> _expectVisibleEventFlags(
     tester.view.resetDevicePixelRatio();
   });
 
-  final now = DateTime(eventDay.year, eventDay.month, 1);
-  final month = DateTime(eventDay.year, eventDay.month);
-  final weekStart = _weekStart(eventDay);
+  final now = DateTime(2026, 5, 1);
   final events = List.generate(
     7,
     (index) => CalendarEvent(
       id: 'density-$index',
       title: '일정 ${index + 1}',
-      startAt: DateTime(eventDay.year, eventDay.month, eventDay.day, 9 + index),
-      endAt: DateTime(eventDay.year, eventDay.month, eventDay.day, 10 + index),
+      startAt: DateTime(2026, 5, 4, 9 + index),
+      endAt: DateTime(2026, 5, 4, 10 + index),
       allDay: false,
       category: EventCategory.basic,
       colorValue: EventCategory.basic.colorValue,
@@ -306,8 +260,8 @@ Future<void> _expectVisibleEventFlags(
             width: width,
             height: height,
             child: CalendarMonthGrid(
-              month: month,
-              selectedDate: eventDay,
+              month: DateTime(2026, 5),
+              selectedDate: DateTime(2026, 5, 4),
               events: events,
               weekStartsOnMonday: true,
               showLunarDates: true,
@@ -323,28 +277,18 @@ Future<void> _expectVisibleEventFlags(
 
   for (var index = 0; index < expectedVisible; index++) {
     expect(
-      find.byKey(
-        ValueKey(
-          'event-span-density-$index-${weekStart.year}-${weekStart.month}-${weekStart.day}',
-        ),
-      ),
+      find.byKey(ValueKey('event-span-density-$index-2026-5-4')),
       findsOneWidget,
       reason: '$width px should show event lane ${index + 1}.',
     );
   }
   expect(
-    find.byKey(
-      ValueKey(
-        'event-span-density-$expectedVisible-${weekStart.year}-${weekStart.month}-${weekStart.day}',
-      ),
-    ),
+    find.byKey(ValueKey('event-span-density-$expectedVisible-2026-5-4')),
     findsNothing,
     reason: '$width px should overflow after $expectedVisible visible events.',
   );
   final lastVisibleFlag = find.byKey(
-    ValueKey(
-      'event-span-density-${expectedVisible - 1}-${weekStart.year}-${weekStart.month}-${weekStart.day}',
-    ),
+    ValueKey('event-span-density-${expectedVisible - 1}-2026-5-4'),
   );
   final overflowLabel = find.text('+${events.length - expectedVisible}');
   expect(overflowLabel, findsOneWidget);

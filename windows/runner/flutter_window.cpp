@@ -1,11 +1,14 @@
 #include "flutter_window.h"
 
 #include <ctime>
+#include <commctrl.h>
 #include <iomanip>
 #include <optional>
 #include <sstream>
+#include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
+#include <flutter/standard_method_codec.h>
 #include "resource.h"
 
 namespace {
@@ -39,6 +42,7 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  RegisterMapLauncherChannel();
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -53,6 +57,78 @@ bool FlutterWindow::OnCreate() {
   AddTrayIcon();
 
   return true;
+}
+
+void FlutterWindow::RegisterMapLauncherChannel() {
+  map_launcher_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "daily/map_launcher",
+          &flutter::StandardMethodCodec::GetInstance());
+  map_launcher_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() != "openLocation") {
+          result->NotImplemented();
+          return;
+        }
+        OpenMapChooser(call, std::move(result));
+      });
+}
+
+void FlutterWindow::OpenMapChooser(
+    const flutter::MethodCall<flutter::EncodableValue>& call,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+  if (arguments == nullptr) {
+    result->Error("bad_arguments", "A location is required.");
+    return;
+  }
+  const auto iterator = arguments->find(flutter::EncodableValue("location"));
+  if (iterator == arguments->end() ||
+      !std::holds_alternative<std::string>(iterator->second)) {
+    result->Error("bad_arguments", "A location is required.");
+    return;
+  }
+  const auto& location = std::get<std::string>(iterator->second);
+  if (location.empty()) {
+    result->Error("bad_arguments", "A location is required.");
+    return;
+  }
+
+  TASKDIALOG_BUTTON buttons[] = {
+      {1001, L"카카오맵"},
+      {1002, L"네이버지도"},
+      {1003, L"Apple 지도"},
+      {IDCANCEL, L"취소"},
+  };
+  TASKDIALOGCONFIG config = {};
+  config.cbSize = sizeof(config);
+  config.hwndParent = GetHandle();
+  config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
+  config.pszWindowTitle = L"Daily";
+  config.pszMainInstruction = L"지도에서 열기";
+  config.pszContent = L"선택한 지도 서비스의 웹사이트가 기본 브라우저에서 열립니다.";
+  config.cButtons = ARRAYSIZE(buttons);
+  config.pButtons = buttons;
+  config.nDefaultButton = IDCANCEL;
+
+  int selected = IDCANCEL;
+  TaskDialogIndirect(&config, &selected, nullptr, nullptr);
+  switch (selected) {
+    case 1001:
+      result->Success(flutter::EncodableValue("kakao"));
+      break;
+    case 1002:
+      result->Success(flutter::EncodableValue("naver"));
+      break;
+    case 1003:
+      result->Success(flutter::EncodableValue("apple"));
+      break;
+    default:
+      result->Success(flutter::EncodableValue("handled"));
+      break;
+  }
 }
 
 void FlutterWindow::OnDestroy() {

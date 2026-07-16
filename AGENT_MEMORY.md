@@ -1412,3 +1412,141 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   keystores, OAuth secrets, and private config files out of the repository.
 - The current iPhone-first Drive sync target uses project number
   `234127810480` for iOS, Android, and Windows Desktop OAuth.
+
+## 2026-07-17 2.5.17 Baseline Reset
+
+- App source, platform configuration, release workflow, tests, and release
+  documents were rolled back to the exact `v2.5.17` tracked tree on branch
+  `Cottlebit/rollback-to-v2.5.17`.
+- `AGENT_MEMORY.md` is intentionally preserved as the cross-agent handoff
+  record and is not part of the product-source rollback.
+- Reapply post-`2.5.17` work one item at a time. Explain and obtain user
+  approval before any UI change.
+
+## 2026-07-17 Daily Account Provider Linking
+
+- Reapplied from the `v2.5.17` product baseline as the first approved item.
+- Daily now stores one local `DailyAccount` identity with independently
+  attached Apple and Google providers. A provider is attached only after its
+  own sign-in succeeds; matching email addresses are never used to merge
+  accounts.
+- Apple sign-in no longer opens an interactive Google login page. Apple-only
+  users enter Daily immediately.
+- If the same stored Daily account already has a Google provider and its
+  authorization can be restored silently on the device, Google Drive AppData
+  sync resumes. A missing or expired Google session leaves Apple/local use
+  available and does not show a Google login page.
+- `Google로 계속` is now the explicit Google account sign-in path. It requests
+  the existing Google Drive AppData scope during that authorization, then
+  attaches the Google account to the current Daily account and starts sync.
+- Legacy pre-Daily-account Apple/Google local state is migrated once on app
+  start so existing local users retain their connected session behavior.
+- Settings now distinguishes the Daily account, Apple login, Google login,
+  and Google Drive sync status. This was an approved text/status-only UI
+  adjustment; no calendar UI was changed.
+- Verification passed on macOS:
+  - `./tool/flutter.sh test --no-pub`
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh build ios --simulator --debug --no-pub`
+- Remaining manual verification for iOS/macOS/Android/Windows:
+  - Apple-only sign-in enters the calendar without any Google auth sheet.
+  - On the same Daily account, explicitly sign in with Google, grant Drive
+    AppData, restart, then sign in with Apple and confirm only silent Google
+    restoration occurs.
+  - With a missing/revoked Google session, Apple sign-in remains usable and
+    Settings offers an explicit Google login action.
+  - Confirm Google sign-in on each platform shows the native/system OAuth UI,
+  obtains Drive AppData consent, and starts the v2 sync flow.
+
+## 2026-07-17 Desktop Google OAuth Cancellation
+
+- Reapplied as the second approved post-`2.5.17` item.
+- Returning to Daily from the system browser no longer cancels a pending
+  macOS/Windows Google OAuth flow. The loopback callback remains active until
+  completion, timeout, or user cancellation.
+- While a desktop OAuth flow is pending, the primary action reads
+  `Google 연결 중` and Daily exposes an explicit `연결 취소` control.
+- The manual cancellation control is intentionally unavailable for iOS native
+  authorization because that platform owns cancellation in its system auth
+  sheet.
+- Verification passed on macOS:
+  - `./tool/flutter.sh test --no-pub`
+  - `./tool/flutter.sh analyze --no-pub`
+
+## 2026-07-17 Provider Unlink and Daily Account Deletion
+
+- Reapplied as the third approved post-`2.5.17` item.
+- Settings now has independent `Apple 연동 해지` and `Google 연동 해지`
+  controls when the respective provider is attached to the local Daily
+  account.
+- Google unlink asks whether to keep or delete the Google Drive AppData
+  backup. Keeping the backup preserves only cloud data; local calendar data
+  remains available in both choices. Backup deletion must succeed before the
+  provider is unlinked.
+- Apple unlink shows the matching stored-data decision, but its `저장 내용
+  초기화` action is disabled until iCloud storage is implemented. Apple unlink
+  currently removes only the Daily-to-Apple provider connection and preserves
+  local calendar data.
+- The prior membership action is now `Daily 계정 탈퇴`. It removes the local
+  Daily account record, Apple/Google provider and merge metadata, local events
+  and settings, local OAuth session state, and Google Drive AppData backup.
+  Future iCloud-backed Daily data must be deleted in this same flow.
+- Verification passed on macOS:
+  - `./tool/flutter.sh test --no-pub`
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh build ios --simulator --debug --no-pub`
+- Remaining manual verification:
+  - On iOS/macOS, confirm the disabled Apple stored-data button is visible in
+    the unlink dialog and Apple unlink preserves local events.
+  - Confirm Google unlink both preserves and deletes Drive AppData according
+    to the selected action.
+  - Confirm Daily account deletion prompts for Google authorization when the
+    stored Google session has expired, then removes cloud and local data.
+
+## 2026-07-17 Category Settings Backup Retry
+
+- Reapplied as the fourth approved post-`2.5.17` item without UI changes.
+- Adding, editing, or deleting an event category now triggers a second
+  best-effort settings backup request after the category operation. For edits,
+  the retry is deliberately queued after existing events have been updated to
+  the new category/color.
+- The existing first settings backup remains in place; GoogleDriveSyncService
+  serializes these requests so the retry follows the first request.
+- Verification:
+  - `flutter analyze --no-pub` passed using an isolated writable Flutter home.
+  - Full Flutter tests could not be rerun in the current restricted environment:
+    the SQLite native-asset hook attempted to download its macOS library from
+  GitHub, but network access is unavailable. Rerun `./tool/flutter.sh test
+    --no-pub` in the normal Mac workspace before release.
+
+## 2026-07-17 Native Map Launcher
+
+- Reapplied as the fifth approved post-`2.5.17` item. Events with a non-empty
+  location show one `지도 바로가기` action.
+- The action does not open a Flutter dialog or bottom sheet. It calls the
+  `daily/map_launcher` native platform channel instead.
+- iOS checks KakaoMap, Naver Map, and Apple Maps URL schemes:
+  - one installed map app opens directly;
+  - two or more installed map apps appear in a native system action sheet;
+  - no installed map app falls back to an Apple Maps web search.
+- Android checks KakaoMap and Naver Map because Apple Maps does not ship as an
+  Android application. One installed app opens directly, two use a native
+  Android dialog, and no installed map app opens the Apple Maps web search.
+- macOS and Windows always show their native system chooser with KakaoMap,
+  Naver Map, and Apple Maps. The selected provider opens in the default web
+  browser; desktop never attempts to detect installed map applications.
+- iOS declares `kakaomap`, `nmap`, and `maps` query schemes. Android declares
+  package-visibility queries for `kakaomap` and `nmap`.
+- Verification:
+  - `flutter analyze --no-pub` passed using an isolated writable Flutter home.
+  - Added `test/core/maps/map_launcher_test.dart`, but Flutter test execution
+    remains blocked before tests start because sqlite3 attempts to download a
+    macOS native library from GitHub and this environment has no network.
+  - An iOS debug build could not start because the restricted environment
+    cannot write Xcode/SwiftPM caches and CoreSimulatorService was unavailable.
+- Required manual verification before release:
+  - iPhone/iPad: test zero, one, two, and three installed map-app states and
+    confirm the action-sheet anchor works on iPad.
+  - Android: test KakaoMap-only, Naver Map-only, both, and neither installed.
+  - macOS/Windows: test all three native chooser actions and confirm each
+    opens the selected provider in the system default browser.

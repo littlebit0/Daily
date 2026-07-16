@@ -48,7 +48,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
   Widget build(BuildContext context) {
     final days = _visibleDays(widget.month, widget.weekStartsOnMonday);
     final weeks = List.generate(
-      days.length ~/ 7,
+      6,
       (weekIndex) => days.skip(weekIndex * 7).take(7).toList(),
     );
     final width = MediaQuery.sizeOf(context).width;
@@ -263,10 +263,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
       return null;
     }
     final col = (position.dx / (constraints.maxWidth / 7)).floor().clamp(0, 6);
-    final weekCount = days.length ~/ 7;
-    final row = (position.dy / (constraints.maxHeight / weekCount))
-        .floor()
-        .clamp(0, weekCount - 1);
+    final row = (position.dy / (constraints.maxHeight / 6)).floor().clamp(0, 5);
     return days[row * 7 + col];
   }
 
@@ -276,13 +273,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
         ? first.weekday - 1
         : first.weekday % 7;
     final start = first.subtract(Duration(days: leadingDays));
-    final daysInMonth = DateUtils.getDaysInMonth(month.year, month.month);
-    final requiredWeeks = ((leadingDays + daysInMonth) / 7).ceil();
-    final weekCount = math.max(5, requiredWeeks);
-    return List.generate(
-      weekCount * 7,
-      (index) => start.add(Duration(days: index)),
-    );
+    return List.generate(42, (index) => start.add(Duration(days: index)));
   }
 
   Set<DateTime> _holidayDays(List<CalendarEvent> events) {
@@ -909,7 +900,7 @@ class _EventSpanFlag extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: dense
-                  ? 10
+                  ? 9.2
                   : compact
                   ? 10.5
                   : 11,
@@ -964,40 +955,35 @@ class _MonthFlagMetrics {
     required int maxFlags,
     required bool reserveOverflow,
   }) {
-    var top = compact ? 22.0 : 27.0;
-    var bottomReserve = compact ? 3.0 : 10.0;
+    final top = compact ? 22.0 : 27.0;
+    final bottomReserve = compact ? 3.0 : 10.0;
     final overflowHeight = compact ? 10.0 : 12.0;
     final overflowGap = compact ? 1.0 : 2.0;
     final regularHeight = compact ? 13.0 : 19.0;
     final regularGap = compact ? 1.0 : 2.0;
-    final tightHeight = compact ? 10.5 : 13.0;
+    final tightHeight = compact ? 10.5 : 17.0;
     final tightGap = compact ? 1.0 : 2.0;
     final overflowReserve = reserveOverflow ? overflowHeight + overflowGap : 0;
-    final minimumVisibleLanes = math.min(4, maxFlags);
-    double usableHeight() =>
-        math.max(0.0, rowHeight - top - bottomReserve - overflowReserve);
+    final usableHeight = math.max(
+      0.0,
+      rowHeight - top - bottomReserve - overflowReserve,
+    );
 
     var height = regularHeight;
     var gap = regularGap;
     var visibleLanes = _lanesThatFit(
-      usableHeight: usableHeight(),
+      usableHeight: usableHeight,
       height: height,
       gap: gap,
       maxFlags: maxFlags,
     );
     var denseText = false;
 
-    if (visibleLanes < minimumVisibleLanes) {
-      // On shorter desktop windows, keep four event rows readable instead of
-      // leaving a large empty cell with a single visible event.
-      if (!compact) {
-        top = 18.0;
-        bottomReserve = 1.0;
-      }
+    if (compact && visibleLanes < maxFlags) {
       height = tightHeight;
       gap = tightGap;
       visibleLanes = _lanesThatFit(
-        usableHeight: usableHeight(),
+        usableHeight: usableHeight,
         height: height,
         gap: gap,
         maxFlags: maxFlags,

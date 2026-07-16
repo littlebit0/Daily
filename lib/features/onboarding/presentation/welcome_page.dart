@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/apple_sign_in_service.dart';
+import '../../../core/auth/google_account.dart';
 import '../../../core/di/app_providers.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
 
@@ -18,7 +19,6 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   _WelcomeAction? _busyAction;
   var _message = '';
   var _googleDriveAttempt = 0;
-  var _canCancelGoogleDriveConnection = false;
 
   bool get _busy => _busyAction != null;
 
@@ -28,6 +28,11 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     final compact = width < 560;
     final appleSignInService = ref.watch(appleSignInServiceProvider);
     final showAppleSignIn = appleSignInService.isSupportedPlatform;
+    final canCancelGoogleConnection =
+        _busyAction == _WelcomeAction.googleDrive &&
+        ref
+            .watch(googleDriveAuthServiceProvider)
+            .canCancelPendingSignInOnResume;
 
     return Scaffold(
       body: SafeArea(
@@ -53,8 +58,8 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Apple 또는 Google로 로그인하거나 계정 없이 로컬로 시작할 수 있습니다. '
-                    'Google Drive는 연결한 경우에만 기기 간 동기화에 사용됩니다.',
+                    'Apple 또는 Google 계정을 Daily 계정에 연결할 수 있습니다. Google 로그인 시 Google Drive를 통한 기기 간 동기화도 함께 사용할 수 있습니다. '
+                    '계정 없이 로컬로도 시작할 수 있습니다.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: const Color(0xff5f6875),
@@ -95,28 +100,28 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
-                    onPressed: _busyAction == _WelcomeAction.googleDrive
-                        ? _canCancelGoogleDriveConnection
-                              ? _cancelGoogleDriveConnection
-                              : null
-                        : _busy
-                        ? null
-                        : _connectAndRestore,
+                    onPressed: _busy ? null : _connectAndRestore,
                     icon: _busyAction == _WelcomeAction.googleDrive
-                        ? Icon(
-                            _canCancelGoogleDriveConnection
-                                ? Icons.close
-                                : Icons.hourglass_top_outlined,
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.login),
                     label: Text(
                       _busyAction == _WelcomeAction.googleDrive
-                          ? _canCancelGoogleDriveConnection
-                                ? '연결 취소'
-                                : 'Google 연결 중'
+                          ? 'Google 연결 중'
                           : 'Google로 계속',
                     ),
                   ),
+                  if (canCancelGoogleConnection) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _cancelGoogleDriveSignIn,
+                      icon: const Icon(Icons.close),
+                      label: const Text('연결 취소'),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
                     onPressed: _busy ? null : _requestNotificationPermission,
@@ -162,10 +167,15 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
       if (!mounted) {
         return;
       }
+      final restoredGoogleSync = await _restoreLinkedGoogleDriveSync();
+      if (!mounted) {
+        return;
+      }
       setState(() {
-        _message = 'Apple 로그인이 완료되었습니다.';
+        _message = restoredGoogleSync
+            ? 'Apple 로그인이 완료되었습니다. 연결된 Google Drive 동기화를 복원했습니다.'
+            : 'Apple 로그인이 완료되었습니다.';
       });
-      await _restoreLinkedGoogleDriveIfAvailable();
       await _completeOnboarding();
     } on AppleSignInException catch (error) {
       if (mounted) {
@@ -185,29 +195,18 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   Future<void> _connectAndRestore() async {
     setState(() {
       _busyAction = _WelcomeAction.googleDrive;
-      _message = 'Google Drive 연결 창을 여는 중입니다.';
+      _message = 'Google 로그인 창을 여는 중입니다.';
     });
     try {
-      final authService = ref.read(googleDriveAuthServiceProvider);
-      await authService.initialize();
-      if (mounted) {
-        setState(
-          () => _canCancelGoogleDriveConnection =
-              authService.canCancelPendingSignInOnResume,
-        );
-      }
       final connected = await _connectGoogleDriveAndRestore(
-        cancelMessage: 'Google Drive 연결이 취소되었습니다.',
+        cancelMessage: 'Google 로그인이 취소되었습니다.',
       );
       if (connected) {
         await _completeOnboarding();
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _busyAction = null;
-          _canCancelGoogleDriveConnection = false;
-        });
+        setState(() => _busyAction = null);
       }
     }
   }
@@ -228,7 +227,26 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
         }
         return false;
       }
-      await _rememberAppleGoogleLink(account);
+
+      final headers = await authService.authorizationHeaders(
+        promptIfNecessary: true,
+      );
+      if (!_isCurrentGoogleDriveAttempt(attempt)) {
+        return false;
+      }
+      if (headers == null) {
+        throw const GoogleDriveAuthException(
+          'Google Drive 권한 승인이 완료되지 않았습니다. 다시 연결해 주세요.',
+        );
+      }
+      await ref
+          .read(settingsRepositoryProvider)
+          .saveGoogleAccount(
+            GoogleAccount(
+              email: account.email,
+              displayName: account.displayName,
+            ),
+          );
 
       final syncService = ref.read(googleDriveSyncServiceProvider);
       await syncService.startListeningOnly(flushPendingChanges: false);
@@ -236,7 +254,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
         return false;
       }
       await syncService.syncPendingChangesNow(
-        promptIfNecessary: true,
+        promptIfNecessary: false,
         restoreAfterBackup: true,
       );
       if (!_isCurrentGoogleDriveAttempt(attempt)) {
@@ -256,51 +274,42 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     return false;
   }
 
-  Future<void> _restoreLinkedGoogleDriveIfAvailable() async {
-    final attempt = ++_googleDriveAttempt;
+  Future<bool> _restoreLinkedGoogleDriveSync() async {
+    final linkedGoogle = ref
+        .read(settingsRepositoryProvider)
+        .dailyAccount()
+        ?.googleAccount;
+    if (linkedGoogle == null) {
+      return false;
+    }
+
     try {
-      final settingsRepository = ref.read(settingsRepositoryProvider);
-      final linkedEmail = settingsRepository.appleLinkedGoogleEmail();
       final authService = ref.read(googleDriveAuthServiceProvider);
-      final account = await authService.restorePreviousSignIn();
-      if (!_isCurrentGoogleDriveAttempt(attempt) || account == null) {
-        return;
+      final restored = await authService.restorePreviousSignIn();
+      if (restored == null || !_sameEmail(restored.email, linkedGoogle.email)) {
+        return false;
       }
-      if (linkedEmail != null && account.email != linkedEmail) {
-        return;
+      final headers = await authService.authorizationHeaders();
+      if (headers == null) {
+        return false;
       }
-      await _rememberAppleGoogleLink(account);
       final syncService = ref.read(googleDriveSyncServiceProvider);
       await syncService.startListeningOnly(flushPendingChanges: false);
-      if (!_isCurrentGoogleDriveAttempt(attempt)) {
-        return;
-      }
-      await syncService.syncPendingChangesNow(
-        promptIfNecessary: false,
-        restoreAfterBackup: true,
-      );
+      await syncService.syncPendingChangesNow(restoreAfterBackup: true);
+      return true;
     } on Object {
-      // Apple sign-in must remain usable even when the stored Google session
-      // cannot be restored silently.
+      return false;
     }
   }
 
-  Future<void> _rememberAppleGoogleLink(GoogleDriveAccount account) async {
-    final settingsRepository = ref.read(settingsRepositoryProvider);
-    if (settingsRepository.appleAccount() == null) {
-      return;
-    }
-    await settingsRepository.saveAppleLinkedGoogleAccount(
-      email: account.email,
-      displayName: account.displayName,
-    );
-  }
+  bool _sameEmail(String left, String right) =>
+      left.trim().toLowerCase() == right.trim().toLowerCase();
 
   bool _isCurrentGoogleDriveAttempt(int attempt) {
     return _googleDriveAttempt == attempt;
   }
 
-  void _cancelGoogleDriveConnection() {
+  void _cancelGoogleDriveSignIn() {
     if (_busyAction != _WelcomeAction.googleDrive) {
       return;
     }
@@ -313,7 +322,6 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     if (mounted) {
       setState(() {
         _busyAction = null;
-        _canCancelGoogleDriveConnection = false;
         _message = 'Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.';
       });
     }

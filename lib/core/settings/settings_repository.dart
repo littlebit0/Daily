@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../auth/apple_account.dart';
+import '../auth/daily_account.dart';
+import '../auth/google_account.dart';
 import '../../features/events/domain/event_category.dart';
 import 'app_settings.dart';
 
@@ -48,9 +50,7 @@ class SettingsRepository {
   static const _appleEmailKey = 'appleEmail';
   static const _appleGivenNameKey = 'appleGivenName';
   static const _appleFamilyNameKey = 'appleFamilyName';
-  static const _appleLinkedGoogleEmailKey = 'appleLinkedGoogleEmail';
-  static const _appleLinkedGoogleDisplayNameKey =
-      'appleLinkedGoogleDisplayName';
+  static const _dailyAccountKey = 'dailyAccount';
   static const _geminiKey = 'geminiApiKey';
   static const _appLockPinHashKey = 'appLockPinHash';
 
@@ -193,7 +193,25 @@ class SettingsRepository {
     );
   }
 
+  DailyAccount? dailyAccount() {
+    final stored = _storedDailyAccount();
+    if (stored != null) {
+      return stored;
+    }
+    final apple = appleAccount();
+    if (apple == null) {
+      return null;
+    }
+    return DailyAccount(id: const Uuid().v4(), appleAccount: apple);
+  }
+
+  bool get hasStoredDailyAccount => _storedDailyAccount() != null;
+
   Future<void> saveAppleAccount(AppleAccount account) async {
+    final dailyAccount = _currentOrNewDailyAccount().copyWith(
+      appleAccount: account,
+    );
+    await _saveDailyAccount(dailyAccount);
     await _preferences.setString(
       _appleUserIdentifierKey,
       account.userIdentifier,
@@ -208,29 +226,31 @@ class SettingsRepository {
     await _preferences.remove(_appleEmailKey);
     await _preferences.remove(_appleGivenNameKey);
     await _preferences.remove(_appleFamilyNameKey);
+    final dailyAccount = _storedDailyAccount();
+    if (dailyAccount != null) {
+      await _saveDailyAccount(dailyAccount.copyWith(clearAppleAccount: true));
+    }
   }
 
-  String? appleLinkedGoogleEmail() {
-    return _stringOrNull(_preferences.getString(_appleLinkedGoogleEmailKey));
-  }
-
-  String? appleLinkedGoogleDisplayName() {
-    return _stringOrNull(
-      _preferences.getString(_appleLinkedGoogleDisplayNameKey),
+  Future<void> saveGoogleAccount(GoogleAccount account) async {
+    await _saveDailyAccount(
+      _currentOrNewDailyAccount().copyWith(googleAccount: account),
     );
   }
 
-  Future<void> saveAppleLinkedGoogleAccount({
-    required String email,
-    String? displayName,
-  }) async {
-    await _setNullableString(_appleLinkedGoogleEmailKey, email);
-    await _setNullableString(_appleLinkedGoogleDisplayNameKey, displayName);
+  Future<void> deleteGoogleAccount() async {
+    final dailyAccount = _storedDailyAccount();
+    if (dailyAccount != null) {
+      await _saveDailyAccount(dailyAccount.copyWith(clearGoogleAccount: true));
+    }
   }
 
-  Future<void> deleteAppleLinkedGoogleAccount() async {
-    await _preferences.remove(_appleLinkedGoogleEmailKey);
-    await _preferences.remove(_appleLinkedGoogleDisplayNameKey);
+  Future<void> deleteDailyAccount() async {
+    await _preferences.remove(_dailyAccountKey);
+    await _preferences.remove(_appleUserIdentifierKey);
+    await _preferences.remove(_appleEmailKey);
+    await _preferences.remove(_appleGivenNameKey);
+    await _preferences.remove(_appleFamilyNameKey);
   }
 
   Future<String?> geminiApiKey() {
@@ -283,8 +303,7 @@ class SettingsRepository {
     await _preferences.remove(_appLockEnabledKey);
     await _preferences.remove(_use24HourTimeKey);
     await _preferences.remove(_deviceIdKey);
-    await deleteAppleAccount();
-    await deleteAppleLinkedGoogleAccount();
+    await deleteDailyAccount();
     await deleteGeminiApiKey();
     await deleteAppLockPin();
   }
@@ -376,6 +395,34 @@ class SettingsRepository {
       return;
     }
     await _preferences.setString(key, trimmed);
+  }
+
+  DailyAccount? _storedDailyAccount() {
+    final raw = _preferences.getString(_dailyAccountKey);
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    try {
+      return DailyAccount.fromJson(jsonDecode(raw));
+    } on Object {
+      return null;
+    }
+  }
+
+  DailyAccount _currentOrNewDailyAccount() {
+    return _storedDailyAccount() ??
+        DailyAccount(id: const Uuid().v4(), appleAccount: appleAccount());
+  }
+
+  Future<void> _saveDailyAccount(DailyAccount account) async {
+    if (!account.hasProviders) {
+      await _preferences.remove(_dailyAccountKey);
+      return;
+    }
+    await _preferences.setString(
+      _dailyAccountKey,
+      jsonEncode(account.toJson()),
+    );
   }
 
   String? _stringOrNull(String? value) {
