@@ -6,28 +6,26 @@ Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로�
 
 ## 현재 버전
 
-- 앱 버전: `2.6.0`
+- 앱 버전: `2.5.17`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 다음 릴리스 후보: `2.6.0`
+- 다음 릴리스 후보: `2.5.17`
 - 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
 
 ## 배포 파일
 
 GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 
-이번 2.6.0 릴리스는 iOS 계정/Google Drive 동기화 수정과 macOS 데스크톱
-OAuth 안정화 내용을 포함합니다.
+이번 iOS 계정/Google Drive 동기화 수정 릴리스는 사용자의 지시에 따라
+GitHub Release 파일을 iOS IPA 하나로 제한합니다.
 
-- GitHub Release 업로드용 IPA: `dist/release-2.6.0/daily-ios-2.6.0.ipa`
-- GitHub Release 업로드용 macOS DMG: `dist/release-2.6.0/daily-macos-2.6.0.dmg`
-- App Store Connect Transporter 업로드용 IPA: `dist/transporter-upload/Daily-iOS-Transporter-2.6.0.ipa`
-- 실사용 iPhone 설치 확인용 IPA: `dist/device-install/Daily-iOS-Device-2.6.0.ipa`
-- iOS IPA SHA-256: `a748b495d37ff918f5bcd71bcc334a6d4ff12b75b88d139e65645db4a485427c`
-- macOS DMG SHA-256: `59da7dd629f40b9023cda8b337223e4b394e3b8de36850ef97717d1a2e8346f7`
+- GitHub Release 업로드용 IPA: `dist/release-2.5.17/daily-ios-2.5.17.ipa`
+- App Store Connect Transporter 업로드용 IPA: `dist/transporter-upload/Daily-iOS-Transporter-2.5.17.ipa`
+- 실사용 iPhone 설치 확인용 IPA: `dist/device-install/Daily-iOS-Device-2.5.17.ipa`
+- SHA-256: `13f9fc31fd20bb368704d0b9065b20fe005bb6c3437e234bfdb606bc980b3416`
 
-Android와 Windows는 이번 GitHub Release 파일에 포함하지 않습니다. 두 플랫폼은
-동일한 계정 UX와 동기화 정책을 적용했으며, 실제 OS 환경에서의 체크리스트 검증이
-남아 있습니다.
+macOS, Android, Windows 산출물은 이번 IPA 전용 릴리스에는 포함하지 않습니다.
+다만 macOS, Android, Windows도 다음 플랫폼 빌드 전에 iOS와 동일한 계정 UX와
+동기화 정책을 적용하고 검증해야 합니다.
 
 ## 지원 플랫폼
 
@@ -36,20 +34,18 @@ Android와 Windows는 이번 GitHub Release 파일에 포함하지 않습니다.
 - iOS
 - macOS
 
-iOS 앱 `DailyCalendar`는 Apple App Store Connect에 등록되었고, 2.6.0 심사 승인을
-받아 무료 앱으로 배포됩니다. GitHub IPA는 App Store 설치 파일이 아닌 별도 설치 및
-검증용 산출물입니다. macOS DMG는 Developer ID 공증 전의 설치 파일입니다.
+실제 App Store/TestFlight/Developer ID 배포에는 Apple Developer 서명과 provisioning 설정이 필요합니다. Android와 Windows 릴리스 산출물은 이번 IPA 전용 릴리스에 포함하지 않지만, 다음 플랫폼 빌드 전에는 아래 계정/동기화 정책을 동일하게 적용해야 합니다.
 
 현재 계정/동기화 정책은 다음과 같습니다.
 
 - Apple 로그인 지원 플랫폼: iOS, macOS
 - Google Drive AppData 동기화 지원 플랫폼: Android, Windows, iOS, macOS
 - Apple 로그인 후 저장된 Google Drive 세션이 있으면 자동으로 복원
-- 저장된 Google Drive 세션이 없으면 Apple/local 모드로 진입하고 Google 로그인을 강제하지 않음
+- 저장된 Google Drive 세션이 없으면 Apple 로그인 직후 Google Drive 권한 연결을 진행
 - Google 로그인 후 이미 저장된 Apple 계정 표시가 있으면 Apple 연결 상태를 유지
 - 설정의 계정 섹션은 Apple/Google 상태를 분리해서 보여주되 `로그아웃` 버튼은 하나만 표시
 - 일반 `로그아웃`은 pending 변경을 동기화하고 시작화면으로 돌아가며 Apple/Google 연결 상태는 보존
-- `계정 삭제`는 로컬 데이터, Apple/Google 연결 상태, Google Drive AppData 백업을 삭제하는 파괴적 경로
+- `회원탈퇴`는 로컬 데이터, Apple/Google 연결 상태, Google Drive AppData 백업을 삭제하는 파괴적 경로
 
 ## 핵심 기능
 
@@ -80,7 +76,7 @@ iOS 앱 `DailyCalendar`는 Apple App Store Connect에 등록되었고, 2.6.0 심
 - Apple 로그인
 - Google 계정 로그인
 - Apple/Google 계정 연결 상태 자동 복원
-- 설정의 통합 로그아웃과 계정 삭제
+- 설정의 통합 로그아웃과 회원탈퇴
 - Google Drive AppData 기반 백업, 복원, 자동 동기화
 
 ## 동기화 구조
@@ -216,16 +212,15 @@ macOS, Android, Windows는 같은 공유 Flutter 계정/동기화 정책을 따�
 다음 각 플랫폼 작업자는 실제 기기 또는 해당 OS에서 아래 항목을 다시 확인해야 합니다.
 
 - fresh install 후 Apple/Google/local 시작 흐름
-- Apple 로그인 후 Google Drive 자동 복원 또는 Apple/local 모드 진입
+- Apple 로그인 후 Google Drive 자동 복원 또는 최초 연결
 - Google 로그인 후 기존 Apple 연결 표시 유지
 - 일반 로그아웃 후 재로그인 시 저장된 계정 연결 자동 복원
-- 계정 삭제 후 로컬 데이터, 계정 표시, Drive 백업 삭제
+- 회원탈퇴 후 로컬 데이터, 계정 표시, Drive 백업 삭제
 - 일정 생성/수정/삭제 v2 AppData 동기화
 
 ## 스토어 배포 상태
 
-`DailyCalendar` iOS 앱은 App Store Connect 등록과 2.6.0 심사 승인을 완료했습니다.
-무료 앱으로 출시 설정이 반영되면 App Store 검색과 직접 링크에서 제공됩니다.
+현재 우선순위는 Apple App Store/TestFlight 제출입니다.
 
 App Store Connect에서 확인 또는 수정할 항목:
 
@@ -244,7 +239,7 @@ App Store Connect에서 확인 또는 수정할 항목:
   - Transporter로 업로드한 최신 iOS IPA 빌드를 선택
 
 Android Play Store와 Microsoft Store 배포는 보류 상태입니다. 다음 플랫폼 릴리스
-전에는 Android와 Windows 체크리스트 검증을 완료해야 합니다.
+전에는 macOS, Android, Windows 계정 UX가 iOS와 동일한지 먼저 검증해야 합니다.
 
 ## 보안과 로컬 비밀값
 
@@ -261,9 +256,7 @@ Android keystore는 이후 Play Store 업데이트에 필요하므로 별도 안
 ## 문서
 
 - [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)
-- [릴리스 노트 2.6.0](docs/RELEASE_NOTES_2.6.0.md)
 - [릴리스 노트 2.0.4](docs/RELEASE_NOTES_2.0.4.md)
-- [릴리스 노트 2.5.17](docs/RELEASE_NOTES_2.5.17.md)
 - [릴리스 노트 2.0.0](docs/RELEASE_NOTES_2.0.0.md)
 - [현재 진행상태](docs/PROGRESS_STATUS.md)
 - [릴리스 체크리스트](docs/RELEASE_CHECKLIST.md)
@@ -277,6 +270,6 @@ Android keystore는 이후 Play Store 업데이트에 필요하므로 별도 안
 - Microsoft Store Partner Center identity 확보 후 Store용 MSIX 생성
 - fresh Google 계정으로 Android/Windows/iOS/macOS 간 v2 동기화 재검증
 - Android 실제 기기 알림 검증
-- macOS Developer ID 서명 및 공증 배포 설정
+- Apple Developer 서명, TestFlight/App Store, macOS Developer ID 배포 설정
 - Google Drive AppData v2 파일 암호화 검토
 - 동시 수정 충돌을 사용자에게 보여주는 conflict UX 추가

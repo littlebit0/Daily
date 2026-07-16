@@ -48,9 +48,6 @@ class SettingsRepository {
   static const _appleEmailKey = 'appleEmail';
   static const _appleGivenNameKey = 'appleGivenName';
   static const _appleFamilyNameKey = 'appleFamilyName';
-  static const _appleLinkedGoogleEmailKey = 'appleLinkedGoogleEmail';
-  static const _appleLinkedGoogleDisplayNameKey =
-      'appleLinkedGoogleDisplayName';
   static const _geminiKey = 'geminiApiKey';
   static const _appLockPinHashKey = 'appLockPinHash';
 
@@ -210,29 +207,6 @@ class SettingsRepository {
     await _preferences.remove(_appleFamilyNameKey);
   }
 
-  String? appleLinkedGoogleEmail() {
-    return _stringOrNull(_preferences.getString(_appleLinkedGoogleEmailKey));
-  }
-
-  String? appleLinkedGoogleDisplayName() {
-    return _stringOrNull(
-      _preferences.getString(_appleLinkedGoogleDisplayNameKey),
-    );
-  }
-
-  Future<void> saveAppleLinkedGoogleAccount({
-    required String email,
-    String? displayName,
-  }) async {
-    await _setNullableString(_appleLinkedGoogleEmailKey, email);
-    await _setNullableString(_appleLinkedGoogleDisplayNameKey, displayName);
-  }
-
-  Future<void> deleteAppleLinkedGoogleAccount() async {
-    await _preferences.remove(_appleLinkedGoogleEmailKey);
-    await _preferences.remove(_appleLinkedGoogleDisplayNameKey);
-  }
-
   Future<String?> geminiApiKey() {
     return _secureStorage.read(key: _geminiKey);
   }
@@ -284,7 +258,6 @@ class SettingsRepository {
     await _preferences.remove(_use24HourTimeKey);
     await _preferences.remove(_deviceIdKey);
     await deleteAppleAccount();
-    await deleteAppleLinkedGoogleAccount();
     await deleteGeminiApiKey();
     await deleteAppLockPin();
   }

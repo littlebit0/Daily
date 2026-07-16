@@ -1,4 +1,4 @@
-name: Release Apple Installers
+name: Release IPA
 
 on:
   push:
@@ -15,8 +15,8 @@ permissions:
   contents: write
 
 jobs:
-  apple-installers:
-    name: iOS IPA and macOS DMG
+  ios:
+    name: iOS unsigned IPA
     runs-on: macos-latest
     steps:
       - name: Check out repository
@@ -35,19 +35,7 @@ jobs:
       - name: Build unsigned iOS app
         run: flutter build ios --release --no-codesign --no-pub
 
-      - name: Build unsigned macOS app
-        run: |
-          flutter build macos --release --config-only --no-pub
-          xcodebuild \
-            -workspace macos/Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -sdk macosx \
-            -derivedDataPath build/macos \
-            CODE_SIGNING_ALLOWED=NO \
-            build
-
-      - name: Stage Apple installers
+      - name: Stage IPA
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -58,20 +46,19 @@ jobs:
           mkdir -p dist Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           /usr/bin/zip -qry "dist/daily-ios-${version}-unsigned.ipa" Payload
-          hdiutil create \
-            -volname Daily \
-            -srcfolder build/macos/Build/Products/Release/Daily.app \
-            -ov \
-            -format UDZO \
-            "dist/daily-macos-${version}-unsigned.dmg"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: Daily ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          body_path: docs/RELEASE_NOTES_2.5.17.md
-          files: |
-            dist/daily-ios-*-unsigned.ipa
-            dist/daily-macos-*-unsigned.dmg
+          body: |
+            Daily iOS IPA release.
+
+            Changes:
+            - Fixes GitHub issues #15 and #16.
+            - Clarifies Apple login behavior for re-signed IPA installs.
+            - Refreshes restored Google Drive AppData settings immediately.
+            - Keeps this GitHub Release limited to the iOS IPA asset as requested.
+          files: dist/daily-ios-*-unsigned.ipa
           fail_on_unmatched_files: true

@@ -391,17 +391,6 @@ class _EventTile extends StatelessWidget {
                     event.location!,
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
-                if (event.location != null && event.location!.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: () => _showMapPicker(context, event.location!),
-                    icon: const Icon(Icons.map_outlined, size: 16),
-                    label: const Text('지도 바로가기'),
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 28),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
                 if (event.weather != null && event.weather!.isNotEmpty)
                   Text(
                     '날씨: ${event.weather!}',
@@ -455,72 +444,6 @@ class _EventTile extends StatelessWidget {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  Future<void> _showMapPicker(BuildContext context, String location) async {
-    final query = location.trim();
-    if (query.isEmpty) {
-      return;
-    }
-    final selection = await showModalBottomSheet<_MapService>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.map_outlined),
-              title: const Text('카카오맵'),
-              onTap: () => Navigator.of(context).pop(_MapService.kakao),
-            ),
-            ListTile(
-              leading: const Icon(Icons.map_outlined),
-              title: const Text('네이버지도'),
-              onTap: () => Navigator.of(context).pop(_MapService.naver),
-            ),
-            ListTile(
-              leading: const Icon(Icons.map_outlined),
-              title: const Text('Apple 지도'),
-              onTap: () => Navigator.of(context).pop(_MapService.apple),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (selection == null) {
-      return;
-    }
-    await _openMap(selection, query);
-  }
-
-  Future<void> _openMap(_MapService service, String query) async {
-    final encodedQuery = Uri.encodeComponent(query);
-    final encodedPath = Uri.encodeComponent(query);
-    final candidates = switch (service) {
-      _MapService.kakao => [
-        Uri.parse('kakaomap://search?q=$encodedQuery'),
-        Uri.parse('https://map.kakao.com/link/search/$encodedPath'),
-      ],
-      _MapService.naver => [
-        Uri.parse(
-          'nmap://search?query=$encodedQuery&appname=com.littlebit0.daily',
-        ),
-        Uri.parse('https://map.naver.com/p/search/$encodedPath'),
-      ],
-      _MapService.apple => [
-        Uri.parse('https://maps.apple.com/?q=$encodedQuery'),
-      ],
-    };
-    for (final uri in candidates) {
-      try {
-        if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-          return;
-        }
-      } on Object {
-        continue;
-      }
-    }
-  }
-
   String _formatTimeLabel(CalendarEvent event) {
     final dateFormatter = DateFormat('M월 d일');
     final timeFormatter = DateFormat('HH:mm');
@@ -556,8 +479,6 @@ class _EventTile extends StatelessWidget {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 }
-
-enum _MapService { kakao, naver, apple }
 
 CalendarRange _dayRange(DateTime date) {
   final start = DateTime(date.year, date.month, date.day);

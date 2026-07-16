@@ -1381,3 +1381,13 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   keystores, OAuth secrets, and private config files out of the repository.
 - The current iPhone-first Drive sync target uses project number
   `234127810480` for iOS, Android, and Windows Desktop OAuth.
+
+## 2026-07-17 2.5.17 Baseline Reset
+
+- App source, platform configuration, release workflow, tests, and release
+  documents were rolled back to the exact `v2.5.17` tracked tree on branch
+  `Cottlebit/rollback-to-v2.5.17`.
+- `AGENT_MEMORY.md` is intentionally preserved as the cross-agent handoff
+  record and is not part of the product-source rollback.
+- Reapply post-`2.5.17` work one item at a time. Explain and obtain user
+  approval before any UI change.
