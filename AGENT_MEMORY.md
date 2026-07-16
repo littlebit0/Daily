@@ -1441,3 +1441,33 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Verification passed on macOS:
   - `./tool/flutter.sh test --no-pub`
   - `./tool/flutter.sh analyze --no-pub`
+
+## 2026-07-17 Provider Unlink and Daily Account Deletion
+
+- Reapplied as the third approved post-`2.5.17` item.
+- Settings now has independent `Apple 연동 해지` and `Google 연동 해지`
+  controls when the respective provider is attached to the local Daily
+  account.
+- Google unlink asks whether to keep or delete the Google Drive AppData
+  backup. Keeping the backup preserves only cloud data; local calendar data
+  remains available in both choices. Backup deletion must succeed before the
+  provider is unlinked.
+- Apple unlink shows the matching stored-data decision, but its `저장 내용
+  초기화` action is disabled until iCloud storage is implemented. Apple unlink
+  currently removes only the Daily-to-Apple provider connection and preserves
+  local calendar data.
+- The prior membership action is now `Daily 계정 탈퇴`. It removes the local
+  Daily account record, Apple/Google provider and merge metadata, local events
+  and settings, local OAuth session state, and Google Drive AppData backup.
+  Future iCloud-backed Daily data must be deleted in this same flow.
+- Verification passed on macOS:
+  - `./tool/flutter.sh test --no-pub`
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh build ios --simulator --debug --no-pub`
+- Remaining manual verification:
+  - On iOS/macOS, confirm the disabled Apple stored-data button is visible in
+    the unlink dialog and Apple unlink preserves local events.
+  - Confirm Google unlink both preserves and deletes Drive AppData according
+    to the selected action.
+  - Confirm Daily account deletion prompts for Google authorization when the
+    stored Google session has expired, then removes cloud and local data.

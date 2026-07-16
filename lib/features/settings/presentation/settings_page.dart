@@ -39,7 +39,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   var _appleBusy = false;
   var _notificationMessage = '';
   var _notificationBusy = false;
-  String? _driveEmail;
   AppleAccount? _appleAccount;
   DailyAccount? _dailyAccount;
   var _googleDriveConnectAttempt = 0;
@@ -63,7 +62,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     Future.microtask(() async {
       final key = await ref.read(settingsRepositoryProvider).geminiApiKey();
       final settingsRepository = ref.read(settingsRepositoryProvider);
-      String? driveEmail;
       AppleAccount? appleAccount;
       var dailyAccount = settingsRepository.dailyAccount();
       try {
@@ -81,12 +79,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           );
           dailyAccount = settingsRepository.dailyAccount();
         }
-        if (driveAccount != null &&
-            _matchesLinkedGoogleAccount(dailyAccount, driveAccount.email)) {
-          driveEmail = driveAccount.email;
-        }
       } on Object {
-        driveEmail = null;
+        // Settings still shows the saved provider connection if restoration fails.
       }
       try {
         appleAccount = await ref
@@ -98,7 +92,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (mounted) {
         _apiKeyController.text = key ?? '';
         setState(() {
-          _driveEmail = driveEmail;
           _appleAccount = appleAccount;
           _dailyAccount = settingsRepository.dailyAccount();
         });
@@ -444,6 +437,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   busy: _appleBusy,
                   message: _appleMessage,
                   onSignIn: _connectApple,
+                  onDisconnect: _disconnectApple,
                 ),
                 const Divider(height: 1),
               ],
@@ -454,14 +448,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
               const Divider(height: 1),
               _GoogleDriveSyncSettings(
-                email: _driveEmail,
+                email: account?.googleAccount?.email,
                 busy: _syncBusy,
                 message: _syncMessage,
                 onConnect: _connectGoogleDrive,
                 onSyncNow: _syncGoogleDriveNow,
                 canCancelConnection: _canCancelGoogleDriveConnection,
                 onCancelConnection: _cancelGoogleDriveSignIn,
-                onDeleteAccount: _deleteAccount,
+                onDisconnect: _disconnectGoogle,
+                hasDailyAccount: hasAccountConnection,
+                onDeleteDailyAccount: _deleteAccount,
               ),
               if (hasAccountConnection) ...[
                 const SizedBox(height: 8),
@@ -523,6 +519,59 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     } on AppleSignInException catch (error) {
       if (mounted) {
         setState(() => _appleMessage = error.message);
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _appleMessage = '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _appleBusy = false);
+      }
+    }
+  }
+
+  Future<void> _disconnectApple() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Apple 연동 해지'),
+        content: const Text(
+          'Apple 계정 연결을 해제할까요? iCloud 저장 기능은 아직 제공되지 않아 저장 내용 초기화는 사용할 수 없습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          const Tooltip(
+            message: 'iCloud 저장 기능이 추가된 후 사용할 수 있습니다.',
+            child: FilledButton(onPressed: null, child: Text('저장 내용 초기화')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('연동 해지'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _appleBusy = true;
+      _appleMessage = '';
+    });
+    try {
+      await ref.read(settingsRepositoryProvider).deleteAppleAccount();
+      if (mounted) {
+        setState(() {
+          _appleAccount = null;
+          _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
+          _appleMessage = 'Apple 연동을 해지했습니다.';
+        });
       }
     } on Object catch (error) {
       if (mounted) {
@@ -781,7 +830,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           .read(settingsRepositoryProvider)
           .load();
       setState(() {
-        _driveEmail = account.email;
         _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
         _syncMessage = 'Google Drive 연결이 완료되었습니다.';
       });
@@ -820,18 +868,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final syncService = ref.read(googleDriveSyncServiceProvider);
       await syncService.startListeningOnly(flushPendingChanges: false);
       await syncService.syncPendingChangesNow(restoreAfterBackup: true);
-      if (mounted) {
-        setState(() => _driveEmail = account.email);
-      }
       return true;
     } on Object {
       return false;
     }
-  }
-
-  bool _matchesLinkedGoogleAccount(DailyAccount? account, String email) {
-    final linkedEmail = account?.googleAccount?.email;
-    return linkedEmail != null && _sameEmail(linkedEmail, email);
   }
 
   bool _sameEmail(String left, String right) =>
@@ -896,6 +936,71 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
+  Future<void> _disconnectGoogle() async {
+    final deleteBackup = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Google 연동 해지'),
+        content: const Text(
+          'Google 계정 연결을 해제할까요? Google Drive AppData 백업은 유지하거나 함께 삭제할 수 있습니다. 로컬 일정과 설정은 유지됩니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('연동만 해제'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('백업 삭제 후 해제'),
+          ),
+        ],
+      ),
+    );
+    if (deleteBackup == null) {
+      return;
+    }
+
+    setState(() {
+      _syncBusy = true;
+      _syncMessage = '';
+    });
+    try {
+      if (deleteBackup) {
+        await ref
+            .read(googleDriveSyncServiceProvider)
+            .deleteCloudBackup(promptIfNecessary: true);
+      }
+      try {
+        await ref.read(googleDriveAuthServiceProvider).signOut();
+      } on Object {
+        // Local provider unlink must remain available even if the platform
+        // cannot clear its cached Google session.
+      }
+      await ref.read(settingsRepositoryProvider).deleteGoogleAccount();
+      if (mounted) {
+        setState(() {
+          _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
+          _syncMessage = deleteBackup
+              ? 'Google 연동과 Drive 백업을 삭제했습니다.'
+              : 'Google 연동을 해지했습니다. Drive 백업은 유지됩니다.';
+        });
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _syncMessage = _googleAccountErrorMessage(error));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncBusy = false);
+      }
+    }
+  }
+
   Future<void> _logoutAccount() async {
     setState(() {
       _syncBusy = true;
@@ -913,7 +1018,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           return;
         }
         setState(() {
-          _driveEmail = null;
           _syncMessage = '로그아웃했습니다.';
         });
         ref.read(appSettingsProvider.notifier).state = updated;
@@ -933,12 +1037,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _deleteAccount() async {
     final authService = ref.read(googleDriveAuthServiceProvider);
-    final hasGoogleAccount =
-        _driveEmail != null || authService.currentAccount != null;
-    final hasSignedInAccount = hasGoogleAccount || _appleAccount != null;
-    final title = hasSignedInAccount ? '회원탈퇴' : '로컬 데이터 초기화';
-    final content = hasSignedInAccount
-        ? 'Google Drive의 Daily 백업, 이 기기의 모든 일정과 설정, Apple/Google 로그인 정보를 삭제하고 시작 화면으로 돌아갑니다. 이 작업은 되돌릴 수 없습니다.'
+    final dailyAccount = _dailyAccount;
+    final hasGoogleAccount = dailyAccount?.googleAccount != null;
+    final hasDailyAccount = dailyAccount?.hasProviders ?? false;
+    final title = hasDailyAccount ? 'Daily 계정 탈퇴' : '로컬 데이터 초기화';
+    final content = hasDailyAccount
+        ? 'Daily 계정의 Apple/Google 연결 및 병합 정보, Google Drive AppData 백업, 이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다. 향후 iCloud 저장 데이터도 이 경로에서 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.'
         : '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다.';
 
     final confirmed = await showDialog<bool>(
@@ -954,7 +1058,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(hasSignedInAccount ? '회원탈퇴' : '초기화'),
+            child: Text(hasDailyAccount ? 'Daily 계정 탈퇴' : '초기화'),
           ),
         ],
       ),
@@ -984,10 +1088,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ref.read(appSettingsProvider.notifier).state = const AppSettings();
       if (mounted) {
         setState(() {
-          _driveEmail = null;
           _appleAccount = null;
-          _syncMessage = hasSignedInAccount
-              ? '회원탈퇴가 완료되었습니다.'
+          _dailyAccount = null;
+          _syncMessage = hasDailyAccount
+              ? 'Daily 계정 탈퇴가 완료되었습니다.'
               : '로컬 데이터 초기화가 완료되었습니다.';
         });
         Navigator.of(context).popUntil((route) => route.isFirst);
@@ -1452,7 +1556,9 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
     required this.onSyncNow,
     required this.canCancelConnection,
     required this.onCancelConnection,
-    required this.onDeleteAccount,
+    required this.onDisconnect,
+    required this.hasDailyAccount,
+    required this.onDeleteDailyAccount,
   });
 
   final String? email;
@@ -1462,7 +1568,9 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
   final VoidCallback onSyncNow;
   final bool canCancelConnection;
   final VoidCallback onCancelConnection;
-  final VoidCallback onDeleteAccount;
+  final VoidCallback onDisconnect;
+  final bool hasDailyAccount;
+  final VoidCallback onDeleteDailyAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -1519,10 +1627,17 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
+        if (connected)
+          OutlinedButton.icon(
+            onPressed: busy ? null : onDisconnect,
+            icon: const Icon(Icons.link_off_outlined),
+            label: const Text('Google 연동 해지'),
+          ),
+        if (connected) const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: busy ? null : onDeleteAccount,
+          onPressed: busy ? null : onDeleteDailyAccount,
           icon: const Icon(Icons.person_remove_outlined),
-          label: Text(connected ? '회원탈퇴' : '로컬 데이터 초기화'),
+          label: Text(hasDailyAccount ? 'Daily 계정 탈퇴' : '로컬 데이터 초기화'),
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.red,
             side: const BorderSide(color: Colors.red),
@@ -1543,12 +1658,14 @@ class _AppleSignInSettings extends StatelessWidget {
     required this.busy,
     required this.message,
     required this.onSignIn,
+    required this.onDisconnect,
   });
 
   final AppleAccount? account;
   final bool busy;
   final String message;
   final VoidCallback onSignIn;
+  final VoidCallback onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -1594,6 +1711,14 @@ class _AppleSignInSettings extends StatelessWidget {
               ),
             ],
           ),
+        if (connected) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: busy ? null : onDisconnect,
+            icon: const Icon(Icons.link_off_outlined),
+            label: const Text('Apple 연동 해지'),
+          ),
+        ],
         if (message.isNotEmpty) ...[
           const SizedBox(height: 10),
           Text(message, style: Theme.of(context).textTheme.labelMedium),

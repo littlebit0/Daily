@@ -119,6 +119,27 @@ void main() {
     expect(mergedAccount?.googleAccount?.email, 'google@example.com');
   });
 
+  test(
+    'Daily account reset removes merged Apple and Google identities',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      await settingsRepository.saveAppleAccount(
+        const AppleAccount(userIdentifier: 'apple-user'),
+      );
+      await settingsRepository.saveGoogleAccount(
+        const GoogleAccount(email: 'google@example.com'),
+      );
+
+      await settingsRepository.resetAll();
+
+      expect(settingsRepository.dailyAccount(), isNull);
+      expect(settingsRepository.appleAccount(), isNull);
+    },
+  );
+
   testWidgets('Apple sign-in restores an already linked Google session', (
     tester,
   ) async {
