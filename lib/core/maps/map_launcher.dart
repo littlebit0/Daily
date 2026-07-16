@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -29,9 +30,22 @@ class MapLauncher {
       }
       await _openInDefaultBrowser(destination, query);
     } on MissingPluginException {
-      await _openInDefaultBrowser('apple', query);
+      await _openInDefaultBrowser(_fallbackDestination, query);
     } on PlatformException {
-      await _openInDefaultBrowser('apple', query);
+      await _openInDefaultBrowser(_fallbackDestination, query);
+    }
+  }
+
+  String get _fallbackDestination {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+      case TargetPlatform.windows:
+        return 'kakao';
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+      case TargetPlatform.linux:
+      case TargetPlatform.fuchsia:
+        return 'apple';
     }
   }
 

@@ -99,7 +99,6 @@ void FlutterWindow::OpenMapChooser(
   TASKDIALOG_BUTTON buttons[] = {
       {1001, L"카카오맵"},
       {1002, L"네이버지도"},
-      {1003, L"Apple 지도"},
       {IDCANCEL, L"취소"},
   };
   TASKDIALOGCONFIG config = {};
@@ -121,9 +120,6 @@ void FlutterWindow::OpenMapChooser(
       break;
     case 1002:
       result->Success(flutter::EncodableValue("naver"));
-      break;
-    case 1003:
-      result->Success(flutter::EncodableValue("apple"));
       break;
     default:
       result->Success(flutter::EncodableValue("handled"));

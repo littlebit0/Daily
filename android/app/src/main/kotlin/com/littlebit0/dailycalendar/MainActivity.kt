@@ -35,7 +35,7 @@ class MainActivity : FlutterActivity() {
         )
         when (candidates.size) {
             0 -> {
-                startActivity(Intent(Intent.ACTION_VIEW, appleWebUrl(location)))
+                startActivity(Intent(Intent.ACTION_VIEW, kakaoWebUrl(location)))
                 result.success("handled")
             }
             1 -> {
@@ -59,8 +59,8 @@ class MainActivity : FlutterActivity() {
         return if (intent.resolveActivity(packageManager) == null) null else MapCandidate(title, intent)
     }
 
-    private fun appleWebUrl(location: String): Uri =
-        Uri.parse("https://maps.apple.com/?q=${Uri.encode(location)}")
+    private fun kakaoWebUrl(location: String): Uri =
+        Uri.parse("https://map.kakao.com/link/search/${Uri.encode(location)}")
 
     private data class MapCandidate(val title: String, val intent: Intent)
 }

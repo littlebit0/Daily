@@ -1532,9 +1532,10 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Android checks KakaoMap and Naver Map because Apple Maps does not ship as an
   Android application. One installed app opens directly, two use a native
   Android dialog, and no installed map app opens the Apple Maps web search.
-- macOS and Windows always show their native system chooser with KakaoMap,
-  Naver Map, and Apple Maps. The selected provider opens in the default web
-  browser; desktop never attempts to detect installed map applications.
+- macOS always shows its native system chooser with KakaoMap, Naver Map, and
+  Apple Maps. Windows shows only KakaoMap and Naver Map. The selected provider
+  opens in the default web browser; desktop never attempts to detect installed
+  map applications.
 - iOS declares `kakaomap`, `nmap`, and `maps` query schemes. Android declares
   package-visibility queries for `kakaomap` and `nmap`.
 - Verification:
@@ -1548,5 +1549,16 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   - iPhone/iPad: test zero, one, two, and three installed map-app states and
     confirm the action-sheet anchor works on iPad.
   - Android: test KakaoMap-only, Naver Map-only, both, and neither installed.
-  - macOS/Windows: test all three native chooser actions and confirm each
-    opens the selected provider in the system default browser.
+  - macOS: test all three native chooser actions and confirm each opens the
+    selected provider in the system default browser.
+  - Windows: test both native chooser actions and confirm each opens the
+    selected provider in the system default browser.
+
+## 2026-07-17 Android and Windows Apple Maps Exclusion
+
+- Apple Maps is intentionally unavailable on Android and Windows.
+- Android lists or opens only KakaoMap and Naver Map. When neither installed
+  app is available, it falls back to Kakao Map in the browser.
+- Windows native chooser lists only KakaoMap and Naver Map, both opening in
+  the user's default browser.
+- iOS and macOS retain Apple Maps support.
