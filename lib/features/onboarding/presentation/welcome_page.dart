@@ -15,8 +15,7 @@ class WelcomePage extends ConsumerStatefulWidget {
   ConsumerState<WelcomePage> createState() => _WelcomePageState();
 }
 
-class _WelcomePageState extends ConsumerState<WelcomePage>
-    with WidgetsBindingObserver {
+class _WelcomePageState extends ConsumerState<WelcomePage> {
   _WelcomeAction? _busyAction;
   var _message = '';
   var _googleDriveAttempt = 0;
@@ -24,30 +23,16 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
   bool get _busy => _busyAction != null;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _cancelDesktopGoogleDriveSignInIfPending();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final compact = width < 560;
     final appleSignInService = ref.watch(appleSignInServiceProvider);
     final showAppleSignIn = appleSignInService.isSupportedPlatform;
+    final canCancelGoogleConnection =
+        _busyAction == _WelcomeAction.googleDrive &&
+        ref
+            .watch(googleDriveAuthServiceProvider)
+            .canCancelPendingSignInOnResume;
 
     return Scaffold(
       body: SafeArea(
@@ -123,8 +108,20 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.login),
-                    label: const Text('Google로 계속'),
+                    label: Text(
+                      _busyAction == _WelcomeAction.googleDrive
+                          ? 'Google 연결 중'
+                          : 'Google로 계속',
+                    ),
                   ),
+                  if (canCancelGoogleConnection) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _cancelGoogleDriveSignIn,
+                      icon: const Icon(Icons.close),
+                      label: const Text('연결 취소'),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
                     onPressed: _busy ? null : _requestNotificationPermission,
@@ -312,7 +309,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
     return _googleDriveAttempt == attempt;
   }
 
-  void _cancelDesktopGoogleDriveSignInIfPending() {
+  void _cancelGoogleDriveSignIn() {
     if (_busyAction != _WelcomeAction.googleDrive) {
       return;
     }

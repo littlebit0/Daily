@@ -1425,4 +1425,19 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   - With a missing/revoked Google session, Apple sign-in remains usable and
     Settings offers an explicit Google login action.
   - Confirm Google sign-in on each platform shows the native/system OAuth UI,
-    obtains Drive AppData consent, and starts the v2 sync flow.
+  obtains Drive AppData consent, and starts the v2 sync flow.
+
+## 2026-07-17 Desktop Google OAuth Cancellation
+
+- Reapplied as the second approved post-`2.5.17` item.
+- Returning to Daily from the system browser no longer cancels a pending
+  macOS/Windows Google OAuth flow. The loopback callback remains active until
+  completion, timeout, or user cancellation.
+- While a desktop OAuth flow is pending, the primary action reads
+  `Google 연결 중` and Daily exposes an explicit `연결 취소` control.
+- The manual cancellation control is intentionally unavailable for iOS native
+  authorization because that platform owns cancellation in its system auth
+  sheet.
+- Verification passed on macOS:
+  - `./tool/flutter.sh test --no-pub`
+  - `./tool/flutter.sh analyze --no-pub`

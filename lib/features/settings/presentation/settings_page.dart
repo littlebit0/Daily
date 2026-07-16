@@ -26,8 +26,7 @@ class SettingsPage extends ConsumerStatefulWidget {
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends ConsumerState<SettingsPage>
-    with WidgetsBindingObserver {
+class _SettingsPageState extends ConsumerState<SettingsPage> {
   static const _accountActionTimeout = Duration(seconds: 10);
   static const _logoutAccountReserve = Duration(seconds: 3);
   static const _resetNotificationCleanupTimeout = Duration(seconds: 3);
@@ -60,7 +59,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _appVersionInfo = _loadAppVersionInfo();
     Future.microtask(() async {
       final key = await ref.read(settingsRepositoryProvider).geminiApiKey();
@@ -110,16 +108,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _apiKeyController.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _cancelDesktopGoogleDriveSignInIfPending();
-    }
   }
 
   @override
@@ -469,6 +459,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                 message: _syncMessage,
                 onConnect: _connectGoogleDrive,
                 onSyncNow: _syncGoogleDriveNow,
+                canCancelConnection: _canCancelGoogleDriveConnection,
+                onCancelConnection: _cancelGoogleDriveSignIn,
                 onDeleteAccount: _deleteAccount,
               ),
               if (hasAccountConnection) ...[
@@ -849,7 +841,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     return _googleDriveConnectAttempt == attempt;
   }
 
-  void _cancelDesktopGoogleDriveSignInIfPending() {
+  bool get _canCancelGoogleDriveConnection {
+    if (!_syncBusy || _activeGoogleDriveConnectAttempt == null) {
+      return false;
+    }
+    return ref
+        .read(googleDriveAuthServiceProvider)
+        .canCancelPendingSignInOnResume;
+  }
+
+  void _cancelGoogleDriveSignIn() {
     final attempt = _activeGoogleDriveConnectAttempt;
     if (attempt == null || !_isCurrentGoogleDriveConnectAttempt(attempt)) {
       return;
@@ -1449,6 +1450,8 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
     required this.message,
     required this.onConnect,
     required this.onSyncNow,
+    required this.canCancelConnection,
+    required this.onCancelConnection,
     required this.onDeleteAccount,
   });
 
@@ -1457,11 +1460,14 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
   final String message;
   final VoidCallback onConnect;
   final VoidCallback onSyncNow;
+  final bool canCancelConnection;
+  final VoidCallback onCancelConnection;
   final VoidCallback onDeleteAccount;
 
   @override
   Widget build(BuildContext context) {
     final connected = email != null;
+    final connecting = busy && !connected;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1493,11 +1499,25 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Icon(connected ? Icons.sync : Icons.cloud_outlined),
-                label: Text(connected ? '지금 동기화' : 'Google로 계속'),
+                label: Text(
+                  connecting
+                      ? 'Google 연결 중'
+                      : connected
+                      ? '지금 동기화'
+                      : 'Google로 계속',
+                ),
               ),
             ),
           ],
         ),
+        if (canCancelConnection) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: onCancelConnection,
+            icon: const Icon(Icons.close),
+            label: const Text('연결 취소'),
+          ),
+        ],
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: busy ? null : onDeleteAccount,

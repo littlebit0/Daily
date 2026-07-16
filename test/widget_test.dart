@@ -274,7 +274,7 @@ void main() {
   });
 
   testWidgets(
-    'welcome Google Drive button re-enables after desktop auth close',
+    'welcome keeps desktop Google auth active until the user cancels it',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
@@ -306,13 +306,18 @@ void main() {
       expect(
         tester
             .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Google로 계속'),
+              find.widgetWithText(OutlinedButton, 'Google 연결 중'),
             )
             .onPressed,
         isNull,
       );
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+
+      expect(authService.cancelPendingSignInCalls, 0);
+      expect(find.text('연결 취소'), findsOneWidget);
+      await tester.tap(find.text('연결 취소'));
       await tester.pump();
 
       expect(authService.cancelPendingSignInCalls, 1);
@@ -670,7 +675,7 @@ void main() {
   });
 
   testWidgets(
-    'settings Google Drive connect re-enables after desktop auth close',
+    'settings keeps desktop Google auth active until the user cancels it',
     (tester) async {
       SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
       FlutterSecureStorage.setMockInitialValues({});
@@ -719,13 +724,18 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Google로 계속'),
+              find.widgetWithText(FilledButton, 'Google 연결 중'),
             )
             .onPressed,
         isNull,
       );
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+
+      expect(authService.cancelPendingSignInCalls, 0);
+      expect(find.text('연결 취소'), findsOneWidget);
+      await tester.tap(find.text('연결 취소'));
       await tester.pump();
 
       expect(authService.cancelPendingSignInCalls, 1);
