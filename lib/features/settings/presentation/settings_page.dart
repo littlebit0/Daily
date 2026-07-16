@@ -306,21 +306,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               const Divider(height: 1),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('월간 일정 표시 밀도'),
-                subtitle: const Text('날짜 칸 안에 표시할 일정 수를 조절합니다.'),
-                trailing: DropdownButton<CalendarDensity>(
-                  value: settings.calendarDensity,
-                  items: CalendarDensity.values
+                title: const Text('전체 UI 글자 크기'),
+                subtitle: const Text('앱 전체 화면의 글자 크기를 선택합니다.'),
+                trailing: DropdownButton<AppTextSize>(
+                  value: settings.appTextSize,
+                  items: AppTextSize.values
                       .map(
-                        (density) => DropdownMenuItem(
-                          value: density,
-                          child: Text(density.label),
+                        (textSize) => DropdownMenuItem(
+                          value: textSize,
+                          child: Text(textSize.label),
                         ),
                       )
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
-                      _save(settings.copyWith(calendarDensity: value));
+                      _save(settings.copyWith(appTextSize: value));
                     }
                   },
                 ),

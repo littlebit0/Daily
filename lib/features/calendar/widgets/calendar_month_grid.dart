@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/calendar/korean_lunar_calendar.dart';
-import '../../../core/settings/app_settings.dart';
 import '../../events/domain/calendar_event.dart';
 
 class CalendarMonthGrid extends StatefulWidget {
@@ -17,7 +16,6 @@ class CalendarMonthGrid extends StatefulWidget {
     required this.events,
     required this.weekStartsOnMonday,
     required this.showLunarDates,
-    required this.density,
     required this.hideSensitiveEvents,
     required this.onDateSelected,
     this.onDateRangeSelected,
@@ -28,7 +26,6 @@ class CalendarMonthGrid extends StatefulWidget {
   final List<CalendarEvent> events;
   final bool weekStartsOnMonday;
   final bool showLunarDates;
-  final CalendarDensity density;
   final bool hideSensitiveEvents;
   final ValueChanged<DateTime> onDateSelected;
   final Future<void> Function(DateTime start, DateTime end)?
@@ -53,7 +50,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
     );
     final width = MediaQuery.sizeOf(context).width;
     final compact = width < 720;
-    final maxFlags = _maxFlagsForDensity(widget.density, width: width);
+    final maxFlags = _standardMaxFlagsForWidth(width);
     final holidayDays = _holidayDays(widget.events);
 
     return Padding(
@@ -321,8 +318,8 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
     return (buttons & kPrimaryMouseButton) != 0;
   }
 
-  int _maxFlagsForDensity(CalendarDensity density, {required double width}) {
-    final standardTarget = switch (width) {
+  int _standardMaxFlagsForWidth(double width) {
+    return switch (width) {
       <= 390 => 4,
       <= 430 => 5,
       <= 520 => 6,
@@ -331,11 +328,6 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
       <= 1120 => 9,
       <= 1360 => 10,
       _ => 12,
-    };
-    return switch (density) {
-      CalendarDensity.relaxed => math.max(3, standardTarget - 1),
-      CalendarDensity.standard => standardTarget,
-      CalendarDensity.dense => standardTarget + 1,
     };
   }
 }
@@ -555,7 +547,6 @@ class _WeekRow extends StatelessWidget {
                                   '+${overflowCounts[index]}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  textScaler: TextScaler.noScaling,
                                   style: TextStyle(
                                     fontSize: compact ? 9 : 10,
                                     height: 1.0,
@@ -767,7 +758,6 @@ class _DayCellBackground extends StatelessWidget {
                         lunar.shortLabel,
                         maxLines: 1,
                         softWrap: false,
-                        textScaler: TextScaler.noScaling,
                         style: TextStyle(
                           fontSize: 8.5,
                           height: 1.0,

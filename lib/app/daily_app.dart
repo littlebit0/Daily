@@ -26,6 +26,12 @@ class DailyApp extends ConsumerWidget {
       title: 'Daily',
       debugShowCheckedModeBanner: false,
       theme: DailyTheme.light(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(settings.appTextSize.scale)),
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: settings.onboardingCompleted
           ? settings.appLockEnabled
                 ? const _AppLockGate(child: _AppHome())

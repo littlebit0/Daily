@@ -39,7 +39,6 @@ void main() {
               events: [event],
               weekStartsOnMonday: true,
               showLunarDates: true,
-              density: CalendarDensity.standard,
               hideSensitiveEvents: false,
               onDateSelected: (_) {},
             ),
@@ -101,7 +100,6 @@ void main() {
               events: [event],
               weekStartsOnMonday: true,
               showLunarDates: true,
-              density: CalendarDensity.standard,
               hideSensitiveEvents: false,
               onDateSelected: (_) {},
             ),
@@ -116,7 +114,7 @@ void main() {
     expect(tester.getSize(flag).width, greaterThan(300));
   });
 
-  testWidgets('uses iPhone-width event density targets in month cells', (
+  testWidgets('uses fixed iPhone-width event capacity in month cells', (
     tester,
   ) async {
     await _expectVisibleEventFlags(
@@ -170,7 +168,6 @@ void main() {
               events: [holiday],
               weekStartsOnMonday: true,
               showLunarDates: false,
-              density: CalendarDensity.standard,
               hideSensitiveEvents: false,
               onDateSelected: (_) {},
               onDateRangeSelected: (start, end) async {
@@ -207,6 +204,11 @@ void main() {
 
     expect(selectedStart, DateTime(2026, 5, 4));
     expect(selectedEnd, DateTime(2026, 5, 8));
+  });
+
+  test('defines the requested full-app text scale choices', () {
+    expect(AppTextSize.basic.scale, 0.8);
+    expect(AppTextSize.large.scale, 1.0);
   });
 }
 
@@ -265,7 +267,6 @@ Future<void> _expectVisibleEventFlags(
               events: events,
               weekStartsOnMonday: true,
               showLunarDates: true,
-              density: CalendarDensity.standard,
               hideSensitiveEvents: false,
               onDateSelected: (_) {},
             ),

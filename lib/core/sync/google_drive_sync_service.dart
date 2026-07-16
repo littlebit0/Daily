@@ -988,7 +988,7 @@ class GoogleDriveSyncService implements SyncService {
           .map((category) => category.toJson())
           .toList(),
       'dDayReminderOffsets': settings.dDayReminderOffsets,
-      'calendarDensity': settings.calendarDensity.name,
+      'appTextSize': settings.appTextSize.name,
       'defaultCalendarView': settings.defaultCalendarView.name,
       'hiddenCategoryIds': settings.hiddenCategoryIds,
       'calendarShowHolidays': settings.calendarShowHolidays,
@@ -1020,8 +1020,9 @@ class GoogleDriveSyncService implements SyncService {
         -1,
         0,
       ]),
-      calendarDensity: CalendarDensity.fromName(
-        json['calendarDensity'] as String?,
+      appTextSize: AppTextSize.fromName(
+        json['appTextSize'] as String? ??
+            json['calendarEventTextSize'] as String?,
       ),
       defaultCalendarView: CalendarViewMode.fromName(
         json['defaultCalendarView'] as String?,

@@ -1,18 +1,18 @@
 import '../../features/events/domain/event_category.dart';
 
-enum CalendarDensity {
-  relaxed('넓게'),
-  standard('기본'),
-  dense('많이');
+enum AppTextSize {
+  basic('기본', 0.8),
+  large('크게', 1.0);
 
-  const CalendarDensity(this.label);
+  const AppTextSize(this.label, this.scale);
 
   final String label;
+  final double scale;
 
-  static CalendarDensity fromName(String? name) {
-    return CalendarDensity.values.firstWhere(
-      (density) => density.name == name,
-      orElse: () => CalendarDensity.standard,
+  static AppTextSize fromName(String? name) {
+    return AppTextSize.values.firstWhere(
+      (size) => size.name == name,
+      orElse: () => AppTextSize.basic,
     );
   }
 }
@@ -50,7 +50,7 @@ class AppSettings {
     this.blockSensitiveAi = true,
     this.categories = _defaultCategories,
     this.dDayReminderOffsets = const [-7, -3, -1, 0],
-    this.calendarDensity = CalendarDensity.standard,
+    this.appTextSize = AppTextSize.basic,
     this.defaultCalendarView = CalendarViewMode.week,
     this.hiddenCategoryIds = const <String>[],
     this.calendarShowHolidays = true,
@@ -80,7 +80,7 @@ class AppSettings {
   final bool blockSensitiveAi;
   final List<EventCategory> categories;
   final List<int> dDayReminderOffsets;
-  final CalendarDensity calendarDensity;
+  final AppTextSize appTextSize;
   final CalendarViewMode defaultCalendarView;
   final List<String> hiddenCategoryIds;
   final bool calendarShowHolidays;
@@ -105,7 +105,7 @@ class AppSettings {
     bool? blockSensitiveAi,
     List<EventCategory>? categories,
     List<int>? dDayReminderOffsets,
-    CalendarDensity? calendarDensity,
+    AppTextSize? appTextSize,
     CalendarViewMode? defaultCalendarView,
     List<String>? hiddenCategoryIds,
     bool? calendarShowHolidays,
@@ -134,7 +134,7 @@ class AppSettings {
       blockSensitiveAi: blockSensitiveAi ?? this.blockSensitiveAi,
       categories: categories ?? this.categories,
       dDayReminderOffsets: dDayReminderOffsets ?? this.dDayReminderOffsets,
-      calendarDensity: calendarDensity ?? this.calendarDensity,
+      appTextSize: appTextSize ?? this.appTextSize,
       defaultCalendarView: defaultCalendarView ?? this.defaultCalendarView,
       hiddenCategoryIds: hiddenCategoryIds ?? this.hiddenCategoryIds,
       calendarShowHolidays: calendarShowHolidays ?? this.calendarShowHolidays,

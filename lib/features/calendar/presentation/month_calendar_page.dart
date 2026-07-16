@@ -1059,7 +1059,6 @@ class _CalendarMonthPage extends ConsumerWidget {
           events: visibleEvents,
           weekStartsOnMonday: settings.weekStartsOnMonday,
           showLunarDates: settings.showLunarDates,
-          density: settings.calendarDensity,
           hideSensitiveEvents: settings.hideSensitiveEvents,
           onDateSelected: (date) {
             onDateSelected(date, _eventsForDay(visibleEvents, date));
@@ -1081,7 +1080,6 @@ class _CalendarMonthPage extends ConsumerWidget {
         events: const [],
         weekStartsOnMonday: settings.weekStartsOnMonday,
         showLunarDates: settings.showLunarDates,
-        density: settings.calendarDensity,
         hideSensitiveEvents: settings.hideSensitiveEvents,
         onDateSelected: (date) {
           onDateSelected(date, const <CalendarEvent>[]);
@@ -1289,7 +1287,6 @@ class _CalendarHeader extends ConsumerWidget {
     var hidden = settings.hiddenCategoryIds.toSet();
     var showHolidays = settings.calendarShowHolidays;
     var ddayOnly = settings.calendarDdayOnly;
-    var density = settings.calendarDensity;
 
     return showModalBottomSheet<void>(
       context: context,
@@ -1322,29 +1319,6 @@ class _CalendarHeader extends ConsumerWidget {
                             value.trim(),
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<CalendarDensity>(
-                    initialValue: density,
-                    decoration: const InputDecoration(labelText: '일정 표시 밀도'),
-                    items: CalendarDensity.values
-                        .map(
-                          (item) => DropdownMenuItem(
-                            value: item,
-                            child: Text(item.label),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) async {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() => density = value);
-                      final updated = ref
-                          .read(appSettingsProvider)
-                          .copyWith(calendarDensity: value);
-                      await ref.read(settingsRepositoryProvider).save(updated);
-                      ref.read(appSettingsProvider.notifier).state = updated;
-                    },
-                  ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: ddayOnly,

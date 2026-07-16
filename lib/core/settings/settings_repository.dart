@@ -36,7 +36,9 @@ class SettingsRepository {
   static const _blockSensitiveAiKey = 'blockSensitiveAi';
   static const _categoriesKey = 'eventCategories';
   static const _dDayReminderOffsetsKey = 'dDayReminderOffsets';
-  static const _calendarDensityKey = 'calendarDensity';
+  static const _appTextSizeKey = 'appTextSize';
+  static const _legacyCalendarEventTextSizeKey = 'calendarEventTextSize';
+  static const _legacyCalendarDensityKey = 'calendarDensity';
   static const _defaultCalendarViewKey = 'defaultCalendarView';
   static const _hiddenCategoryIdsKey = 'hiddenCategoryIds';
   static const _calendarShowHolidaysKey = 'calendarShowHolidays';
@@ -71,8 +73,9 @@ class SettingsRepository {
       blockSensitiveAi: _preferences.getBool(_blockSensitiveAiKey) ?? true,
       categories: _loadCategories(),
       dDayReminderOffsets: _loadDdayOffsets(),
-      calendarDensity: CalendarDensity.fromName(
-        _preferences.getString(_calendarDensityKey),
+      appTextSize: AppTextSize.fromName(
+        _preferences.getString(_appTextSizeKey) ??
+            _preferences.getString(_legacyCalendarEventTextSizeKey),
       ),
       defaultCalendarView: CalendarViewMode.fromName(
         _preferences.getString(_defaultCalendarViewKey),
@@ -137,10 +140,9 @@ class SettingsRepository {
       _dDayReminderOffsetsKey,
       jsonEncode(settings.dDayReminderOffsets),
     );
-    await _preferences.setString(
-      _calendarDensityKey,
-      settings.calendarDensity.name,
-    );
+    await _preferences.setString(_appTextSizeKey, settings.appTextSize.name);
+    await _preferences.remove(_legacyCalendarEventTextSizeKey);
+    await _preferences.remove(_legacyCalendarDensityKey);
     await _preferences.setString(
       _defaultCalendarViewKey,
       settings.defaultCalendarView.name,
@@ -293,7 +295,9 @@ class SettingsRepository {
     await _preferences.remove(_blockSensitiveAiKey);
     await _preferences.remove(_categoriesKey);
     await _preferences.remove(_dDayReminderOffsetsKey);
-    await _preferences.remove(_calendarDensityKey);
+    await _preferences.remove(_appTextSizeKey);
+    await _preferences.remove(_legacyCalendarEventTextSizeKey);
+    await _preferences.remove(_legacyCalendarDensityKey);
     await _preferences.remove(_defaultCalendarViewKey);
     await _preferences.remove(_hiddenCategoryIdsKey);
     await _preferences.remove(_calendarShowHolidaysKey);

@@ -1562,3 +1562,31 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Windows native chooser lists only KakaoMap and Naver Map, both opening in
   the user's default browser.
 - iOS and macOS retain Apple Maps support.
+
+## 2026-07-17 Full UI Text Size and Release 2.7.0.2
+
+- The release label is `2.7.0.2`: marketing version `2.7.0`, build number
+  `2`. Apple builds must use `--build-name 2.7.0 --build-number 2`; iOS and
+  macOS Xcode test targets also store `MARKETING_VERSION = 2.7.0` and
+  `CURRENT_PROJECT_VERSION = 2`. Windows MSIX uses `2.7.0.2` and the matching
+  output filename.
+- Removed the user-facing monthly event-density control from both Settings and
+  the calendar filter sheet. The width-based standard display capacity remains
+  fixed: `4` event lanes at widths up to `390`, `5` up to `430`, then `6`, `7`,
+  `8`, `9`, `10`, and `12` as the viewport widens.
+- Added the synced `appTextSize` setting with two values only: `기본` (`0.8x`)
+  and `크게` (`1.0x`). `DailyApp` applies it through the root `MediaQuery`, so
+  the onboarding, calendar, settings, dialogs, sheets, event details, and
+  other app UI all inherit the same scale. The old
+  `calendarEventTextSize` key is read only as a migration fallback, then
+  removed when settings are saved.
+- Existing local `calendarDensity` data is removed on the next settings save;
+  it is no longer written to Google Drive AppData settings. Older remote
+  settings without `appTextSize` safely use `기본`.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh test --no-pub test/features/calendar/calendar_month_grid_test.dart`
+- Manual verification needed on iPhone 17, Android, macOS, and Windows:
+  switch `기본`/`크게`, restart the app, then sync and restore on another
+  platform to confirm the selected size remains unchanged and the old density
+  selector is absent from both Settings and filter.
