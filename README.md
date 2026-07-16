@@ -6,9 +6,9 @@ Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로�
 
 ## 현재 버전
 
-- 앱 버전: `2.7.0.2`
+- 앱 버전: `2.7.0.3`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 다음 릴리스 후보: `2.7.0.2`
+- 다음 릴리스 후보: `2.7.0.3`
 - 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
 
 ## 배포 파일

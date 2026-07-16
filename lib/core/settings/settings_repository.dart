@@ -46,6 +46,7 @@ class SettingsRepository {
   static const _hideSensitiveEventsKey = 'hideSensitiveEvents';
   static const _hideSensitiveNotificationsKey = 'hideSensitiveNotifications';
   static const _appLockEnabledKey = 'appLockEnabled';
+  static const _appLockBiometricsEnabledKey = 'appLockBiometricsEnabled';
   static const _use24HourTimeKey = 'use24HourTime';
   static const _deviceIdKey = 'deviceId';
   static const _appleUserIdentifierKey = 'appleUserIdentifier';
@@ -55,6 +56,7 @@ class SettingsRepository {
   static const _dailyAccountKey = 'dailyAccount';
   static const _geminiKey = 'geminiApiKey';
   static const _appLockPinHashKey = 'appLockPinHash';
+  static const _appLockPinLengthKey = 'appLockPinLength';
 
   AppSettings load() {
     return AppSettings(
@@ -89,6 +91,8 @@ class SettingsRepository {
       hideSensitiveNotifications:
           _preferences.getBool(_hideSensitiveNotificationsKey) ?? false,
       appLockEnabled: _preferences.getBool(_appLockEnabledKey) ?? false,
+      appLockBiometricsEnabled:
+          _preferences.getBool(_appLockBiometricsEnabledKey) ?? false,
       use24HourTime: _preferences.getBool(_use24HourTimeKey) ?? true,
     );
   }
@@ -165,6 +169,10 @@ class SettingsRepository {
       settings.hideSensitiveNotifications,
     );
     await _preferences.setBool(_appLockEnabledKey, settings.appLockEnabled);
+    await _preferences.setBool(
+      _appLockBiometricsEnabledKey,
+      settings.appLockBiometricsEnabled,
+    );
     await _preferences.setBool(_use24HourTimeKey, settings.use24HourTime);
   }
 
@@ -267,12 +275,20 @@ class SettingsRepository {
     return _deleteSecureStorageKey(_geminiKey);
   }
 
-  Future<void> saveAppLockPin(String pin) {
-    return _secureStorage.write(key: _appLockPinHashKey, value: _hashPin(pin));
+  Future<void> saveAppLockPin(String pin) async {
+    await _secureStorage.write(key: _appLockPinHashKey, value: _hashPin(pin));
+    await _secureStorage.write(key: _appLockPinLengthKey, value: '${pin.length}');
   }
 
-  Future<void> deleteAppLockPin() {
-    return _deleteSecureStorageKey(_appLockPinHashKey);
+  Future<void> deleteAppLockPin() async {
+    await _deleteSecureStorageKey(_appLockPinHashKey);
+    await _deleteSecureStorageKey(_appLockPinLengthKey);
+  }
+
+  Future<int?> appLockPinLength() async {
+    final raw = await _secureStorage.read(key: _appLockPinLengthKey);
+    final length = int.tryParse(raw ?? '');
+    return length != null && length >= 4 ? length : null;
   }
 
   Future<bool> verifyAppLockPin(String pin) async {
@@ -305,6 +321,7 @@ class SettingsRepository {
     await _preferences.remove(_hideSensitiveEventsKey);
     await _preferences.remove(_hideSensitiveNotificationsKey);
     await _preferences.remove(_appLockEnabledKey);
+    await _preferences.remove(_appLockBiometricsEnabledKey);
     await _preferences.remove(_use24HourTimeKey);
     await _preferences.remove(_deviceIdKey);
     await deleteDailyAccount();

@@ -47,6 +47,30 @@ void main() {
   );
 
   test(
+    'app lock stores the configured PIN length with its secure hash',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final secureStorage = _MemorySecureStorage();
+      final settingsRepository = SettingsRepository(
+        preferences: preferences,
+        secureStorage: secureStorage,
+      );
+
+      await settingsRepository.saveAppLockPin('13579');
+
+      expect(await settingsRepository.appLockPinLength(), 5);
+      expect(await settingsRepository.verifyAppLockPin('13579'), isTrue);
+      expect(await settingsRepository.verifyAppLockPin('1357'), isFalse);
+
+      await settingsRepository.deleteAppLockPin();
+
+      expect(await settingsRepository.appLockPinLength(), isNull);
+      expect(await settingsRepository.verifyAppLockPin('13579'), isFalse);
+    },
+  );
+
+  test(
     'Apple account refresh keeps saved app login marker if revoked',
     () async {
       SharedPreferences.setMockInitialValues({
@@ -402,6 +426,66 @@ void main() {
       container.read(selectedDateProvider),
       DateTime(startDate.year, startDate.month, startDate.day + 7),
     );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('app lock covers Settings immediately after backgrounding', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'onboardingCompleted': true,
+      'appLockEnabled': true,
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final secureStorage = _MemorySecureStorage();
+    final settingsRepository = SettingsRepository(
+      preferences: preferences,
+      secureStorage: secureStorage,
+    );
+    await settingsRepository.saveAppLockPin('13579');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(_FakeNotification()),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(account: null),
+          ),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('app-lock-screen')), findsOneWidget);
+    for (final digit in ['1', '3', '5', '7', '9']) {
+      await tester.tap(find.widgetWithText(TextButton, digit));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('설정'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsPage), findsOneWidget);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('app-lock-screen')), findsOneWidget);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('app-lock-screen')), findsOneWidget);
+
+    for (final digit in ['1', '3', '5', '7', '9']) {
+      await tester.tap(find.widgetWithText(TextButton, digit));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsPage), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -1122,5 +1206,53 @@ class _MissingEntitlementSecureStorage extends FlutterSecureStorage {
       message: "A required entitlement isn't present.",
       details: -34018,
     );
+  }
+}
+
+class _MemorySecureStorage extends FlutterSecureStorage {
+  _MemorySecureStorage();
+
+  final _values = <String, String>{};
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (value == null) {
+      _values.remove(key);
+    } else {
+      _values[key] = value;
+    }
+  }
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => _values[key];
+
+  @override
+  Future<void> delete({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    _values.remove(key);
   }
 }

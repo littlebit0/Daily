@@ -392,6 +392,8 @@ class GoogleDriveSyncService implements SyncService {
           remoteSettings.copyWith(
             onboardingCompleted: localSettings.onboardingCompleted,
             appLockEnabled: localSettings.appLockEnabled,
+            appLockBiometricsEnabled:
+                localSettings.appLockBiometricsEnabled,
           ),
         );
         settingsRevisionNotifier.value += 1;

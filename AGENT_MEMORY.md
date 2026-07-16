@@ -1563,12 +1563,12 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   the user's default browser.
 - iOS and macOS retain Apple Maps support.
 
-## 2026-07-17 Full UI Text Size and Release 2.7.0.2
+## 2026-07-17 Full UI Text Size and Release 2.7.0.3
 
-- The release label is `2.7.0.2`: marketing version `2.7.0`, build number
-  `2`. Apple builds must use `--build-name 2.7.0 --build-number 2`; iOS and
+- The release label is `2.7.0.3`: marketing version `2.7.0`, build number
+  `3`. Apple builds must use `--build-name 2.7.0 --build-number 3`; iOS and
   macOS Xcode test targets also store `MARKETING_VERSION = 2.7.0` and
-  `CURRENT_PROJECT_VERSION = 2`. Windows MSIX uses `2.7.0.2` and the matching
+  `CURRENT_PROJECT_VERSION = 3`. Windows MSIX uses `2.7.0.3` and the matching
   output filename.
 - Removed the user-facing monthly event-density control from both Settings and
   the calendar filter sheet. The width-based standard display capacity remains
@@ -1590,3 +1590,47 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   switch `기본`/`크게`, restart the app, then sync and restore on another
   platform to confirm the selected size remains unchanged and the old density
   selector is absent from both Settings and filter.
+
+## 2026-07-17 App Lock UX (Issue #19)
+
+- Replaced system-keyboard PIN entry on the lock gate with an in-app numeric
+  keypad. The unlock action button is removed; entering the final configured
+  PIN digit verifies and unlocks immediately.
+- New PINs remain 4 digits or longer. Their exact length is stored separately
+  in secure storage beside the PIN hash, so 4, 5, 6, or longer PINs all verify
+  precisely on their final digit. Legacy PIN hashes without a saved length use
+  a short pause-based compatibility check once, then save their length after
+  a successful unlock.
+- Enabling lock now uses a custom numeric keypad and confirmation step.
+  Disabling lock first requires a successful PIN verification and disables
+  the biometric preference with the lock.
+- Added an optional `생체 인증 사용` setting. The shared app flow uses the
+  official `local_auth` plugin and falls back to PIN when biometric auth is
+  unavailable, cancelled, or fails. Android now uses `FlutterFragmentActivity`
+  and an AppCompat theme as required by that plugin. Windows plugin generation
+  is included for Windows Hello support.
+- Shared Flutter code re-locks and clears entered PIN state whenever the app is
+  inactive, hidden, or paused, preventing Settings from remaining usable after
+  backgrounding.
+- Android applies `FLAG_SECURE` whenever app lock is enabled, so Daily content
+  is excluded from the recent-app preview and device screenshots.
+- Follow-up fix: the lock gate now wraps the app's root Navigator instead of
+  only the calendar home. Backgrounding from Settings, Search, event details,
+  or another pushed route therefore covers that route immediately. The hidden
+  Navigator remains mounted while locked, so successful PIN/biometric unlock
+  returns to the route the user was viewing instead of losing navigation state
+  or showing the lock only after returning to the calendar.
+- Added a widget regression test covering unlock -> Settings -> inactive ->
+  locked -> resume -> unlock -> restored Settings.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart` (26 tests)
+  - Added a test that verifies secure PIN hash/length storage and deletion.
+- Android debug APK build could not run on this Mac because no Android SDK is
+  configured.
+- Mac/iPhone agent follow-up required before Apple release:
+  - Run `flutter pub get` so `local_auth_darwin` is registered in generated
+    native plugin files, then add/verify the Face ID usage description and
+    test Face ID/Touch ID on real devices.
+  - Implement native privacy overlays during app switching so iOS/macOS app
+    switcher snapshots never expose Daily content while app lock is enabled.

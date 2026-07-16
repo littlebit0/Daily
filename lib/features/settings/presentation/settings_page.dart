@@ -11,6 +11,7 @@ import '../../../core/auth/apple_sign_in_service.dart';
 import '../../../core/auth/daily_account.dart';
 import '../../../core/auth/google_account.dart';
 import '../../../core/di/app_providers.dart';
+import '../../../core/security/biometric_auth_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
 import '../../../core/sync/google_drive_sync_service.dart';
@@ -39,6 +40,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   var _appleBusy = false;
   var _notificationMessage = '';
   var _notificationBusy = false;
+  var _biometricAvailable = false;
   AppleAccount? _appleAccount;
   DailyAccount? _dailyAccount;
   var _googleDriveConnectAttempt = 0;
@@ -95,6 +97,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _appleAccount = appleAccount;
           _dailyAccount = settingsRepository.dailyAccount();
         });
+      }
+    });
+    Future.microtask(() async {
+      final available = await BiometricAuthService().isAvailable();
+      if (mounted) {
+        setState(() => _biometricAvailable = available);
       }
     });
   }
@@ -361,6 +369,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ? _enableAppLock(settings)
                     : _disableAppLock(settings),
               ),
+              if (settings.appLockEnabled) ...[
+                const Divider(height: 1),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: settings.appLockBiometricsEnabled,
+                  title: const Text('생체 인증 사용'),
+                  subtitle: Text(
+                    _biometricAvailable
+                        ? 'Face ID, Touch ID 또는 기기의 생체 인증으로 잠금을 해제합니다.'
+                        : '이 기기에서는 생체 인증을 사용할 수 없습니다.',
+                  ),
+                  onChanged: _biometricAvailable
+                      ? (value) => _save(
+                          settings.copyWith(appLockBiometricsEnabled: value),
+                        )
+                      : null,
+                ),
+              ],
             ],
           ),
           _SettingsSection(
@@ -593,10 +619,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _enableAppLock(AppSettings settings) async {
-    final pin = await _showPinDialog(
+    final pin = await _showPinSetupDialog(
       context: context,
       title: '앱 잠금 PIN 설정',
-      label: '4자리 이상 PIN',
     );
     if (pin == null) {
       return;
@@ -614,8 +639,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _disableAppLock(AppSettings settings) async {
-    await ref.read(settingsRepositoryProvider).deleteAppLockPin();
-    await _save(settings.copyWith(appLockEnabled: false));
+    final repository = ref.read(settingsRepositoryProvider);
+    final pinLength = await repository.appLockPinLength();
+    if (!mounted) {
+      return;
+    }
+    final confirmed = await _showPinVerificationDialog(
+      context: context,
+      expectedLength: pinLength,
+      verifier: repository.verifyAppLockPin,
+    );
+    if (confirmed != true) {
+      return;
+    }
+    await repository.deleteAppLockPin();
+    await _save(
+      settings.copyWith(
+        appLockEnabled: false,
+        appLockBiometricsEnabled: false,
+      ),
+    );
   }
 
   Future<void> _rescheduleNotifications() async {
@@ -1836,14 +1879,27 @@ Future<int?> _showNumberDialog({
   );
 }
 
-Future<String?> _showPinDialog({
+Future<String?> _showPinSetupDialog({
   required BuildContext context,
   required String title,
-  required String label,
 }) async {
   return showDialog<String>(
     context: context,
-    builder: (context) => _PinDialog(title: title, label: label),
+    builder: (context) => _PinSetupDialog(title: title),
+  );
+}
+
+Future<bool?> _showPinVerificationDialog({
+  required BuildContext context,
+  required int? expectedLength,
+  required Future<bool> Function(String pin) verifier,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => _PinVerificationDialog(
+      expectedLength: expectedLength,
+      verifier: verifier,
+    ),
   );
 }
 
@@ -2016,58 +2072,289 @@ class _NumberDialogState extends State<_NumberDialog> {
   }
 }
 
-class _PinDialog extends StatefulWidget {
-  const _PinDialog({required this.title, required this.label});
+class _PinSetupDialog extends StatefulWidget {
+  const _PinSetupDialog({required this.title});
 
   final String title;
-  final String label;
 
   @override
-  State<_PinDialog> createState() => _PinDialogState();
+  State<_PinSetupDialog> createState() => _PinSetupDialogState();
 }
 
-class _PinDialogState extends State<_PinDialog> {
-  late final TextEditingController _controller;
+class _PinSetupDialogState extends State<_PinSetupDialog> {
+  var _pin = '';
+  String? _firstPin;
+  var _error = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController();
+  bool get _confirming => _firstPin != null;
+
+  void _appendDigit(String digit) {
+    setState(() {
+      _pin += digit;
+      _error = '';
+    });
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void _removeDigit() {
+    if (_pin.isEmpty) {
+      return;
+    }
+    setState(() {
+      _pin = _pin.substring(0, _pin.length - 1);
+      _error = '';
+    });
+  }
+
+  void _continue() {
+    if (!_confirming) {
+      if (_pin.length < 4) {
+        setState(() => _error = 'PIN은 4자리 이상이어야 합니다.');
+        return;
+      }
+      setState(() {
+        _firstPin = _pin;
+        _pin = '';
+        _error = '';
+      });
+      return;
+    }
+    if (_pin != _firstPin) {
+      setState(() {
+        _pin = '';
+        _error = 'PIN이 일치하지 않습니다. 다시 입력하세요.';
+      });
+      return;
+    }
+    Navigator.of(context).pop(_pin);
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.title),
-      content: SingleChildScrollView(
-        child: TextField(
-          controller: _controller,
-          autofocus: true,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(labelText: widget.label),
+      content: SizedBox(
+        width: 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _confirming ? 'PIN을 한 번 더 입력하세요.' : '4자리 이상의 PIN을 입력하세요.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 18),
+            _PinEntryDots(filledCount: _pin.length),
+            SizedBox(
+              height: 22,
+              child: Text(
+                _error,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+            _SecurePinKeypad(
+              onDigit: _appendDigit,
+              onBackspace: _removeDigit,
+            ),
+          ],
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () {
-            FocusManager.instance.primaryFocus?.unfocus();
-            Navigator.of(context).pop();
-          },
+          onPressed: () => Navigator.of(context).pop(),
           child: const Text('취소'),
         ),
         FilledButton(
-          onPressed: () {
-            FocusManager.instance.primaryFocus?.unfocus();
-            Navigator.of(context).pop(_controller.text.trim());
-          },
-          child: const Text('적용'),
+          onPressed: _continue,
+          child: Text(_confirming ? '설정' : '다음'),
+        ),
+      ],
+    );
+  }
+}
+
+class _PinVerificationDialog extends StatefulWidget {
+  const _PinVerificationDialog({
+    required this.expectedLength,
+    required this.verifier,
+  });
+
+  final int? expectedLength;
+  final Future<bool> Function(String pin) verifier;
+
+  @override
+  State<_PinVerificationDialog> createState() =>
+      _PinVerificationDialogState();
+}
+
+class _PinVerificationDialogState extends State<_PinVerificationDialog> {
+  static const _legacyCheckDelay = Duration(milliseconds: 700);
+
+  Timer? _legacyTimer;
+  var _pin = '';
+  var _checking = false;
+  var _error = '';
+
+  @override
+  void dispose() {
+    _legacyTimer?.cancel();
+    super.dispose();
+  }
+
+  void _appendDigit(String digit) {
+    _legacyTimer?.cancel();
+    if (_checking ||
+        (widget.expectedLength != null && _pin.length >= widget.expectedLength!)) {
+      return;
+    }
+    setState(() {
+      _pin += digit;
+      _error = '';
+    });
+    if (widget.expectedLength != null && _pin.length == widget.expectedLength) {
+      unawaited(_verify());
+    } else if (widget.expectedLength == null && _pin.length >= 4) {
+      _legacyTimer = Timer(_legacyCheckDelay, () => unawaited(_verify()));
+    }
+  }
+
+  void _removeDigit() {
+    _legacyTimer?.cancel();
+    if (_checking || _pin.isEmpty) {
+      return;
+    }
+    setState(() {
+      _pin = _pin.substring(0, _pin.length - 1);
+      _error = '';
+    });
+  }
+
+  Future<void> _verify() async {
+    if (_checking || _pin.isEmpty) {
+      return;
+    }
+    final pin = _pin;
+    setState(() => _checking = true);
+    final verified = await widget.verifier(pin);
+    if (!mounted) {
+      return;
+    }
+    if (verified) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() {
+      _checking = false;
+      _pin = '';
+      _error = 'PIN이 일치하지 않습니다.';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('PIN 확인'),
+      content: SizedBox(
+        width: 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('앱 잠금을 해제하려면 PIN을 입력하세요.'),
+            const SizedBox(height: 18),
+            _PinEntryDots(
+              filledCount: _pin.length,
+              expectedCount: widget.expectedLength,
+            ),
+            SizedBox(
+              height: 22,
+              child: Text(
+                _error,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+            _SecurePinKeypad(
+              enabled: !_checking,
+              onDigit: _appendDigit,
+              onBackspace: _removeDigit,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _checking ? null : () => Navigator.of(context).pop(false),
+          child: const Text('취소'),
+        ),
+      ],
+    );
+  }
+}
+
+class _PinEntryDots extends StatelessWidget {
+  const _PinEntryDots({required this.filledCount, this.expectedCount});
+
+  final int filledCount;
+  final int? expectedCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = expectedCount ?? (filledCount > 6 ? filledCount : 6);
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 12,
+      runSpacing: 10,
+      children: List.generate(count, (index) {
+        final filled = index < filledCount;
+        return Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: filled
+                ? Theme.of(context).colorScheme.primary
+                : Colors.transparent,
+            border: Border.all(color: Theme.of(context).colorScheme.outline),
+            shape: BoxShape.circle,
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _SecurePinKeypad extends StatelessWidget {
+  const _SecurePinKeypad({
+    required this.onDigit,
+    required this.onBackspace,
+    this.enabled = true,
+  });
+
+  final ValueChanged<String> onDigit;
+  final VoidCallback onBackspace;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0'];
+    return GridView.count(
+      crossAxisCount: 3,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 1.45,
+      children: [
+        for (final digit in digits)
+          digit.isEmpty
+              ? const SizedBox.shrink()
+              : TextButton(
+                  onPressed: enabled ? () => onDigit(digit) : null,
+                  child: Text(
+                    digit,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+        IconButton(
+          tooltip: '한 자리 지우기',
+          onPressed: enabled ? onBackspace : null,
+          icon: const Icon(Icons.backspace_outlined),
         ),
       ],
     );

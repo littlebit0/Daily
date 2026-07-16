@@ -58,6 +58,7 @@ class AppSettings {
     this.hideSensitiveEvents = false,
     this.hideSensitiveNotifications = false,
     this.appLockEnabled = false,
+    this.appLockBiometricsEnabled = false,
     this.use24HourTime = true,
   });
 
@@ -88,6 +89,7 @@ class AppSettings {
   final bool hideSensitiveEvents;
   final bool hideSensitiveNotifications;
   final bool appLockEnabled;
+  final bool appLockBiometricsEnabled;
   final bool use24HourTime;
 
   AppSettings copyWith({
@@ -113,6 +115,7 @@ class AppSettings {
     bool? hideSensitiveEvents,
     bool? hideSensitiveNotifications,
     bool? appLockEnabled,
+    bool? appLockBiometricsEnabled,
     bool? use24HourTime,
   }) {
     return AppSettings(
@@ -143,6 +146,8 @@ class AppSettings {
       hideSensitiveNotifications:
           hideSensitiveNotifications ?? this.hideSensitiveNotifications,
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
+      appLockBiometricsEnabled:
+          appLockBiometricsEnabled ?? this.appLockBiometricsEnabled,
       use24HourTime: use24HourTime ?? this.use24HourTime,
     );
   }
