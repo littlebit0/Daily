@@ -1391,3 +1391,38 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   record and is not part of the product-source rollback.
 - Reapply post-`2.5.17` work one item at a time. Explain and obtain user
   approval before any UI change.
+
+## 2026-07-17 Daily Account Provider Linking
+
+- Reapplied from the `v2.5.17` product baseline as the first approved item.
+- Daily now stores one local `DailyAccount` identity with independently
+  attached Apple and Google providers. A provider is attached only after its
+  own sign-in succeeds; matching email addresses are never used to merge
+  accounts.
+- Apple sign-in no longer opens an interactive Google login page. Apple-only
+  users enter Daily immediately.
+- If the same stored Daily account already has a Google provider and its
+  authorization can be restored silently on the device, Google Drive AppData
+  sync resumes. A missing or expired Google session leaves Apple/local use
+  available and does not show a Google login page.
+- `Google로 계속` is now the explicit Google account sign-in path. It requests
+  the existing Google Drive AppData scope during that authorization, then
+  attaches the Google account to the current Daily account and starts sync.
+- Legacy pre-Daily-account Apple/Google local state is migrated once on app
+  start so existing local users retain their connected session behavior.
+- Settings now distinguishes the Daily account, Apple login, Google login,
+  and Google Drive sync status. This was an approved text/status-only UI
+  adjustment; no calendar UI was changed.
+- Verification passed on macOS:
+  - `./tool/flutter.sh test --no-pub`
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh build ios --simulator --debug --no-pub`
+- Remaining manual verification for iOS/macOS/Android/Windows:
+  - Apple-only sign-in enters the calendar without any Google auth sheet.
+  - On the same Daily account, explicitly sign in with Google, grant Drive
+    AppData, restart, then sign in with Apple and confirm only silent Google
+    restoration occurs.
+  - With a missing/revoked Google session, Apple sign-in remains usable and
+    Settings offers an explicit Google login action.
+  - Confirm Google sign-in on each platform shows the native/system OAuth UI,
+    obtains Drive AppData consent, and starts the v2 sync flow.

@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/auth/apple_account.dart';
 import '../../../core/auth/apple_sign_in_service.dart';
+import '../../../core/auth/daily_account.dart';
+import '../../../core/auth/google_account.dart';
 import '../../../core/di/app_providers.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
@@ -40,6 +42,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   var _notificationBusy = false;
   String? _driveEmail;
   AppleAccount? _appleAccount;
+  DailyAccount? _dailyAccount;
   var _googleDriveConnectAttempt = 0;
   int? _activeGoogleDriveConnectAttempt;
 
@@ -61,13 +64,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     _appVersionInfo = _loadAppVersionInfo();
     Future.microtask(() async {
       final key = await ref.read(settingsRepositoryProvider).geminiApiKey();
+      final settingsRepository = ref.read(settingsRepositoryProvider);
       String? driveEmail;
       AppleAccount? appleAccount;
+      var dailyAccount = settingsRepository.dailyAccount();
       try {
         final driveAccount = await ref
             .read(googleDriveAuthServiceProvider)
             .restorePreviousSignIn();
-        driveEmail = driveAccount?.email;
+        if (driveAccount != null &&
+            (dailyAccount?.googleAccount == null &&
+                !settingsRepository.hasStoredDailyAccount)) {
+          await settingsRepository.saveGoogleAccount(
+            GoogleAccount(
+              email: driveAccount.email,
+              displayName: driveAccount.displayName,
+            ),
+          );
+          dailyAccount = settingsRepository.dailyAccount();
+        }
+        if (driveAccount != null &&
+            _matchesLinkedGoogleAccount(dailyAccount, driveAccount.email)) {
+          driveEmail = driveAccount.email;
+        }
       } on Object {
         driveEmail = null;
       }
@@ -83,6 +102,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         setState(() {
           _driveEmail = driveEmail;
           _appleAccount = appleAccount;
+          _dailyAccount = settingsRepository.dailyAccount();
         });
       }
     });
@@ -106,7 +126,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   Widget build(BuildContext context) {
     final settings = ref.watch(appSettingsProvider);
     final appleSignInService = ref.watch(appleSignInServiceProvider);
-    final hasAccountConnection = _appleAccount != null || _driveEmail != null;
+    final account = _dailyAccount;
+    final appleAccount = account?.appleAccount ?? _appleAccount;
+    final hasAccountConnection = account?.hasProviders ?? false;
     final accountBusy = _appleBusy || _syncBusy;
 
     return Scaffold(
@@ -424,9 +446,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           _SettingsSection(
             title: '계정',
             children: [
+              _DailyAccountStatus(account: account),
+              const Divider(height: 1),
               if (appleSignInService.isSupportedPlatform) ...[
                 _AppleSignInSettings(
-                  account: _appleAccount,
+                  account: appleAccount,
                   busy: _appleBusy,
                   message: _appleMessage,
                   onSignIn: _connectApple,
@@ -493,15 +517,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       }
       setState(() {
         _appleAccount = account;
-        _appleMessage = 'Apple 로그인이 완료되었습니다. 기존 Google Drive 연결을 확인합니다.';
+        _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
+        _appleMessage = 'Apple 로그인이 완료되었습니다.';
       });
-      await _connectGoogleDrive(preferSilentRestore: true);
+      final restoredGoogleSync = await _restoreLinkedGoogleDriveSync();
       if (mounted) {
         setState(() {
-          _appleMessage =
-              ref.read(googleDriveAuthServiceProvider).currentAccount == null
-              ? 'Apple 로그인이 완료되었습니다. Google Drive 연결이 필요합니다.'
-              : 'Apple 로그인과 Google Drive 동기화 연결이 완료되었습니다.';
+          _appleMessage = restoredGoogleSync
+              ? 'Apple 로그인이 완료되었습니다. 연결된 Google Drive 동기화를 복원했습니다.'
+              : 'Apple 로그인이 완료되었습니다.';
         });
       }
     } on AppleSignInException catch (error) {
@@ -711,7 +735,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     return normalized;
   }
 
-  Future<void> _connectGoogleDrive({bool preferSilentRestore = false}) async {
+  Future<void> _connectGoogleDrive() async {
     final attempt = ++_googleDriveConnectAttempt;
     _activeGoogleDriveConnectAttempt = attempt;
     setState(() {
@@ -720,26 +744,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     });
     try {
       final authService = ref.read(googleDriveAuthServiceProvider);
-      var account = preferSilentRestore
-          ? await authService.restorePreviousSignIn()
-          : null;
+      final account = await authService.signIn(forceAccountSelection: true);
       if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
         return;
       }
-      if (account == null && preferSilentRestore) {
-        if (mounted) {
-          setState(() {
-            _syncMessage = 'Google 로그인 창을 여는 중입니다.';
-          });
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 1100));
-        if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
-          return;
-        }
-      }
-      account ??= await authService.signIn(forceAccountSelection: true);
-      if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
-        return;
+      if (account == null) {
+        throw const GoogleDriveAuthException('Google 로그인이 취소되었습니다.');
       }
       final headers = await authService.authorizationHeaders(
         promptIfNecessary: true,
@@ -752,6 +762,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           'Google Drive 권한 승인이 완료되지 않았습니다. 다시 연결해 주세요.',
         );
       }
+      await ref
+          .read(settingsRepositoryProvider)
+          .saveGoogleAccount(
+            GoogleAccount(
+              email: account.email,
+              displayName: account.displayName,
+            ),
+          );
       final syncService = ref.read(googleDriveSyncServiceProvider);
       await syncService.startListeningOnly(flushPendingChanges: false);
       if (!_isCurrentGoogleDriveConnectAttempt(attempt)) {
@@ -771,7 +789,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           .read(settingsRepositoryProvider)
           .load();
       setState(() {
-        _driveEmail = account?.email;
+        _driveEmail = account.email;
+        _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
         _syncMessage = 'Google Drive 연결이 완료되었습니다.';
       });
     } on Object catch (error) {
@@ -787,6 +806,44 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       }
     }
   }
+
+  Future<bool> _restoreLinkedGoogleDriveSync() async {
+    final linkedGoogle = ref
+        .read(settingsRepositoryProvider)
+        .dailyAccount()
+        ?.googleAccount;
+    if (linkedGoogle == null) {
+      return false;
+    }
+    try {
+      final authService = ref.read(googleDriveAuthServiceProvider);
+      final account = await authService.restorePreviousSignIn();
+      if (account == null || !_sameEmail(account.email, linkedGoogle.email)) {
+        return false;
+      }
+      final headers = await authService.authorizationHeaders();
+      if (headers == null) {
+        return false;
+      }
+      final syncService = ref.read(googleDriveSyncServiceProvider);
+      await syncService.startListeningOnly(flushPendingChanges: false);
+      await syncService.syncPendingChangesNow(restoreAfterBackup: true);
+      if (mounted) {
+        setState(() => _driveEmail = account.email);
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  bool _matchesLinkedGoogleAccount(DailyAccount? account, String email) {
+    final linkedEmail = account?.googleAccount?.email;
+    return linkedEmail != null && _sameEmail(linkedEmail, email);
+  }
+
+  bool _sameEmail(String left, String right) =>
+      left.trim().toLowerCase() == right.trim().toLowerCase();
 
   bool _isCurrentGoogleDriveConnectAttempt(int attempt) {
     return _googleDriveConnectAttempt == attempt;
@@ -1412,9 +1469,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.account_circle_outlined),
           title: const Text('Google 계정'),
-          subtitle: Text(
-            connected ? email! : 'Google로 로그인하면 Drive 동기화를 함께 사용할 수 있습니다.',
-          ),
+          subtitle: Text(connected ? email! : 'Google 로그인 시 Daily 계정에 연결됩니다.'),
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
@@ -1423,7 +1478,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           subtitle: Text(
             connected
                 ? '이 계정의 Google Drive AppData에 일정을 백업하고 복원합니다.'
-                : 'Google 계정 로그인 후 자동으로 연결됩니다.',
+                : 'Google 로그인 시 Drive AppData 권한도 함께 승인합니다.',
           ),
         ),
         Row(
@@ -1484,9 +1539,9 @@ class _AppleSignInSettings extends StatelessWidget {
     final subtitle = connected
         ? [
             if (account!.email != null) account!.email!,
-            'Apple 로그인 상태입니다. Google Drive를 통해 백업과 동기화를 진행합니다.',
+            'Daily 계정에 연결된 Apple 로그인입니다.',
           ].join('\n')
-        : 'Apple 로그인 후 Google Drive 동기화를 연결합니다.';
+        : 'Apple 로그인만으로 Daily를 사용할 수 있습니다.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1524,6 +1579,30 @@ class _AppleSignInSettings extends StatelessWidget {
           Text(message, style: Theme.of(context).textTheme.labelMedium),
         ],
       ],
+    );
+  }
+}
+
+class _DailyAccountStatus extends StatelessWidget {
+  const _DailyAccountStatus({required this.account});
+
+  final DailyAccount? account;
+
+  @override
+  Widget build(BuildContext context) {
+    final providers = [
+      if (account?.appleAccount != null) 'Apple',
+      if (account?.googleAccount != null) 'Google',
+    ];
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.person_outline),
+      title: const Text('Daily 계정'),
+      subtitle: Text(
+        providers.isEmpty
+            ? 'Apple 또는 Google 계정을 연결할 수 있습니다.'
+            : '${providers.join(' · ')} 로그인 연결됨',
+      ),
     );
   }
 }

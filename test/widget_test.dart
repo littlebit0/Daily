@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:daily/app/daily_app.dart';
 import 'package:daily/core/auth/apple_sign_in_service.dart';
+import 'package:daily/core/auth/apple_account.dart';
+import 'package:daily/core/auth/google_account.dart';
 import 'package:daily/core/di/app_providers.dart';
 import 'package:daily/core/notifications/notification_service.dart';
 import 'package:daily/core/settings/settings_repository.dart';
@@ -44,25 +46,28 @@ void main() {
     },
   );
 
-  test('Apple account refresh keeps saved app login marker if revoked', () async {
-    SharedPreferences.setMockInitialValues({
-      'appleUserIdentifier': 'apple-user',
-      'appleEmail': 'hwi@example.com',
-    });
-    final preferences = await SharedPreferences.getInstance();
-    final settingsRepository = SettingsRepository(preferences: preferences);
-    final appleSignInService = AppleSignInService(
-      settingsRepository: settingsRepository,
-      targetPlatform: TargetPlatform.iOS,
-      availabilityChecker: () async => true,
-      credentialStateChecker: (_) async => CredentialState.revoked,
-    );
+  test(
+    'Apple account refresh keeps saved app login marker if revoked',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'appleUserIdentifier': 'apple-user',
+        'appleEmail': 'hwi@example.com',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      final appleSignInService = AppleSignInService(
+        settingsRepository: settingsRepository,
+        targetPlatform: TargetPlatform.iOS,
+        availabilityChecker: () async => true,
+        credentialStateChecker: (_) async => CredentialState.revoked,
+      );
 
-    final account = await appleSignInService.refreshCurrentAccount();
+      final account = await appleSignInService.refreshCurrentAccount();
 
-    expect(account?.email, 'hwi@example.com');
-    expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
-  });
+      expect(account?.email, 'hwi@example.com');
+      expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
+    },
+  );
 
   test('Apple unknown auth error explains sideloaded IPA limitation', () async {
     SharedPreferences.setMockInitialValues({});
@@ -92,10 +97,43 @@ void main() {
     );
   });
 
-  testWidgets('Apple sign-in starts Daily on Apple platforms', (tester) async {
+  test('Daily account keeps Apple and Google identities together', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final settingsRepository = SettingsRepository(preferences: preferences);
+
+    await settingsRepository.saveAppleAccount(
+      const AppleAccount(
+        userIdentifier: 'apple-user',
+        email: 'apple@example.com',
+      ),
+    );
+    final accountAfterApple = settingsRepository.dailyAccount();
+    await settingsRepository.saveGoogleAccount(
+      const GoogleAccount(email: 'google@example.com', displayName: 'Daily'),
+    );
+    final mergedAccount = settingsRepository.dailyAccount();
+
+    expect(mergedAccount?.id, accountAfterApple?.id);
+    expect(mergedAccount?.appleAccount?.userIdentifier, 'apple-user');
+    expect(mergedAccount?.googleAccount?.email, 'google@example.com');
+  });
+
+  testWidgets('Apple sign-in restores an already linked Google session', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    await settingsRepository.saveAppleAccount(
+      const AppleAccount(
+        userIdentifier: 'apple-user',
+        email: 'hwi@example.com',
+      ),
+    );
+    await settingsRepository.saveGoogleAccount(
+      const GoogleAccount(email: 'linked@example.com'),
+    );
     final appleSignInService = AppleSignInService(
       settingsRepository: settingsRepository,
       targetPlatform: TargetPlatform.iOS,
@@ -166,7 +204,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Apple sign-in auto-opens Google when no session exists', (
+  testWidgets('Apple sign-in starts Daily without opening Google login', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -223,15 +261,14 @@ void main() {
 
     expect(settingsRepository.appleAccount()?.email, 'hwi@example.com');
     expect(settingsRepository.load().onboardingCompleted, isTrue);
+    // App startup may make a silent restoration attempt, but Apple sign-in
+    // itself must never open the interactive Google authentication flow.
     expect(
       googleAuthService.restorePreviousSignInCalls,
       greaterThanOrEqualTo(1),
     );
-    expect(googleAuthService.signInCalls, 1);
-    expect(
-      driveSyncService.syncPendingChangesNowCalls,
-      greaterThanOrEqualTo(1),
-    );
+    expect(googleAuthService.signInCalls, 0);
+    expect(driveSyncService.syncPendingChangesNowCalls, 0);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
