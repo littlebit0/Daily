@@ -6,6 +6,7 @@ import 'package:daily/core/auth/apple_account.dart';
 import 'package:daily/core/auth/google_account.dart';
 import 'package:daily/core/di/app_providers.dart';
 import 'package:daily/core/notifications/notification_service.dart';
+import 'package:daily/core/settings/app_settings.dart';
 import 'package:daily/core/settings/settings_repository.dart';
 import 'package:daily/core/sync/google_drive_auth_service.dart';
 import 'package:daily/core/sync/google_drive_sync_service.dart';
@@ -23,6 +24,18 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('app text size remains selected after settings reload', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+
+    await settingsRepository.save(
+      settingsRepository.load().copyWith(appTextSize: AppTextSize.large),
+    );
+
+    expect(settingsRepository.load().appTextSize, AppTextSize.large);
+  });
+
   test(
     'settings reset ignores missing keychain entitlement during cleanup',
     () async {

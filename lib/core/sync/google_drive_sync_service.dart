@@ -389,11 +389,13 @@ class GoogleDriveSyncService implements SyncService {
       );
       if (remoteSettings != null) {
         await _settingsRepository.save(
-          remoteSettings.copyWith(
+          remoteSettings.settings.copyWith(
             onboardingCompleted: localSettings.onboardingCompleted,
             appLockEnabled: localSettings.appLockEnabled,
-            appLockBiometricsEnabled:
-                localSettings.appLockBiometricsEnabled,
+            appLockBiometricsEnabled: localSettings.appLockBiometricsEnabled,
+            appTextSize: remoteSettings.hasAppTextSize
+                ? remoteSettings.settings.appTextSize
+                : localSettings.appTextSize,
           ),
         );
         settingsRevisionNotifier.value += 1;
@@ -656,7 +658,7 @@ class GoogleDriveSyncService implements SyncService {
     );
   }
 
-  Future<AppSettings?> _downloadSettingsFile(
+  Future<_DownloadedSettings?> _downloadSettingsFile(
     Map<String, String> authHeaders,
     String fileId,
   ) async {
@@ -673,7 +675,13 @@ class GoogleDriveSyncService implements SyncService {
     if (settings is! Map) {
       return null;
     }
-    return _settingsFromJson(Map<String, Object?>.from(settings));
+    final settingsJson = Map<String, Object?>.from(settings);
+    return _DownloadedSettings(
+      settings: _settingsFromJson(settingsJson),
+      hasAppTextSize:
+          settingsJson.containsKey('appTextSize') ||
+          settingsJson.containsKey('calendarEventTextSize'),
+    );
   }
 
   Future<void> _uploadEventFile(
@@ -1137,6 +1145,16 @@ class GoogleDriveSyncStatus {
 }
 
 enum _SyncRequestKind { backupOnly, restoreOnly, backupThenRestore }
+
+class _DownloadedSettings {
+  const _DownloadedSettings({
+    required this.settings,
+    required this.hasAppTextSize,
+  });
+
+  final AppSettings settings;
+  final bool hasAppTextSize;
+}
 
 class _PendingSyncRequest {
   const _PendingSyncRequest({

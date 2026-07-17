@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:daily/core/notifications/notification_service.dart';
+import 'package:daily/core/settings/app_settings.dart';
 import 'package:daily/core/settings/settings_repository.dart';
 import 'package:daily/core/sync/google_drive_auth_service.dart';
 import 'package:daily/core/sync/google_drive_sync_service.dart';
@@ -474,36 +475,113 @@ void main() {
     },
   );
 
-  test('restore settings updates category colors and notifies listeners', (
-  ) async {
+  test(
+    'restore settings updates category colors and notifies listeners',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'appTextSize': AppTextSize.large.name,
+        'categories': jsonEncode([
+          {
+            'id': 'basic',
+            'label': '기본',
+            'colorValue': EventCategory.basic.colorValue,
+            'locked': false,
+          },
+          {
+            'id': 'custom-work',
+            'label': '업무',
+            'colorValue': 0xff2563eb,
+            'locked': false,
+          },
+          {
+            'id': 'holiday',
+            'label': '공휴일',
+            'colorValue': EventCategory.holiday.colorValue,
+            'locked': true,
+          },
+        ]),
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final requests = <http.Request>[];
+      final httpClient = MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-settings.json')) {
+            return _driveFiles([
+              {'id': 'settings-file', 'name': 'daily-sync-v2-settings.json'},
+            ]);
+          }
+          if (query.contains('daily-sync-v2-event-')) {
+            return _driveFiles([]);
+          }
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/settings-file') {
+          return _jsonResponse({
+            'schemaVersion': 2,
+            'type': 'settings',
+            'settings': {
+              'categories': [
+                {
+                  'id': 'basic',
+                  'label': '기본',
+                  'colorValue': EventCategory.basic.colorValue,
+                  'locked': false,
+                },
+                {
+                  'id': 'custom-work',
+                  'label': '업무',
+                  'colorValue': 0xff10b981,
+                  'locked': false,
+                },
+                {
+                  'id': 'holiday',
+                  'label': '공휴일',
+                  'colorValue': EventCategory.holiday.colorValue,
+                  'locked': true,
+                },
+              ],
+            },
+          });
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      expect(service.settingsRevisionNotifier.value, 0);
+      await service.restoreNow();
+
+      final restored = SettingsRepository(preferences: preferences).load();
+      final work = restored.categories.singleWhere(
+        (category) => category.id == 'custom-work',
+      );
+      expect(work.colorValue, 0xff10b981);
+      expect(restored.appTextSize, AppTextSize.large);
+      expect(service.settingsRevisionNotifier.value, 1);
+    },
+  );
+
+  test('restore settings applies an explicitly synced app text size', () async {
     SharedPreferences.setMockInitialValues({
-      'categories': jsonEncode([
-        {
-          'id': 'basic',
-          'label': '기본',
-          'colorValue': EventCategory.basic.colorValue,
-          'locked': false,
-        },
-        {
-          'id': 'custom-work',
-          'label': '업무',
-          'colorValue': 0xff2563eb,
-          'locked': false,
-        },
-        {
-          'id': 'holiday',
-          'label': '공휴일',
-          'colorValue': EventCategory.holiday.colorValue,
-          'locked': true,
-        },
-      ]),
+      'appTextSize': AppTextSize.large.name,
     });
     final preferences = await SharedPreferences.getInstance();
     final repository = _MemoryEventRepository();
     final notificationService = _FakeNotificationService();
-    final requests = <http.Request>[];
     final httpClient = MockClient((request) async {
-      requests.add(request);
       if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
         final query = request.url.queryParameters['q'] ?? '';
         if (query.contains('daily-sync-v2-settings.json')) {
@@ -520,28 +598,7 @@ void main() {
         return _jsonResponse({
           'schemaVersion': 2,
           'type': 'settings',
-          'settings': {
-            'categories': [
-              {
-                'id': 'basic',
-                'label': '기본',
-                'colorValue': EventCategory.basic.colorValue,
-                'locked': false,
-              },
-              {
-                'id': 'custom-work',
-                'label': '업무',
-                'colorValue': 0xff10b981,
-                'locked': false,
-              },
-              {
-                'id': 'holiday',
-                'label': '공휴일',
-                'colorValue': EventCategory.holiday.colorValue,
-                'locked': true,
-              },
-            ],
-          },
+          'settings': {'appTextSize': AppTextSize.basic.name},
         });
       }
       return http.Response('unexpected ${request.method} ${request.url}', 500);
@@ -555,15 +612,12 @@ void main() {
     );
     addTearDown(service.dispose);
 
-    expect(service.settingsRevisionNotifier.value, 0);
     await service.restoreNow();
 
-    final restored = SettingsRepository(preferences: preferences).load();
-    final work = restored.categories.singleWhere(
-      (category) => category.id == 'custom-work',
+    expect(
+      SettingsRepository(preferences: preferences).load().appTextSize,
+      AppTextSize.basic,
     );
-    expect(work.colorValue, 0xff10b981);
-    expect(service.settingsRevisionNotifier.value, 1);
   });
 }
 

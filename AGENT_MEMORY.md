@@ -1591,6 +1591,26 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   platform to confirm the selected size remains unchanged and the old density
   selector is absent from both Settings and filter.
 
+## 2026-07-17 Text Size Persistence (Issue #20)
+
+- Issue #20 originally reported that the monthly event-density selection
+  returned to its default. The density selector no longer exists in 2.7.0.3;
+  its current user-facing replacement is the synced `전체 UI 글자 크기`
+  (`appTextSize`) setting.
+- Local `기본`/`크게` persistence was verified through a repository reload.
+- Fixed a compatibility restore bug: a legacy Google Drive settings payload
+  without `appTextSize` or `calendarEventTextSize` was decoded as `기본` and
+  could overwrite a locally selected `크게` value. Legacy payloads now retain
+  the local selection. A remote payload that explicitly contains a text-size
+  value still restores that value across devices.
+- Shared Flutter behavior applies to Android, Windows, iOS, and macOS. Manual
+  platform verification should select `크게`, restart the app, restore an old
+  Drive settings file, and confirm the selection remains `크게`; then restore
+  a current backup with an explicit value and confirm that value is applied.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart` (29 tests)
+
 ## 2026-07-17 App Lock UX (Issue #19)
 
 - Replaced system-keyboard PIN entry on the lock gate with an in-app numeric
