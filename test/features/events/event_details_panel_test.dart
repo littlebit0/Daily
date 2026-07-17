@@ -1,0 +1,154 @@
+import 'package:daily/core/di/app_providers.dart';
+import 'package:daily/core/settings/settings_repository.dart';
+import 'package:daily/features/events/domain/calendar_event.dart';
+import 'package:daily/features/events/domain/event_category.dart';
+import 'package:daily/features/events/domain/event_repository.dart';
+import 'package:daily/features/events/presentation/event_details_panel.dart';
+import 'package:daily/features/events/presentation/sensitive_event_access.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('locked sensitive event does not render private details', (
+    tester,
+  ) async {
+    final event = _sensitiveEvent();
+    await _pumpPanel(tester, event: event, unlocked: false);
+
+    expect(find.text('비공개 일정'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline), findsWidgets);
+    expect(find.textContaining('10:00'), findsNothing);
+    expect(find.text('서울시청'), findsNothing);
+    expect(find.text('맑음'), findsNothing);
+    expect(find.text('https://example.com/meeting'), findsNothing);
+    expect(find.text('준비물 확인'), findsNothing);
+  });
+
+  testWidgets('unlocked event detail shows all fields and actions', (
+    tester,
+  ) async {
+    final event = _sensitiveEvent();
+    await _pumpPanel(tester, event: event, unlocked: true);
+
+    await tester.tap(find.text('비밀 회의').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('시간'), findsOneWidget);
+    expect(find.text('장소'), findsOneWidget);
+    expect(find.text('서울시청'), findsWidgets);
+    expect(find.text('지도 바로가기'), findsWidgets);
+    expect(find.text('URI'), findsOneWidget);
+    expect(find.text('https://example.com/meeting'), findsWidgets);
+    expect(find.text('날씨'), findsOneWidget);
+    expect(find.text('맑음'), findsWidgets);
+    expect(find.text('메모'), findsOneWidget);
+    expect(find.text('준비물 확인'), findsWidgets);
+    expect(find.text('수정'), findsOneWidget);
+    expect(find.text('삭제'), findsOneWidget);
+  });
+}
+
+Future<void> _pumpPanel(
+  WidgetTester tester, {
+  required CalendarEvent event,
+  required bool unlocked,
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final preferences = await SharedPreferences.getInstance();
+  final repository = _SingleEventRepository(event);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        settingsRepositoryProvider.overrideWithValue(
+          SettingsRepository(preferences: preferences),
+        ),
+        eventRepositoryProvider.overrideWithValue(repository),
+        sensitiveEventsUnlockedProvider.overrideWith((ref) => unlocked),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: EventDetailsPanel(date: event.startAt, events: [event]),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+CalendarEvent _sensitiveEvent() {
+  return CalendarEvent(
+    id: 'sensitive-event',
+    title: '비밀 회의',
+    memo: '준비물 확인',
+    location: '서울시청',
+    url: 'https://example.com/meeting',
+    weather: '맑음',
+    startAt: DateTime(2026, 7, 17, 10),
+    endAt: DateTime(2026, 7, 17, 11),
+    allDay: false,
+    category: EventCategory.basic,
+    colorValue: EventCategory.basic.colorValue,
+    createdAt: DateTime(2026, 7, 16),
+    updatedAt: DateTime(2026, 7, 16),
+    sensitive: true,
+  );
+}
+
+class _SingleEventRepository implements EventRepository {
+  _SingleEventRepository(this.event);
+
+  CalendarEvent event;
+
+  @override
+  Future<List<CalendarEvent>> allEventsForSync() async => [event];
+
+  @override
+  Future<void> clearAll() async {}
+
+  @override
+  Future<void> delete(String eventId) async {}
+
+  @override
+  Future<List<CalendarEvent>> eventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) async => [event];
+
+  @override
+  Future<CalendarEvent?> findById(String id) async => event;
+
+  @override
+  Future<void> hardDelete(String eventId) async {}
+
+  @override
+  Future<void> markSynced(String eventId) async {}
+
+  @override
+  Future<List<CalendarEvent>> pendingSyncEvents() async => [event];
+
+  @override
+  Future<void> save(CalendarEvent event) async {
+    this.event = event;
+  }
+
+  @override
+  Future<List<CalendarEvent>> search(String query) async => [event];
+
+  @override
+  Future<List<CalendarEvent>> updateCategoryReferences({
+    required EventCategory previous,
+    required EventCategory updated,
+    required DateTime updatedAt,
+  }) async => const [];
+
+  @override
+  Stream<List<CalendarEvent>> watchEventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) => Stream.value([event]);
+}

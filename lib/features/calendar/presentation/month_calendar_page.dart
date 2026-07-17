@@ -13,6 +13,7 @@ import '../../events/domain/event_category.dart';
 import '../../events/domain/event_draft.dart';
 import '../../events/presentation/event_details_panel.dart';
 import '../../events/presentation/event_editor_dialog.dart';
+import '../../events/presentation/sensitive_event_access.dart';
 import '../../settings/presentation/settings_page.dart';
 import '../widgets/calendar_month_grid.dart';
 
@@ -29,6 +30,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
   Timer? _searchDebounce;
   Future<List<CalendarEvent>>? _searchResults;
   var _searchOpen = false;
+  var _quickAccessSelected = false;
 
   @override
   void dispose() {
@@ -40,7 +42,11 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(appSettingsProvider);
+    final storedSettings = ref.watch(appSettingsProvider);
+    final sensitiveEventsUnlocked = ref.watch(sensitiveEventsUnlockedProvider);
+    final settings = storedSettings.copyWith(
+      hideSensitiveEvents: !sensitiveEventsUnlocked,
+    );
     final month = ref.watch(visibleMonthProvider);
     final selectedDate = ref.watch(selectedDateProvider);
     final viewMode = ref.watch(calendarViewModeProvider);
@@ -64,115 +70,133 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
         bottom: false,
         child: Column(
           children: [
-            _CalendarHeader(
-              month: month,
-              selectedDate: selectedDate,
-              viewMode: viewMode,
-              searchQuery: searchQuery,
-              searchOpen: _searchOpen,
-              onSearchPressed: _toggleSearch,
-            ),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: _searchOpen
-                  ? _InlineSearchPanel(
-                      controller: _searchController,
-                      focusNode: _searchFocusNode,
-                      results: _searchResults,
-                      onChanged: _handleSearchChanged,
-                      onSubmitted: _runSearch,
-                      onClose: _closeSearch,
-                      onEventSelected: _selectSearchResult,
-                    )
-                  : const SizedBox(width: double.infinity),
-            ),
-            Expanded(
-              child: viewMode == CalendarViewMode.day
-                  ? _CalendarMainContent(
-                      month: month,
-                      selectedDate: selectedDate,
-                      viewMode: viewMode,
-                      settings: settings,
-                      searchQuery: searchQuery,
-                      onMonthDelta: (delta) => _moveVisibleRange(
-                        ref,
-                        viewMode,
-                        month,
-                        selectedDate,
-                        delta,
-                      ),
-                      onDateSelected: (date, events) {
-                        ref.read(selectedDateProvider.notifier).state = date;
-                      },
-                    )
-                  : wide
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: _CalendarMainContent(
-                            month: month,
-                            selectedDate: selectedDate,
-                            viewMode: viewMode,
-                            settings: settings,
-                            searchQuery: searchQuery,
-                            onMonthDelta: (delta) => _moveVisibleRange(
-                              ref,
-                              viewMode,
-                              month,
-                              selectedDate,
-                              delta,
-                            ),
-                            onDateSelected: (date, events) {
-                              ref.read(selectedDateProvider.notifier).state =
-                                  date;
-                            },
-                          ),
+            if (_quickAccessSelected)
+              Expanded(
+                child: _buildQuickAccessPage(
+                  context,
+                  ref,
+                  settings,
+                  searchQuery,
+                  month,
+                ),
+              )
+            else ...[
+              _CalendarHeader(
+                month: month,
+                selectedDate: selectedDate,
+                viewMode: viewMode,
+                searchQuery: searchQuery,
+                searchOpen: _searchOpen,
+                onSearchPressed: _toggleSearch,
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: _searchOpen
+                    ? _InlineSearchPanel(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        results: _searchResults,
+                        hideSensitiveEvents: settings.hideSensitiveEvents,
+                        onChanged: _handleSearchChanged,
+                        onSubmitted: _runSearch,
+                        onClose: _closeSearch,
+                        onEventSelected: _selectSearchResult,
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
+              Expanded(
+                child: viewMode == CalendarViewMode.day
+                    ? _CalendarMainContent(
+                        month: month,
+                        selectedDate: selectedDate,
+                        viewMode: viewMode,
+                        settings: settings,
+                        searchQuery: searchQuery,
+                        onMonthDelta: (delta) => _moveVisibleRange(
+                          ref,
+                          viewMode,
+                          month,
+                          selectedDate,
+                          delta,
                         ),
-                        Container(
-                          width: 360,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            border: Border(
-                              left: BorderSide(color: Color(0xffedf0f5)),
+                        onDateSelected: (date, events) {
+                          ref.read(selectedDateProvider.notifier).state = date;
+                        },
+                      )
+                    : wide
+                    ? Row(
+                        children: [
+                          Expanded(
+                            child: _CalendarMainContent(
+                              month: month,
+                              selectedDate: selectedDate,
+                              viewMode: viewMode,
+                              settings: settings,
+                              searchQuery: searchQuery,
+                              onMonthDelta: (delta) => _moveVisibleRange(
+                                ref,
+                                viewMode,
+                                month,
+                                selectedDate,
+                                delta,
+                              ),
+                              onDateSelected: (date, events) {
+                                ref.read(selectedDateProvider.notifier).state =
+                                    date;
+                              },
                             ),
                           ),
-                          child: _MonthDetailsPanel(
-                            eventsAsync: eventsAsync,
-                            settings: settings,
-                            searchQuery: searchQuery,
-                            selectedDate: selectedDate,
+                          Container(
+                            width: 360,
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              border: Border(
+                                left: BorderSide(color: Color(0xffedf0f5)),
+                              ),
+                            ),
+                            child: _MonthDetailsPanel(
+                              eventsAsync: eventsAsync,
+                              settings: settings,
+                              searchQuery: searchQuery,
+                              selectedDate: selectedDate,
+                            ),
                           ),
+                        ],
+                      )
+                    : _CalendarMainContent(
+                        month: month,
+                        selectedDate: selectedDate,
+                        viewMode: viewMode,
+                        settings: settings,
+                        searchQuery: searchQuery,
+                        onMonthDelta: (delta) => _moveVisibleRange(
+                          ref,
+                          viewMode,
+                          month,
+                          selectedDate,
+                          delta,
                         ),
-                      ],
-                    )
-                  : _CalendarMainContent(
-                      month: month,
-                      selectedDate: selectedDate,
-                      viewMode: viewMode,
-                      settings: settings,
-                      searchQuery: searchQuery,
-                      onMonthDelta: (delta) => _moveVisibleRange(
-                        ref,
-                        viewMode,
-                        month,
-                        selectedDate,
-                        delta,
+                        onDateSelected: (date, events) {
+                          ref.read(selectedDateProvider.notifier).state = date;
+                          _showDaySheet(
+                            context,
+                            date,
+                            _eventsForDay(events, date),
+                          );
+                        },
                       ),
-                      onDateSelected: (date, events) {
-                        ref.read(selectedDateProvider.notifier).state = date;
-                        _showDaySheet(
-                          context,
-                          date,
-                          _eventsForDay(events, date),
-                        );
-                      },
-                    ),
-            ),
+              ),
+            ],
             _CalendarBottomBar(
               viewMode: viewMode,
-              onQuickAccessPressed: () => _showQuickAccessSheet(context, ref),
+              quickAccessSelected: _quickAccessSelected,
+              onQuickAccessPressed: () {
+                _closeSearch();
+                setState(() => _quickAccessSelected = true);
+              },
+              onCalendarViewSelected: _selectCalendarView,
               onLlmPressed: () => _showLlmSheet(context),
             ),
           ],
@@ -236,6 +260,13 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     _closeSearch();
   }
 
+  void _selectCalendarView(CalendarViewMode viewMode) {
+    ref.read(calendarViewModeProvider.notifier).state = viewMode;
+    if (_quickAccessSelected) {
+      setState(() => _quickAccessSelected = false);
+    }
+  }
+
   void _showLlmSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
@@ -250,20 +281,22 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     );
   }
 
-  Future<void> _showQuickAccessSheet(BuildContext context, WidgetRef ref) {
-    final settings = ref.read(appSettingsProvider);
-    final query = ref.read(calendarSearchQueryProvider);
+  Widget _buildQuickAccessPage(
+    BuildContext context,
+    WidgetRef ref,
+    AppSettings settings,
+    String query,
+    DateTime currentMonth,
+  ) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final currentMonth = ref.read(visibleMonthProvider);
     final range = _monthRangeFor(currentMonth, settings.weekStartsOnMonday);
-    final eventsAsync = ref.read(eventsInRangeProvider(range));
+    final eventsAsync = ref.watch(eventsInRangeProvider(range));
 
-    return showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+    return ColoredBox(
+      color: const Color(0xfff8fafc),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
         child: eventsAsync.when(
           data: (events) {
             final visibleEvents = _filterVisibleEvents(events, settings, query);
@@ -272,20 +305,20 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                 visibleEvents.where((event) => event.showDday).toList()
                   ..sort((a, b) => a.startAt.compareTo(b.startAt));
             return ListView(
-              shrinkWrap: true,
               children: [
-                Text('빠른 보기', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
+                Text(
+                  '빠른 보기',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 16),
                 _QuickAccessCard(
                   icon: Icons.calendar_month_outlined,
                   title: '월간 미니 캘린더',
                   subtitle: '${currentMonth.year}년 ${currentMonth.month}월',
                   items: _monthSummary(visibleEvents),
-                  onTap: () {
-                    ref.read(calendarViewModeProvider.notifier).state =
-                        CalendarViewMode.month;
-                    Navigator.of(context).pop();
-                  },
+                  onTap: () => _selectCalendarView(CalendarViewMode.month),
                 ),
                 const SizedBox(height: 10),
                 _QuickAccessCard(
@@ -304,9 +337,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                       today.year,
                       today.month,
                     );
-                    ref.read(calendarViewModeProvider.notifier).state =
-                        CalendarViewMode.day;
-                    Navigator.of(context).pop();
+                    _selectCalendarView(CalendarViewMode.day);
                   },
                 ),
                 const SizedBox(height: 10),
@@ -327,9 +358,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                       return;
                     }
                     ref.read(appSettingsProvider.notifier).state = updated;
-                    ref.read(calendarViewModeProvider.notifier).state =
-                        CalendarViewMode.month;
-                    Navigator.of(context).pop();
+                    _selectCalendarView(CalendarViewMode.month);
                   },
                 ),
               ],
@@ -356,9 +385,11 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
   }
 
   String _eventPreview(CalendarEvent event, AppSettings settings) {
-    final title = settings.hideSensitiveEvents && event.sensitive
-        ? '비공개 일정'
-        : event.title;
+    final hidden = settings.hideSensitiveEvents && event.sensitive;
+    final title = hidden ? '비공개 일정' : event.title;
+    if (hidden) {
+      return title;
+    }
     if (event.allDay) {
       return title;
     }
@@ -417,6 +448,7 @@ class _InlineSearchPanel extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     required this.results,
+    required this.hideSensitiveEvents,
     required this.onChanged,
     required this.onSubmitted,
     required this.onClose,
@@ -426,6 +458,7 @@ class _InlineSearchPanel extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final Future<List<CalendarEvent>>? results;
+  final bool hideSensitiveEvents;
   final ValueChanged<String> onChanged;
   final VoidCallback onSubmitted;
   final VoidCallback onClose;
@@ -501,6 +534,7 @@ class _InlineSearchPanel extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 10),
                   itemBuilder: (context, index) => _InlineSearchResultTile(
                     event: events[index],
+                    hideSensitive: hideSensitiveEvents,
                     onTap: () => onEventSelected(events[index]),
                   ),
                   separatorBuilder: (context, index) =>
@@ -517,14 +551,20 @@ class _InlineSearchPanel extends StatelessWidget {
 }
 
 class _InlineSearchResultTile extends StatelessWidget {
-  const _InlineSearchResultTile({required this.event, required this.onTap});
+  const _InlineSearchResultTile({
+    required this.event,
+    required this.hideSensitive,
+    required this.onTap,
+  });
 
   final CalendarEvent event;
+  final bool hideSensitive;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final date = DateFormat('yyyy년 M월 d일').format(event.startAt);
+    final hidden = hideSensitive && event.sensitive;
     final time = event.allDay
         ? '종일'
         : DateFormat('HH:mm').format(event.startAt);
@@ -536,11 +576,20 @@ class _InlineSearchResultTile extends StatelessWidget {
         side: const BorderSide(color: Color(0xffedf0f5)),
       ),
       leading: CircleAvatar(
-        backgroundColor: Color(event.colorValue).withValues(alpha: 0.12),
-        child: Icon(Icons.flag, color: Color(event.colorValue)),
+        backgroundColor: hidden
+            ? const Color(0xffeef0f3)
+            : Color(event.colorValue).withValues(alpha: 0.12),
+        child: Icon(
+          hidden ? Icons.lock_outline : Icons.flag,
+          color: hidden ? const Color(0xff64748b) : Color(event.colorValue),
+        ),
       ),
-      title: Text(event.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text('$date  $time'),
+      title: Text(
+        hidden ? '비공개 일정' : event.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(hidden ? date : '$date  $time'),
     );
   }
 }
@@ -1178,11 +1227,6 @@ class _CalendarHeader extends ConsumerWidget {
     ];
     final utilityActions = [
       IconButton(
-        tooltip: '빠른 보기',
-        onPressed: () => _showQuickAccessSheet(context, ref),
-        icon: const Icon(Icons.dashboard_outlined),
-      ),
-      IconButton(
         tooltip: searchOpen ? '검색 닫기' : '검색',
         onPressed: onSearchPressed,
         icon: Icon(searchOpen ? Icons.search_off : Icons.search),
@@ -1209,9 +1253,10 @@ class _CalendarHeader extends ConsumerWidget {
           children: [
             Expanded(child: monthButton),
             if (!ios) ...navigationActions.take(2),
+            navigationActions[2],
+            utilityActions[0],
             utilityActions[1],
             utilityActions[2],
-            utilityActions[3],
           ],
         ),
       );
@@ -1223,7 +1268,9 @@ class _CalendarHeader extends ConsumerWidget {
         children: [
           monthButton,
           const Spacer(),
-          if (!ios) ...[...navigationActions, const SizedBox(width: 6)],
+          if (!ios) ...navigationActions.take(2),
+          navigationActions[2],
+          const SizedBox(width: 6),
           ...utilityActions,
         ],
       ),
@@ -1410,136 +1457,25 @@ class _CalendarHeader extends ConsumerWidget {
       ),
     );
   }
-
-  Future<void> _showQuickAccessSheet(BuildContext context, WidgetRef ref) {
-    final settings = ref.read(appSettingsProvider);
-    final query = ref.read(calendarSearchQueryProvider);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final currentMonth = ref.read(visibleMonthProvider);
-    final range = _monthRangeFor(currentMonth, settings.weekStartsOnMonday);
-    final eventsAsync = ref.read(eventsInRangeProvider(range));
-
-    return showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-        child: eventsAsync.when(
-          data: (events) {
-            final visibleEvents = _filterVisibleEvents(events, settings, query);
-            final todayEvents = _eventsForDay(visibleEvents, today);
-            final ddayEvents =
-                visibleEvents.where((event) => event.showDday).toList()
-                  ..sort((a, b) => a.startAt.compareTo(b.startAt));
-            return ListView(
-              shrinkWrap: true,
-              children: [
-                Text('빠른 보기', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-                _QuickAccessCard(
-                  icon: Icons.calendar_month_outlined,
-                  title: '월간 미니 캘린더',
-                  subtitle: '${currentMonth.year}년 ${currentMonth.month}월',
-                  items: _monthSummary(visibleEvents),
-                  onTap: () {
-                    ref.read(calendarViewModeProvider.notifier).state =
-                        CalendarViewMode.month;
-                    Navigator.of(context).pop();
-                  },
-                ),
-                const SizedBox(height: 10),
-                _QuickAccessCard(
-                  icon: Icons.today_outlined,
-                  title: '오늘 일정',
-                  subtitle: '${today.month}월 ${today.day}일',
-                  items: todayEvents.isEmpty
-                      ? const ['일정 없음']
-                      : todayEvents
-                            .take(4)
-                            .map((event) => _eventPreview(event, settings))
-                            .toList(),
-                  onTap: () {
-                    ref.read(selectedDateProvider.notifier).state = today;
-                    ref.read(visibleMonthProvider.notifier).state = DateTime(
-                      today.year,
-                      today.month,
-                    );
-                    ref.read(calendarViewModeProvider.notifier).state =
-                        CalendarViewMode.day;
-                    Navigator.of(context).pop();
-                  },
-                ),
-                const SizedBox(height: 10),
-                _QuickAccessCard(
-                  icon: Icons.flag_outlined,
-                  title: 'D-day',
-                  subtitle: '중요한 날짜',
-                  items: ddayEvents.isEmpty
-                      ? const ['D-day 일정 없음']
-                      : ddayEvents
-                            .take(4)
-                            .map((event) => _eventPreview(event, settings))
-                            .toList(),
-                  onTap: () async {
-                    final updated = settings.copyWith(calendarDdayOnly: true);
-                    await ref.read(settingsRepositoryProvider).save(updated);
-                    if (!context.mounted) {
-                      return;
-                    }
-                    ref.read(appSettingsProvider.notifier).state = updated;
-                    ref.read(calendarViewModeProvider.notifier).state =
-                        CalendarViewMode.month;
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ],
-            );
-          },
-          error: (error, stackTrace) => Text('$error'),
-          loading: () => const SizedBox(
-            height: 140,
-            child: Center(child: CircularProgressIndicator()),
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<String> _monthSummary(List<CalendarEvent> events) {
-    final normalCount = events.where((event) => !event.holiday).length;
-    final ddayCount = events.where((event) => event.showDday).length;
-    return [
-      '일정 $normalCount개',
-      'D-day $ddayCount개',
-      '공휴일 ${events.where((event) => event.holiday).length}개',
-    ];
-  }
-
-  String _eventPreview(CalendarEvent event, AppSettings settings) {
-    final title = settings.hideSensitiveEvents && event.sensitive
-        ? '비공개 일정'
-        : event.title;
-    if (event.allDay) {
-      return title;
-    }
-    return '$title  ${DateFormat('HH:mm').format(event.startAt)}';
-  }
 }
 
-class _CalendarBottomBar extends ConsumerWidget {
+class _CalendarBottomBar extends StatelessWidget {
   const _CalendarBottomBar({
     required this.viewMode,
+    required this.quickAccessSelected,
     required this.onQuickAccessPressed,
+    required this.onCalendarViewSelected,
     required this.onLlmPressed,
   });
 
   final CalendarViewMode viewMode;
+  final bool quickAccessSelected;
   final VoidCallback onQuickAccessPressed;
+  final ValueChanged<CalendarViewMode> onCalendarViewSelected;
   final VoidCallback onLlmPressed;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     const barSurface = Color(0xfff8fbff);
     return Container(
       width: double.infinity,
@@ -1566,31 +1502,32 @@ class _CalendarBottomBar extends ConsumerWidget {
                 _BottomBarItem(
                   tooltip: '빠른 보기',
                   icon: Icons.dashboard_outlined,
+                  selected: quickAccessSelected,
                   onPressed: onQuickAccessPressed,
                 ),
                 _BottomBarItem(
                   tooltip: '주간 보기',
                   label: '주',
-                  selected: viewMode == CalendarViewMode.week,
+                  selected:
+                      !quickAccessSelected && viewMode == CalendarViewMode.week,
                   onPressed: () =>
-                      ref.read(calendarViewModeProvider.notifier).state =
-                          CalendarViewMode.week,
+                      onCalendarViewSelected(CalendarViewMode.week),
                 ),
                 _BottomBarItem(
                   tooltip: '월간 보기',
                   label: '월',
-                  selected: viewMode == CalendarViewMode.month,
+                  selected:
+                      !quickAccessSelected &&
+                      viewMode == CalendarViewMode.month,
                   onPressed: () =>
-                      ref.read(calendarViewModeProvider.notifier).state =
-                          CalendarViewMode.month,
+                      onCalendarViewSelected(CalendarViewMode.month),
                 ),
                 _BottomBarItem(
                   tooltip: '일간 보기',
                   label: '일',
-                  selected: viewMode == CalendarViewMode.day,
-                  onPressed: () =>
-                      ref.read(calendarViewModeProvider.notifier).state =
-                          CalendarViewMode.day,
+                  selected:
+                      !quickAccessSelected && viewMode == CalendarViewMode.day,
+                  onPressed: () => onCalendarViewSelected(CalendarViewMode.day),
                 ),
                 _BottomBarItem(
                   tooltip: 'LLM',
@@ -2047,10 +1984,11 @@ class _WeekEventFlag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final eventColor = Color(event.colorValue);
-    final title = hideSensitiveEvents && event.sensitive
-        ? '비공개 일정'
-        : event.title;
+    final hidden = hideSensitiveEvents && event.sensitive;
+    final eventColor = hidden
+        ? const Color(0xff64748b)
+        : Color(event.colorValue);
+    final title = hidden ? '비공개 일정' : event.title;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
@@ -2058,17 +1996,27 @@ class _WeekEventFlag extends StatelessWidget {
         color: eventColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        event.allDay
-            ? title
-            : '$title  ${DateFormat('HH:mm').format(event.startAt)}',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: eventColor,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-        ),
+      child: Row(
+        children: [
+          if (hidden) ...[
+            const Icon(Icons.lock_outline, size: 13),
+            const SizedBox(width: 4),
+          ],
+          Expanded(
+            child: Text(
+              hidden || event.allDay
+                  ? title
+                  : '$title  ${DateFormat('HH:mm').format(event.startAt)}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: eventColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

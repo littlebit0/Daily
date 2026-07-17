@@ -511,16 +511,16 @@ class GoogleDriveSyncService implements SyncService {
   }
 
   Future<void> _saveSyncedEvent(CalendarEvent event) async {
-    final synced = event.copyWith(syncStatus: 'synced');
-    final existing = await _eventRepository.findById(synced.id);
-    await _eventRepository.save(synced);
-    await _notificationService.cancelEventReminder(
-      synced.id,
-      reminderMinutesBeforeList: _combinedReminderMinutes(existing, synced),
-    );
-    if (synced.deletedAt == null) {
-      await _notificationService.scheduleEventReminder(synced);
+    final existing = await _eventRepository.findById(event.id);
+    if (existing == null) {
+      return;
     }
+    if (jsonEncode(_eventToJson(existing)) != jsonEncode(_eventToJson(event))) {
+      // A newer local edit landed while this upload was in flight. Keep that
+      // revision pending instead of replacing it with the uploaded snapshot.
+      return;
+    }
+    await _eventRepository.markSynced(event.id);
   }
 
   Future<void> _saveRestoredEvent(CalendarEvent event) async {

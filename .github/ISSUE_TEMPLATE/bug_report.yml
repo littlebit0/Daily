@@ -1,0 +1,54 @@
+name: 버그 제보
+description: Daily에서 발생한 문제를 알려주세요.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        제보해 주셔서 감사합니다. 일정, 계정 정보, 메모 등 개인정보는 작성하거나 첨부하지 마세요.
+  - type: textarea
+    id: description
+    attributes:
+      label: 문제 설명
+      description: 어떤 문제가 발생했는지 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 재현 방법
+      description: 문제가 발생하기까지의 동작을 순서대로 적어주세요.
+      placeholder: |
+        1. Daily를 실행합니다.
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 예상 동작
+      description: 원래 어떻게 동작해야 하는지 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 동작
+      description: 실제로 어떤 동작이나 오류가 나타났는지 적어주세요.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 앱 및 OS 환경
+      description: Daily 버전, 빌드 번호, 기기와 OS 버전을 적어주세요.
+      placeholder: Daily 2.7.0 (3), iPhone 17, iOS 26.5.2
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 개인정보 확인
+      options:
+        - label: 일정, 계정 정보, 메모 등 개인정보가 포함되지 않았음을 확인했습니다.
+          required: true

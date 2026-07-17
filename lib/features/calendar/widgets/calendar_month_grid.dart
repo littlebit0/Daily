@@ -855,7 +855,8 @@ class _EventSpanFlag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(event.colorValue);
+    final hidden = hideSensitive && event.sensitive;
+    final color = hidden ? const Color(0xff64748b) : Color(event.colorValue);
     final formatter = DateFormat('HH:mm');
     final showStartTime =
         showTime &&
@@ -863,9 +864,13 @@ class _EventSpanFlag extends StatelessWidget {
         event.startAt.year == segmentStart.year &&
         event.startAt.month == segmentStart.month &&
         event.startAt.day == segmentStart.day;
-    final prefix = event.showDday && !compact ? '${_formatDday(event)}  ' : '';
-    final suffix = showStartTime ? '  ${formatter.format(event.startAt)}' : '';
-    final title = hideSensitive && event.sensitive ? '비공개 일정' : event.title;
+    final prefix = !hidden && event.showDday && !compact
+        ? '${_formatDday(event)}  '
+        : '';
+    final suffix = !hidden && showStartTime
+        ? '  ${formatter.format(event.startAt)}'
+        : '';
+    final title = hidden ? '비공개 일정' : event.title;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -882,23 +887,30 @@ class _EventSpanFlag extends StatelessWidget {
               ? 3
               : 7,
         ),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            '$prefix$title$suffix',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: dense
-                  ? 9.2
-                  : compact
-                  ? 10.5
-                  : 11,
-              height: dense ? 1.0 : null,
-              fontWeight: FontWeight.w700,
-              color: color,
+        child: Row(
+          children: [
+            if (hidden && !dense) ...[
+              const Icon(Icons.lock_outline, size: 11),
+              const SizedBox(width: 3),
+            ],
+            Expanded(
+              child: Text(
+                '$prefix$title$suffix',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: dense
+                      ? 9.2
+                      : compact
+                      ? 10.5
+                      : 11,
+                  height: dense ? 1.0 : null,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

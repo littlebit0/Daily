@@ -1611,6 +1611,60 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   - `./tool/flutter.sh analyze --no-pub`
   - `./tool/flutter.sh test --no-pub test/widget_test.dart test/core/sync/google_drive_sync_service_test.dart` (29 tests)
 
+## 2026-07-17 Private Event Protection and Details (Issue #21)
+
+- Private events are locked at the start of every app session and lock again
+  when the app becomes inactive, hidden, or paused.
+- Settings now exposes `비공개 일정 표시`. Enabling it requires device
+  biometrics when available, with the saved Daily app-lock PIN as fallback.
+  Disabling it immediately masks private content again.
+- Locked private events use a neutral lock treatment. The title, time, D-day,
+  location, map action, URI, weather, and memo are not rendered in month,
+  week, day/full-date lists, quick access, or search results.
+- Tapping a locked private event requires authentication. Tapping an unlocked
+  event opens a detail sheet containing time, location, map shortcut, URI,
+  weather, memo, D-day, and edit/delete actions.
+- Fixed the intermittent URI/weather/memo loss at its sync race root cause.
+  A Drive upload that completes after a newer local edit no longer saves its
+  stale event snapshot over the database. It marks only the exact uploaded
+  revision as synced; a newer revision remains pending for its own upload.
+- Shared Flutter behavior applies to Android, Windows, iOS, and macOS. Manual
+  verification after all planned issues:
+  - Confirm private placeholders reveal no time or other metadata in every
+    calendar view, quick access, search, and the full-date list.
+  - Confirm biometric and PIN access, cancellation, incorrect PIN, session
+    unlock, manual re-lock, and background re-lock.
+  - Confirm the detail sheet actions, map chooser, URI opening, recurring-event
+    edit scopes, and deletion.
+  - Edit URI, weather, and memo repeatedly while Drive sync is active and
+    verify the newest values survive locally and on another device.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - Focused calendar, event-detail, sync, and app widget tests (38 tests)
+  - Full `./tool/flutter.sh test --no-pub` suite (60 tests)
+
+## 2026-07-17 Quick View Tab and Today Navigation (Issue #22)
+
+- `빠른 보기` no longer opens a modal sheet. It is now a selected bottom-bar
+  tab that replaces the main content while keeping the bottom bar visible.
+- The quick-view cards keep their existing destinations: monthly summary opens
+  month view, today's events open day view at today, and D-day opens the
+  filtered month view.
+- The LLM button intentionally retains its existing modal input sheet. Issue
+  #22 applies tab navigation only to quick view.
+- Added an always-visible `오늘` header action to week, month, and day views on
+  compact iPhone/iPad layouts as well as desktop layouts. It keeps the current
+  calendar mode and moves the selected date and visible month to today.
+- Removed the duplicate quick-view header action because quick view is now a
+  primary bottom tab.
+- Manual verification after all planned issues: switch repeatedly between
+  quick/week/month/day, verify selected bottom-bar styling, confirm quick-view
+  card destinations, confirm LLM still opens its sheet, and test the today
+  action in all three calendar modes on compact and wide layouts.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - Full `./tool/flutter.sh test --no-pub` suite (60 tests)
+
 ## 2026-07-17 App Lock UX (Issue #19)
 
 - Replaced system-keyboard PIN entry on the lock gate with an in-app numeric
@@ -1654,3 +1708,18 @@ Historical app-version notes below `2.0.0` were intentionally removed on
     test Face ID/Touch ID on real devices.
   - Implement native privacy overlays during app switching so iOS/macOS app
     switcher snapshots never expose Daily content while app lock is enabled.
+
+## 2026-07-17 Bug Reporting (Issue #23)
+
+- Added `버그 제보` under Settings > App Info. It opens the Daily GitHub new
+  issue page in the user's default external browser.
+- The report draft contains only the Daily version/build, platform, OS version,
+  and blank sections for the symptom, reproduction steps, expected behavior,
+  and actual behavior. Daily events, account details, memos, and other user
+  data are never read or attached.
+- Added a GitHub bug-report issue form with the same required sections and an
+  explicit privacy confirmation.
+- Manual verification after all planned issues: open the report action on
+  Android, Windows, iOS, and macOS; confirm the default browser opens, the
+  environment fields are accurate, cancellation returns safely to Daily, and
+  no private calendar/account data appears in the URL or form.

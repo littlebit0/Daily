@@ -22,13 +22,15 @@ class BiometricAuthService {
     }
   }
 
-  Future<bool> authenticate() async {
+  Future<bool> authenticate({
+    String localizedReason = 'Daily 잠금을 해제하려면 생체 인증이 필요합니다.',
+  }) async {
     if (!await isAvailable()) {
       return false;
     }
     try {
       return await _localAuthentication.authenticate(
-        localizedReason: 'Daily 잠금을 해제하려면 생체 인증이 필요합니다.',
+        localizedReason: localizedReason,
         biometricOnly: defaultTargetPlatform != TargetPlatform.windows,
         persistAcrossBackgrounding: true,
       );

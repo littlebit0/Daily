@@ -619,6 +619,68 @@ void main() {
       AppTextSize.basic,
     );
   });
+
+  test(
+    'completed upload does not overwrite a newer local event edit',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final uploaded = _event(
+        id: 'editing-event',
+        title: '회의',
+        startAt: DateTime(2026, 7, 17, 10),
+        endAt: DateTime(2026, 7, 17, 11),
+        updatedAt: DateTime(2026, 7, 17, 9),
+        syncStatus: 'pending',
+      );
+      await repository.save(uploaded);
+
+      final newer = uploaded.copyWith(
+        memo: '최신 메모',
+        url: 'https://example.com/latest',
+        weather: '맑음',
+        updatedAt: DateTime(2026, 7, 17, 9, 1),
+        syncStatus: 'pending',
+      );
+      final httpClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          return _driveFiles([
+            {
+              'id': 'editing-event-file',
+              'name': 'daily-sync-v2-event-editing-event.json',
+            },
+          ]);
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/upload/drive/v3/files/editing-event-file') {
+          await repository.save(newer);
+          return _jsonResponse({'id': 'editing-event-file'});
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      await service.backupNow(eventIds: {'editing-event'});
+
+      final saved = await repository.findById('editing-event');
+      expect(saved?.memo, '최신 메모');
+      expect(saved?.url, 'https://example.com/latest');
+      expect(saved?.weather, '맑음');
+      expect(saved?.syncStatus, 'pending');
+    },
+  );
 }
 
 GoogleDriveSyncService _service({

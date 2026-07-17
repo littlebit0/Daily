@@ -15,6 +15,7 @@ import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_category.dart';
 import 'package:daily/features/events/domain/event_repository.dart';
 import 'package:daily/features/settings/presentation/settings_page.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -399,6 +400,8 @@ void main() {
   testWidgets('Daily opens to the weekly calendar shell and swipes weeks', (
     tester,
   ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     SharedPreferences.setMockInitialValues({
       'onboardingCompleted': true,
       'appleUserIdentifier': 'apple-user',
@@ -426,6 +429,19 @@ void main() {
     expect(find.byType(PageView), findsOneWidget);
     expect(find.text('일정 없음'), findsWidgets);
     expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+    expect(find.byTooltip('오늘'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('빠른 보기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('빠른 보기'), findsOneWidget);
+    expect(find.byType(PageView), findsNothing);
+    expect(find.byType(BottomSheet), findsNothing);
+
+    await tester.tap(find.byTooltip('주간 보기'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PageView), findsOneWidget);
 
     final container = ProviderScope.containerOf(
       tester.element(find.byType(DailyApp)),
@@ -440,6 +456,7 @@ void main() {
       DateTime(startDate.year, startDate.month, startDate.day + 7),
     );
 
+    debugDefaultTargetPlatformOverride = null;
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

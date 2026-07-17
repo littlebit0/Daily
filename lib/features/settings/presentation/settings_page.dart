@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,10 +14,12 @@ import '../../../core/auth/google_account.dart';
 import '../../../core/di/app_providers.dart';
 import '../../../core/security/biometric_auth_service.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/support/bug_report_service.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
 import '../../../core/sync/google_drive_sync_service.dart';
 import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
+import '../../events/presentation/sensitive_event_access.dart';
 
 const _fallbackAppVersion = '2.5.14';
 
@@ -340,11 +343,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                value: settings.hideSensitiveEvents,
-                title: const Text('민감 일정 제목 숨김'),
-                subtitle: const Text('달력과 상세 화면에서 민감 일정을 비공개로 표시합니다.'),
-                onChanged: (value) =>
-                    _save(settings.copyWith(hideSensitiveEvents: value)),
+                value: ref.watch(sensitiveEventsUnlockedProvider),
+                title: const Text('비공개 일정 표시'),
+                subtitle: const Text('PIN 또는 생체 인증 후 이번 사용 중에만 내용을 표시합니다.'),
+                onChanged: (value) => _setSensitiveEventsVisible(value),
               ),
               const Divider(height: 1),
               SwitchListTile(
@@ -496,7 +498,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           _SettingsSection(
             title: '앱 정보',
-            children: [_AppVersionTile(versionInfo: _appVersionInfo)],
+            children: [
+              _AppVersionTile(versionInfo: _appVersionInfo),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.bug_report_outlined),
+                title: const Text('버그 제보'),
+                subtitle: const Text('GitHub 제보 양식을 기본 브라우저에서 엽니다.'),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: _reportBug,
+              ),
+            ],
           ),
         ],
       ),
@@ -508,11 +521,39 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final info = await PackageInfo.fromPlatform();
       return _AppVersionInfo(
         version: info.version.isEmpty ? _fallbackAppVersion : info.version,
+        buildNumber: info.buildNumber,
         packageName: info.packageName,
       );
     } on Object {
       return const _AppVersionInfo(version: _fallbackAppVersion);
     }
+  }
+
+  Future<void> _reportBug() async {
+    final info = await _appVersionInfo;
+    final environment = BugReportEnvironment(
+      version: info.version,
+      buildNumber: info.buildNumber,
+      platform: _platformName(defaultTargetPlatform),
+      osVersion: Platform.operatingSystemVersion,
+    );
+    final opened = await BugReportService.open(environment);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('버그 제보 페이지를 열 수 없습니다. 잠시 후 다시 시도하세요.')),
+      );
+    }
+  }
+
+  String _platformName(TargetPlatform platform) {
+    return switch (platform) {
+      TargetPlatform.android => 'Android',
+      TargetPlatform.iOS => 'iOS',
+      TargetPlatform.macOS => 'macOS',
+      TargetPlatform.windows => 'Windows',
+      TargetPlatform.linux => 'Linux',
+      TargetPlatform.fuchsia => 'Fuchsia',
+    };
   }
 
   Future<void> _connectApple() async {
@@ -618,6 +659,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  Future<void> _setSensitiveEventsVisible(bool visible) async {
+    if (!visible) {
+      ref.read(sensitiveEventsUnlockedProvider.notifier).state = false;
+      return;
+    }
+    final authenticated = await authenticateSensitiveEventAccess(
+      context: context,
+      ref: ref,
+    );
+    if (!mounted || !authenticated) {
+      return;
+    }
+    ref.read(sensitiveEventsUnlockedProvider.notifier).state = true;
+  }
+
   Future<void> _enableAppLock(AppSettings settings) async {
     final pin = await _showPinSetupDialog(
       context: context,
@@ -654,10 +710,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
     await repository.deleteAppLockPin();
     await _save(
-      settings.copyWith(
-        appLockEnabled: false,
-        appLockBiometricsEnabled: false,
-      ),
+      settings.copyWith(appLockEnabled: false, appLockBiometricsEnabled: false),
     );
   }
 
@@ -1268,9 +1321,14 @@ class _SettingsSection extends StatelessWidget {
 }
 
 class _AppVersionInfo {
-  const _AppVersionInfo({required this.version, this.packageName = ''});
+  const _AppVersionInfo({
+    required this.version,
+    this.buildNumber = '',
+    this.packageName = '',
+  });
 
   final String version;
+  final String buildNumber;
   final String packageName;
 }
 
@@ -2151,10 +2209,7 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
-            _SecurePinKeypad(
-              onDigit: _appendDigit,
-              onBackspace: _removeDigit,
-            ),
+            _SecurePinKeypad(onDigit: _appendDigit, onBackspace: _removeDigit),
           ],
         ),
       ),
@@ -2182,8 +2237,7 @@ class _PinVerificationDialog extends StatefulWidget {
   final Future<bool> Function(String pin) verifier;
 
   @override
-  State<_PinVerificationDialog> createState() =>
-      _PinVerificationDialogState();
+  State<_PinVerificationDialog> createState() => _PinVerificationDialogState();
 }
 
 class _PinVerificationDialogState extends State<_PinVerificationDialog> {
@@ -2203,7 +2257,8 @@ class _PinVerificationDialogState extends State<_PinVerificationDialog> {
   void _appendDigit(String digit) {
     _legacyTimer?.cancel();
     if (_checking ||
-        (widget.expectedLength != null && _pin.length >= widget.expectedLength!)) {
+        (widget.expectedLength != null &&
+            _pin.length >= widget.expectedLength!)) {
       return;
     }
     setState(() {

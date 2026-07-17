@@ -206,6 +206,50 @@ void main() {
     expect(selectedEnd, DateTime(2026, 5, 8));
   });
 
+  testWidgets('locked sensitive month event hides title, time, and D-day', (
+    tester,
+  ) async {
+    final event = CalendarEvent(
+      id: 'private-event',
+      title: '비밀 약속',
+      startAt: DateTime(2026, 5, 4, 10),
+      endAt: DateTime(2026, 5, 4, 11),
+      allDay: false,
+      category: EventCategory.basic,
+      colorValue: EventCategory.basic.colorValue,
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+      showDday: true,
+      sensitive: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            height: 420,
+            child: CalendarMonthGrid(
+              month: DateTime(2026, 5),
+              selectedDate: DateTime(2026, 5, 4),
+              events: [event],
+              weekStartsOnMonday: true,
+              showLunarDates: false,
+              hideSensitiveEvents: true,
+              onDateSelected: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('비공개 일정'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+    expect(find.textContaining('비밀 약속'), findsNothing);
+    expect(find.textContaining('10:00'), findsNothing);
+    expect(find.textContaining('D-'), findsNothing);
+  });
+
   test('defines the requested full-app text scale choices', () {
     expect(AppTextSize.basic.scale, 0.8);
     expect(AppTextSize.large.scale, 1.0);

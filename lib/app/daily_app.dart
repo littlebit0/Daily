@@ -11,6 +11,7 @@ import '../core/security/biometric_auth_service.dart';
 import '../core/security/app_lock_privacy_service.dart';
 import '../features/calendar/presentation/month_calendar_page.dart';
 import '../features/onboarding/presentation/welcome_page.dart';
+import '../features/events/presentation/sensitive_event_access.dart';
 import 'daily_theme.dart';
 
 class DailyApp extends ConsumerWidget {
@@ -425,6 +426,11 @@ class _AppHomeState extends ConsumerState<_AppHome>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      ref.read(sensitiveEventsUnlockedProvider.notifier).state = false;
+    }
     switch (state) {
       case AppLifecycleState.resumed:
         _startSyncIfConnected();
