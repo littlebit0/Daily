@@ -344,7 +344,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "APP_PATH=\"$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME\"\nif [ -d \"$APP_PATH\" ]; then\n  /usr/bin/xattr -cr \"$APP_PATH\" || true\n  /usr/sbin/dot_clean -m \"$APP_PATH\" || true\nfi\n";
+			shellScript = "APP_PATH=\"$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME\"\nif [ -d \"$APP_PATH\" ]; then\n  /usr/bin/xattr -cr \"$APP_PATH\" || true\n  /usr/sbin/dot_clean -m \"$APP_PATH\" || true\n\n  RESOURCES_PATH=\"$APP_PATH/Contents/Resources\"\n  if [ -d \"$RESOURCES_PATH\" ]; then\n    /usr/bin/find \"$RESOURCES_PATH\" -type d -name '*.bundle' -print0 | while IFS= read -r -d '' RESOURCE_BUNDLE; do\n      RESOURCE_INFO=\"$RESOURCE_BUNDLE/Contents/Info.plist\"\n      if [ -f \"$RESOURCE_INFO\" ] && ! /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' \"$RESOURCE_INFO\" >/dev/null 2>&1; then\n        /bin/rm -rf \"$RESOURCE_BUNDLE/Contents/_CodeSignature\"\n      fi\n    done\n  fi\nfi\n";
 		};
 		33CC111E2044C6BF0003C045 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
