@@ -25,6 +25,18 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('macOS uses desktop text scales instead of iPhone scales', () {
+    expect(
+      appTextScaleForPlatform(AppTextSize.basic, TargetPlatform.macOS),
+      1.0,
+    );
+    expect(
+      appTextScaleForPlatform(AppTextSize.large, TargetPlatform.macOS),
+      1.15,
+    );
+    expect(appTextScaleForPlatform(AppTextSize.basic, TargetPlatform.iOS), 0.8);
+  });
+
   test('app text size remains selected after settings reload', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -455,6 +467,57 @@ void main() {
       container.read(selectedDateProvider),
       DateTime(startDate.year, startDate.month, startDate.day + 7),
     );
+
+    debugDefaultTargetPlatformOverride = null;
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('macOS uses its header toolbar without the iOS bottom bar', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(_FakeNotification()),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(),
+          ),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('macos-calendar-toolbar')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('macos-calendar-toolbar')))
+          .height,
+      lessThan(64),
+    );
+    expect(find.byKey(const ValueKey('calendar-bottom-bar')), findsNothing);
+
+    await tester.tap(find.byTooltip('빠른 보기'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PageView), findsNothing);
+    expect(
+      find.byKey(const ValueKey('macos-calendar-toolbar')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('calendar-bottom-bar')), findsNothing);
 
     debugDefaultTargetPlatformOverride = null;
     await tester.pumpWidget(const SizedBox.shrink());

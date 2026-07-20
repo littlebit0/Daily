@@ -64,12 +64,29 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     };
     final eventsAsync = ref.watch(eventsInRangeProvider(range));
     final wide = MediaQuery.sizeOf(context).width >= 880;
+    final macOS = Theme.of(context).platform == TargetPlatform.macOS;
 
     return Scaffold(
       body: SafeArea(
-        bottom: false,
+        bottom: macOS,
         child: Column(
           children: [
+            if (macOS || !_quickAccessSelected)
+              _CalendarHeader(
+                month: month,
+                selectedDate: selectedDate,
+                viewMode: viewMode,
+                searchQuery: searchQuery,
+                searchOpen: _searchOpen,
+                quickAccessSelected: _quickAccessSelected,
+                onSearchPressed: _toggleSearch,
+                onQuickAccessPressed: () {
+                  _closeSearch();
+                  setState(() => _quickAccessSelected = true);
+                },
+                onCalendarViewSelected: _selectCalendarView,
+                onLlmPressed: () => _showLlmSheet(context),
+              ),
             if (_quickAccessSelected)
               Expanded(
                 child: _buildQuickAccessPage(
@@ -81,14 +98,6 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                 ),
               )
             else ...[
-              _CalendarHeader(
-                month: month,
-                selectedDate: selectedDate,
-                viewMode: viewMode,
-                searchQuery: searchQuery,
-                searchOpen: _searchOpen,
-                onSearchPressed: _toggleSearch,
-              ),
               AnimatedSize(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOutCubic,
@@ -189,16 +198,17 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                       ),
               ),
             ],
-            _CalendarBottomBar(
-              viewMode: viewMode,
-              quickAccessSelected: _quickAccessSelected,
-              onQuickAccessPressed: () {
-                _closeSearch();
-                setState(() => _quickAccessSelected = true);
-              },
-              onCalendarViewSelected: _selectCalendarView,
-              onLlmPressed: () => _showLlmSheet(context),
-            ),
+            if (!macOS)
+              _CalendarBottomBar(
+                viewMode: viewMode,
+                quickAccessSelected: _quickAccessSelected,
+                onQuickAccessPressed: () {
+                  _closeSearch();
+                  setState(() => _quickAccessSelected = true);
+                },
+                onCalendarViewSelected: _selectCalendarView,
+                onLlmPressed: () => _showLlmSheet(context),
+              ),
           ],
         ),
       ),
@@ -1176,7 +1186,11 @@ class _CalendarHeader extends ConsumerWidget {
     required this.viewMode,
     required this.searchQuery,
     required this.searchOpen,
+    required this.quickAccessSelected,
     required this.onSearchPressed,
+    required this.onQuickAccessPressed,
+    required this.onCalendarViewSelected,
+    required this.onLlmPressed,
   });
 
   final DateTime month;
@@ -1184,13 +1198,19 @@ class _CalendarHeader extends ConsumerWidget {
   final CalendarViewMode viewMode;
   final String searchQuery;
   final bool searchOpen;
+  final bool quickAccessSelected;
   final VoidCallback onSearchPressed;
+  final VoidCallback onQuickAccessPressed;
+  final ValueChanged<CalendarViewMode> onCalendarViewSelected;
+  final VoidCallback onLlmPressed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final label = '${month.year}년 ${month.month}월';
     final compact = MediaQuery.sizeOf(context).width < 680;
-    final ios = Theme.of(context).platform == TargetPlatform.iOS;
+    final platform = Theme.of(context).platform;
+    final ios = platform == TargetPlatform.iOS;
+    final macOS = platform == TargetPlatform.macOS;
     final monthButton = TextButton.icon(
       onPressed: () => _showMonthPicker(context, ref),
       icon: const Icon(Icons.calendar_month_outlined, size: 20),
@@ -1244,6 +1264,66 @@ class _CalendarHeader extends ConsumerWidget {
         icon: const Icon(Icons.settings_outlined),
       ),
     ];
+
+    if (macOS) {
+      final viewSwitch = SegmentedButton<CalendarViewMode>(
+        selected: {viewMode},
+        showSelectedIcon: false,
+        style: ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          padding: WidgetStateProperty.all(
+            const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          minimumSize: WidgetStateProperty.all(const Size(38, 34)),
+        ),
+        segments: const [
+          ButtonSegment(value: CalendarViewMode.week, label: Text('주')),
+          ButtonSegment(value: CalendarViewMode.month, label: Text('월')),
+          ButtonSegment(value: CalendarViewMode.day, label: Text('일')),
+        ],
+        onSelectionChanged: (selection) {
+          onCalendarViewSelected(selection.first);
+        },
+      );
+      final quickAccessButton = IconButton(
+        tooltip: '빠른 보기',
+        isSelected: quickAccessSelected,
+        style: IconButton.styleFrom(
+          backgroundColor: quickAccessSelected
+              ? const Color(0xffdbeafe)
+              : Colors.transparent,
+          foregroundColor: quickAccessSelected
+              ? const Color(0xff1d4ed8)
+              : const Color(0xff475569),
+        ),
+        onPressed: onQuickAccessPressed,
+        icon: const Icon(Icons.dashboard_outlined),
+        selectedIcon: const Icon(Icons.dashboard),
+      );
+      final llmButton = IconButton(
+        tooltip: 'LLM',
+        onPressed: onLlmPressed,
+        icon: const Icon(Icons.auto_awesome_outlined),
+      );
+
+      return Padding(
+        key: const ValueKey('macos-calendar-toolbar'),
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+        child: Row(
+          children: [
+            monthButton,
+            const Spacer(),
+            quickAccessButton,
+            const SizedBox(width: 6),
+            viewSwitch,
+            const SizedBox(width: 6),
+            ...navigationActions,
+            ...utilityActions,
+            llmButton,
+          ],
+        ),
+      );
+    }
 
     if (compact) {
       return Padding(
@@ -1478,6 +1558,7 @@ class _CalendarBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     const barSurface = Color(0xfff8fbff);
     return Container(
+      key: const ValueKey('calendar-bottom-bar'),
       width: double.infinity,
       decoration: BoxDecoration(
         color: barSurface,

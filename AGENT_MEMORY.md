@@ -1723,3 +1723,29 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   Android, Windows, iOS, and macOS; confirm the default browser opens, the
   environment fields are accurate, cancellation returns safely to Daily, and
   no private calendar/account data appears in the URL or form.
+
+## 2026-07-20 macOS Desktop Layout Correction
+
+- macOS no longer renders the iOS five-item bottom bar. iOS keeps the existing
+  bottom navigation unchanged.
+- macOS keeps quick access as a main-content tab, but exposes quick access,
+  week/month/day selection, and the LLM action in a desktop header toolbar.
+- macOS maps the synced text-size choices to desktop-appropriate scales:
+  `기본` is `1.0x` and `크게` is `1.15x`. Other platforms retain their existing
+  scales.
+- The initial macOS window content size is `1000 x 720`, with a minimum size of
+  `800 x 600`.
+- Five-week months render five rows instead of reserving an empty sixth row.
+  At an `800 x 570` month-grid area, at least four event rows remain visible.
+- Manual verification required after install: resize the macOS window between
+  `800 x 600` and larger desktop sizes, switch quick/week/month/day, open LLM,
+  and verify there is never a bottom navigation bar on macOS.
+
+## 2026-07-20 Version 2.7.1
+
+- Raised the user-facing release version to `2.7.1` and reset the new release
+  build number to `1` for Apple builds.
+- Windows uses the required four-part package version `2.7.1.1`.
+- This version includes the macOS desktop layout correction: one-line header
+  toolbar, no iOS-style bottom bar, desktop text scaling, dynamic month rows,
+  and increased event visibility at the minimum window size.

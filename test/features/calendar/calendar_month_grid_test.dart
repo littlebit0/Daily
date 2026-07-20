@@ -137,6 +137,44 @@ void main() {
     );
   });
 
+  testWidgets('shows four event rows in a compact macOS month area', (
+    tester,
+  ) async {
+    await _expectVisibleEventFlags(
+      tester,
+      width: 800,
+      height: 570,
+      expectedVisible: 4,
+    );
+  });
+
+  testWidgets('does not reserve an empty sixth row for a five-week month', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 800,
+            height: 570,
+            child: CalendarMonthGrid(
+              month: DateTime(2026, 5),
+              selectedDate: DateTime(2026, 5, 1),
+              events: const [],
+              weekStartsOnMonday: true,
+              showLunarDates: false,
+              hideSensitiveEvents: false,
+              onDateSelected: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(_dayNumberKey(DateTime(2026, 5, 31)), findsOneWidget);
+    expect(_dayNumberKey(DateTime(2026, 6, 1)), findsNothing);
+  });
+
   testWidgets('selects a date range with a primary mouse drag', (tester) async {
     final now = DateTime(2026, 5, 1);
     final holiday = CalendarEvent(

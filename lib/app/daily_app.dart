@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import '../core/di/app_providers.dart';
 import '../core/auth/google_account.dart';
 import '../core/security/biometric_auth_service.dart';
 import '../core/security/app_lock_privacy_service.dart';
+import '../core/settings/app_settings.dart';
 import '../features/calendar/presentation/month_calendar_page.dart';
 import '../features/onboarding/presentation/welcome_page.dart';
 import '../features/events/presentation/sensitive_event_access.dart';
@@ -39,9 +41,14 @@ class DailyApp extends ConsumerWidget {
           );
         }
         return MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(settings.appTextSize.scale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(
+              appTextScaleForPlatform(
+                settings.appTextSize,
+                defaultTargetPlatform,
+              ),
+            ),
+          ),
           child: content,
         );
       },
@@ -50,6 +57,16 @@ class DailyApp extends ConsumerWidget {
           : const WelcomePage(),
     );
   }
+}
+
+double appTextScaleForPlatform(AppTextSize size, TargetPlatform platform) {
+  if (platform == TargetPlatform.macOS) {
+    return switch (size) {
+      AppTextSize.basic => 1.0,
+      AppTextSize.large => 1.15,
+    };
+  }
+  return size.scale;
 }
 
 class _AppLockGate extends ConsumerStatefulWidget {

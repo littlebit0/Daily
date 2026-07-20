@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.7.0
+version: 2.7.1
 
 environment:
   sdk: ^3.11.5
@@ -70,11 +70,11 @@ msix_config:
   display_name: Daily
   publisher_display_name: littlebit0
   identity_name: littlebit0.Daily
-  msix_version: 2.7.0.3
+  msix_version: 2.7.1.1
   logo_path: ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png
   capabilities: internetClient
   output_path: dist
-  output_name: daily-windows-2.7.0.3
+  output_name: daily-windows-2.7.1.1
   architecture: x64
   install_certificate: false
 
