@@ -1907,14 +1907,13 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   - `./tool/flutter.sh analyze --no-pub`
   - Full `./tool/flutter.sh test --no-pub` suite (77 tests)
 
-## 2026-07-21 macOS App Store Separate Record and Signing
+## 2026-07-21 macOS App Store Identity and Signing
 
-- macOS distribution remains a separate App Store Connect app so Transporter
-  and App Store Connect identify it by the distinct name `DailyCalendar macOS`.
-- The macOS bundle identifier is `com.littlebit0.daily.macos`; iOS continues to
-  use `com.littlebit0.daily`.
-- macOS `CFBundleDisplayName` is `DailyCalendar macOS`. Google Drive continues
-  to use the existing macOS desktop OAuth path.
+- macOS remains in the existing multi-platform DailyCalendar App Store Connect
+  record and uses the same bundle identifier as iOS: `com.littlebit0.daily`.
+- macOS `CFBundleDisplayName` is `DailyCalendar macOS`, and the Transporter file
+  name explicitly contains `macOS`. Google Drive continues to use the existing
+  macOS desktop OAuth path.
 - A previous exported PKG mixed an Apple Distribution signature on `Daily.app`
   with Apple Development signatures on executable-free Swift Package resource
   bundles. Transporter rejected those nested bundles with error 90284.
@@ -1923,15 +1922,12 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   outer app. Frameworks and bundles containing executable code are untouched.
 - A fresh App Store PKG was generated and validated:
   - display name `DailyCalendar macOS`;
-  - bundle ID `com.littlebit0.daily.macos`;
+  - bundle ID `com.littlebit0.daily`;
   - version/build `2.7.1 (2.7.1)`;
   - Apple Distribution outer app signature and Apple-issued installer chain;
   - all 16 executable-free resource bundles contain no nested code signature;
   - `codesign --verify --deep --strict` passes;
   - application ID, Apple login, sandbox, network, and Keychain entitlements
-    match `A6Y73X2ZLS.com.littlebit0.daily.macos`.
-- Transporter still requires a separate App Store Connect app record named
-  `DailyCalendar macOS` for bundle ID `com.littlebit0.daily.macos` before the
-  package can be delivered.
+    match `A6Y73X2ZLS.com.littlebit0.daily`.
 - Current Transporter package:
   `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0/dist/transporter-2.7.1/Daily-macOS-AppStore-2.7.1.pkg`
