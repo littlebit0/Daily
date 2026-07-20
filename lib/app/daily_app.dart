@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -418,7 +417,16 @@ class _AppHome extends ConsumerStatefulWidget {
 
 class _AppHomeState extends ConsumerState<_AppHome>
     with WidgetsBindingObserver {
+  static const _syncRestoreRetryDelays = <Duration>[
+    Duration(seconds: 1),
+    Duration(seconds: 3),
+    Duration(seconds: 8),
+  ];
+
   var _servicesStarted = false;
+  Future<bool>? _syncStartOperation;
+  Timer? _syncRestoreRetryTimer;
+  var _syncRestoreRetryIndex = 0;
   ValueNotifier<int>? _settingsRevisionNotifier;
   VoidCallback? _settingsRevisionListener;
 
@@ -433,6 +441,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _syncRestoreRetryTimer?.cancel();
     final listener = _settingsRevisionListener;
     final notifier = _settingsRevisionNotifier;
     if (listener != null) {
@@ -450,6 +459,8 @@ class _AppHomeState extends ConsumerState<_AppHome>
     }
     switch (state) {
       case AppLifecycleState.resumed:
+        _syncRestoreRetryTimer?.cancel();
+        _syncRestoreRetryIndex = 0;
         _startSyncIfConnected();
         break;
       case AppLifecycleState.paused:
@@ -466,44 +477,85 @@ class _AppHomeState extends ConsumerState<_AppHome>
   Widget build(BuildContext context) => const MonthCalendarPage();
 
   Future<void> _startSyncIfConnected() async {
+    final activeOperation = _syncStartOperation;
+    if (activeOperation != null) {
+      await activeOperation;
+      return;
+    }
+    final operation = _tryStartSyncIfConnected();
+    _syncStartOperation = operation;
+    try {
+      final started = await operation;
+      if (started) {
+        _syncRestoreRetryTimer?.cancel();
+        _syncRestoreRetryIndex = 0;
+      } else {
+        _scheduleSyncRestoreRetry();
+      }
+    } finally {
+      if (identical(_syncStartOperation, operation)) {
+        _syncStartOperation = null;
+      }
+    }
+  }
+
+  Future<bool> _tryStartSyncIfConnected() async {
+    final settingsRepository = ref.read(settingsRepositoryProvider);
     try {
       final auth = ref.read(googleDriveAuthServiceProvider);
       final account = await auth.restorePreviousSignIn();
-      if (account != null) {
-        final settingsRepository = ref.read(settingsRepositoryProvider);
-        var dailyAccount = settingsRepository.dailyAccount();
-        if (!settingsRepository.hasStoredDailyAccount) {
-          // Migrate the pre-Daily-account Google session once. New Apple-only
-          // accounts always persist first, so they never attach Google silently.
-          await settingsRepository.saveGoogleAccount(
-            GoogleAccount(
-              email: account.email,
-              displayName: account.displayName,
-            ),
-          );
-          dailyAccount = settingsRepository.dailyAccount();
-        }
-        final linkedGoogleEmail = dailyAccount?.googleAccount?.email;
-        if (linkedGoogleEmail == null ||
-            linkedGoogleEmail.toLowerCase() != account.email.toLowerCase()) {
-          return;
-        }
-        final headers = await auth.authorizationHeaders();
-        if (headers != null) {
-          _startPostLoginServices();
-        }
-        return;
+      var dailyAccount = settingsRepository.dailyAccount();
+      if (account != null && !settingsRepository.hasStoredDailyAccount) {
+        // Migrate the pre-Daily-account Google session once. New Apple-only
+        // accounts always persist first, so they never attach Google silently.
+        await settingsRepository.saveGoogleAccount(
+          GoogleAccount(email: account.email, displayName: account.displayName),
+        );
+        dailyAccount = settingsRepository.dailyAccount();
       }
-      if (!Platform.isWindows && !Platform.isMacOS) {
-        return;
+
+      final linkedGoogleEmail = dailyAccount?.googleAccount?.email;
+      if (linkedGoogleEmail == null) {
+        return false;
       }
+      if (account != null &&
+          linkedGoogleEmail.toLowerCase() != account.email.toLowerCase()) {
+        return false;
+      }
+
+      // This call is always non-interactive. It also restores desktop OAuth
+      // tokens when account metadata was temporarily unavailable.
       final headers = await auth.authorizationHeaders();
-      if (headers != null) {
-        _startPostLoginServices();
+      if (headers == null) {
+        return false;
       }
+      _startPostLoginServices();
+      return true;
     } on Object {
       // Google Drive sync is optional; local calendar use stays available.
+      return false;
     }
+  }
+
+  void _scheduleSyncRestoreRetry() {
+    if (!mounted || _servicesStarted || _syncRestoreRetryTimer != null) {
+      return;
+    }
+    final linkedGoogleAccount = ref
+        .read(settingsRepositoryProvider)
+        .dailyAccount()
+        ?.googleAccount;
+    if (linkedGoogleAccount == null ||
+        _syncRestoreRetryIndex >= _syncRestoreRetryDelays.length) {
+      return;
+    }
+    final delay = _syncRestoreRetryDelays[_syncRestoreRetryIndex++];
+    _syncRestoreRetryTimer = Timer(delay, () {
+      _syncRestoreRetryTimer = null;
+      if (mounted) {
+        _startSyncIfConnected();
+      }
+    });
   }
 
   void _startPostLoginServices() {

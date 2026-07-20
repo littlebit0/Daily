@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -20,8 +21,10 @@ class GoogleDriveAuthService {
   GoogleDriveAuthService({
     FlutterSecureStorage? secureStorage,
     http.Client? httpClient,
+    @visibleForTesting bool? useDesktopOAuth,
   }) : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
-       _httpClient = httpClient ?? http.Client();
+       _httpClient = httpClient ?? http.Client(),
+       _desktopOAuthOverride = useDesktopOAuth;
 
   static const driveAppDataScope =
       'https://www.googleapis.com/auth/drive.appdata';
@@ -72,7 +75,7 @@ class GoogleDriveAuthService {
   static const _displayNameKey = '${_storagePrefix}display_name';
   static const _mobileUserApprovalTimeout = Duration(minutes: 2);
   static const _mobileSilentAuthorizationTimeout = Duration(seconds: 10);
-  static const _mobileLightweightAuthTimeout = Duration(seconds: 3);
+  static const _mobileLightweightAuthTimeout = Duration(seconds: 10);
   static const _mobileAccountClearTimeout = Duration(seconds: 2);
   static const _mobileSignOutTimeout = Duration(seconds: 3);
   static const _desktopUserApprovalTimeout = Duration(minutes: 2);
@@ -81,6 +84,7 @@ class GoogleDriveAuthService {
 
   final FlutterSecureStorage _secureStorage;
   final http.Client _httpClient;
+  final bool? _desktopOAuthOverride;
   final _accountController = StreamController<GoogleDriveAccount?>.broadcast();
   Future<void>? _initializeFuture;
   GoogleSignInAccount? _currentUser;
@@ -539,7 +543,8 @@ class GoogleDriveAuthService {
 
   Future<void> _initialize() async {
     _usesDesktopOAuth =
-        Platform.isIOS || Platform.isWindows || _shouldUseMacosDesktopOAuth;
+        _desktopOAuthOverride ??
+        (Platform.isIOS || Platform.isWindows || _shouldUseMacosDesktopOAuth);
     if (_usesDesktopOAuth) {
       _usesDesktopOAuth = true;
       if (_configuredOAuthClientId.isEmpty) {
@@ -847,11 +852,10 @@ class GoogleDriveAuthService {
         .timeout(_desktopNetworkTimeout);
     final decoded = _decodeTokenResponse(response);
     final tokens = _tokensFromJson(decoded, refreshToken: refreshToken);
-    final account = _desktopAccount;
-    _desktopTokens = tokens;
-    if (account != null) {
-      await _saveDesktopSession(tokens, account);
-    }
+    final account =
+        _desktopAccount ?? await _fetchDesktopAccount(tokens.accessToken);
+    await _saveDesktopSession(tokens, account);
+    _setDesktopAccount(account);
   }
 
   Map<String, String> _withDesktopClientSecret(Map<String, String> body) {
@@ -1030,15 +1034,24 @@ class GoogleDriveAuthService {
     _DesktopTokens tokens,
     GoogleDriveAccount account,
   ) async {
-    _desktopTokens = tokens;
-    await _writeDesktopStorage(_accessTokenKey, tokens.accessToken);
     await _writeDesktopStorage(_refreshTokenKey, tokens.refreshToken);
+    await _writeDesktopStorage(_accessTokenKey, tokens.accessToken);
     await _writeDesktopStorage(
       _expiresAtKey,
       tokens.expiresAt.toIso8601String(),
     );
     await _writeDesktopStorage(_emailKey, account.email);
     await _writeDesktopStorage(_displayNameKey, account.displayName);
+
+    final storedRefreshToken = await _readDesktopStorage(_refreshTokenKey);
+    final storedEmail = await _readDesktopStorage(_emailKey);
+    if (storedRefreshToken != tokens.refreshToken ||
+        storedEmail?.toLowerCase() != account.email.toLowerCase()) {
+      throw const GoogleDriveAuthException(
+        'Google 로그인 정보를 안전하게 저장하지 못했습니다. 기기의 보안 저장소 설정을 확인한 뒤 다시 시도해 주세요.',
+      );
+    }
+    _desktopTokens = tokens;
   }
 
   Future<String?> _readDesktopStorage(String key) async {
@@ -1046,7 +1059,7 @@ class GoogleDriveAuthService {
       return await _secureStorage.read(key: key);
     } on PlatformException catch (error) {
       if (_isMissingSecureStorageEntitlement(error)) {
-        return null;
+        throw GoogleDriveAuthException(_secureStorageConfigurationMessage);
       }
       rethrow;
     }
@@ -1056,10 +1069,21 @@ class GoogleDriveAuthService {
     try {
       await _secureStorage.write(key: key, value: value);
     } on PlatformException catch (error) {
-      if (!_isMissingSecureStorageEntitlement(error)) {
-        rethrow;
+      if (_isMissingSecureStorageEntitlement(error)) {
+        throw GoogleDriveAuthException(_secureStorageConfigurationMessage);
       }
+      rethrow;
     }
+  }
+
+  String get _secureStorageConfigurationMessage {
+    if (Platform.isIOS) {
+      return 'iOS Google 로그인 정보를 저장하려면 Keychain Sharing 설정이 필요합니다. 앱을 업데이트한 뒤 다시 연결해 주세요.';
+    }
+    if (Platform.isMacOS) {
+      return _macosKeychainConfigurationMessage;
+    }
+    return 'Google 로그인 정보를 기기의 보안 저장소에 저장하지 못했습니다. 앱을 업데이트한 뒤 다시 연결해 주세요.';
   }
 
   Future<void> _deleteDesktopStorage(String key) async {

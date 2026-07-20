@@ -983,6 +983,7 @@ class GoogleDriveSyncService implements SyncService {
   Map<String, Object?> _settingsToJson(AppSettings settings) {
     return {
       'defaultReminderMinutes': settings.defaultReminderMinutes,
+      'defaultReminderMinutesList': settings.defaultReminderMinutesList,
       'allDayReminderHour': settings.allDayReminderHour,
       'allDayReminderMinute': settings.allDayReminderMinute,
       'morningBriefingHour': settings.morningBriefingHour,
@@ -1011,7 +1012,9 @@ class GoogleDriveSyncService implements SyncService {
 
   AppSettings _settingsFromJson(Map<String, Object?> json) {
     return AppSettings(
-      defaultReminderMinutes: _intValue(json['defaultReminderMinutes'], 60),
+      defaultReminderMinutesList: json.containsKey('defaultReminderMinutesList')
+          ? _intListValue(json['defaultReminderMinutesList'], const <int>[])
+          : <int>[_intValue(json['defaultReminderMinutes'], 60)],
       allDayReminderHour: _intValue(json['allDayReminderHour'], 9),
       allDayReminderMinute: _intValue(json['allDayReminderMinute'], 0),
       morningBriefingHour: _intValue(json['morningBriefingHour'], 8),

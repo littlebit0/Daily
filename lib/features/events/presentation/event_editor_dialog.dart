@@ -21,6 +21,7 @@ class EventEditorDialog extends StatefulWidget {
     this.event,
     this.categories = EventCategory.values,
     this.defaultReminderMinutes = 60,
+    this.defaultReminderMinutesList,
   });
 
   final DateTime initialDate;
@@ -29,6 +30,7 @@ class EventEditorDialog extends StatefulWidget {
   final CalendarEvent? event;
   final List<EventCategory> categories;
   final int defaultReminderMinutes;
+  final List<int>? defaultReminderMinutesList;
 
   @override
   State<EventEditorDialog> createState() => _EventEditorDialogState();
@@ -105,7 +107,9 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     );
     _reminders =
         event?.reminderMinutesBeforeList ??
-        normalizeReminderMinutes([widget.defaultReminderMinutes]);
+        normalizeReminderMinutes(
+          widget.defaultReminderMinutesList ?? [widget.defaultReminderMinutes],
+        );
     _frequency = event?.recurrence.frequency ?? RecurrenceFrequency.none;
     _recurrenceInterval = event?.recurrence.interval ?? 1;
     _recurrenceUntil = event?.recurrence.until;

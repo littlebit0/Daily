@@ -23,6 +23,28 @@ void main() {
       expect(draft.category, EventCategory.health);
     });
 
+    test('applies every selected default reminder', () async {
+      final result = await parser.parse(
+        '내일 오후 3시 회의',
+        baseDate: baseDate,
+        defaultReminderMinutes: 10,
+        defaultReminderMinutesList: const [10, 30, 60],
+      );
+
+      expect(result.draft!.reminderMinutesBeforeList, [10, 30, 60]);
+    });
+
+    test('an explicit reminder replaces the selected defaults', () async {
+      final result = await parser.parse(
+        '내일 오후 3시 20분 전 회의',
+        baseDate: baseDate,
+        defaultReminderMinutes: 10,
+        defaultReminderMinutesList: const [10, 30, 60],
+      );
+
+      expect(result.draft!.reminderMinutesBeforeList, [20]);
+    });
+
     test('uses a selected date when no date is typed', () async {
       final result = await parser.parse(
         '오전 9시 회의',

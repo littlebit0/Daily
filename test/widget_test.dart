@@ -14,13 +14,16 @@ import 'package:daily/core/sync/sync_service.dart';
 import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_category.dart';
 import 'package:daily/features/events/domain/event_repository.dart';
+import 'package:daily/features/events/presentation/event_details_panel.dart';
 import 'package:daily/features/settings/presentation/settings_page.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -49,6 +52,42 @@ void main() {
     expect(settingsRepository.load().appTextSize, AppTextSize.large);
   });
 
+  test('legacy default reminder migrates into the reminder list', () async {
+    SharedPreferences.setMockInitialValues({'defaultReminderMinutes': 10});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+
+    expect(settingsRepository.load().defaultReminderMinutesList, [10]);
+  });
+
+  test('multiple default reminders remain selected after reload', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+
+    await settingsRepository.save(
+      settingsRepository.load().copyWith(
+        defaultReminderMinutesList: const [60, 10, 30, 10],
+      ),
+    );
+
+    expect(settingsRepository.load().defaultReminderMinutesList, [10, 30, 60]);
+  });
+
+  test('empty default reminder list remains disabled after reload', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+
+    await settingsRepository.save(
+      settingsRepository.load().copyWith(
+        defaultReminderMinutesList: const <int>[],
+      ),
+    );
+
+    expect(settingsRepository.load().defaultReminderMinutesList, isEmpty);
+  });
+
   test(
     'settings reset ignores missing keychain entitlement during cleanup',
     () async {
@@ -71,6 +110,69 @@ void main() {
       expect(settingsRepository.appleAccount(), isNull);
     },
   );
+
+  test(
+    'Google Drive desktop session survives auth service recreation',
+    () async {
+      final storage = _MemorySecureStorage();
+      await storage.write(
+        key: 'daily.google_drive.access_token',
+        value: 'access-token',
+      );
+      await storage.write(
+        key: 'daily.google_drive.refresh_token',
+        value: 'refresh-token',
+      );
+      await storage.write(
+        key: 'daily.google_drive.expires_at',
+        value: DateTime.now()
+            .toUtc()
+            .add(const Duration(hours: 1))
+            .toIso8601String(),
+      );
+      await storage.write(
+        key: 'daily.google_drive.email',
+        value: 'persisted@example.com',
+      );
+      await storage.write(
+        key: 'daily.google_drive.display_name',
+        value: 'Persisted User',
+      );
+
+      final firstService = GoogleDriveAuthService(
+        secureStorage: storage,
+        useDesktopOAuth: true,
+      );
+      final secondService = GoogleDriveAuthService(
+        secureStorage: storage,
+        useDesktopOAuth: true,
+      );
+
+      expect(
+        (await firstService.restorePreviousSignIn())?.email,
+        'persisted@example.com',
+      );
+      expect(
+        (await secondService.restorePreviousSignIn())?.email,
+        'persisted@example.com',
+      );
+      expect(await secondService.authorizationHeaders(), {
+        'Authorization': 'Bearer access-token',
+      });
+    },
+  );
+
+  test('Google Drive restore reports a missing keychain entitlement', () async {
+    final service = GoogleDriveAuthService(
+      secureStorage: const _MissingEntitlementSecureStorage(),
+      useDesktopOAuth: true,
+    );
+
+    await expectLater(
+      service.restorePreviousSignIn(),
+      throwsA(isA<GoogleDriveAuthException>()),
+    );
+  });
 
   test(
     'app lock stores the configured PIN length with its secure hash',
@@ -509,6 +611,73 @@ void main() {
     );
     expect(find.byKey(const ValueKey('calendar-bottom-bar')), findsNothing);
 
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(DailyApp)),
+    );
+    final startDate = container.read(selectedDateProvider);
+    final weekController = tester
+        .widget<PageView>(find.byType(PageView))
+        .controller!;
+
+    await tester.tap(find.byTooltip('이전'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+
+    expect(weekController.page, greaterThan(11999));
+    expect(weekController.page, lessThan(12000));
+
+    await tester.pumpAndSettle();
+    expect(
+      container.read(selectedDateProvider),
+      DateTime(startDate.year, startDate.month, startDate.day - 7),
+    );
+
+    final weekListener = tester.widget<Listener>(
+      find.byKey(const ValueKey('week-pointer-navigation')),
+    );
+    weekListener.onPointerSignal!(
+      const PointerScrollEvent(scrollDelta: Offset(30, 0)),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(selectedDateProvider), startDate);
+
+    weekListener.onPointerSignal!(
+      const PointerScrollEvent(scrollDelta: Offset(0, 30)),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(selectedDateProvider), startDate);
+
+    container.read(calendarViewModeProvider.notifier).state =
+        CalendarViewMode.day;
+    await tester.pumpAndSettle();
+    final dayListener = tester.widget<Listener>(
+      find.byKey(const ValueKey('day-pointer-navigation')),
+    );
+    dayListener.onPointerSignal!(
+      const PointerScrollEvent(scrollDelta: Offset(30, 0)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(selectedDateProvider),
+      DateTime(startDate.year, startDate.month, startDate.day + 1),
+    );
+
+    container.read(calendarViewModeProvider.notifier).state =
+        CalendarViewMode.month;
+    await tester.pumpAndSettle();
+    final monthBeforeScroll = container.read(visibleMonthProvider);
+    final monthListener = tester.widget<Listener>(
+      find.byKey(const ValueKey('month-pointer-navigation')),
+    );
+    monthListener.onPointerSignal!(
+      const PointerScrollEvent(scrollDelta: Offset(0, 30)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(visibleMonthProvider),
+      DateTime(monthBeforeScroll.year, monthBeforeScroll.month + 1),
+    );
+
     await tester.tap(find.byTooltip('빠른 보기'));
     await tester.pumpAndSettle();
 
@@ -620,6 +789,49 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Daily retries a temporary Google Drive restore failure without prompting',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      await settingsRepository.saveGoogleAccount(
+        const GoogleAccount(email: 'restored@example.com'),
+      );
+      final authService = _FakeGoogleDriveAuthService(
+        account: null,
+        restoredAccount: const GoogleDriveAccount(
+          email: 'restored@example.com',
+        ),
+        restoreFailuresRemaining: 1,
+      );
+      final syncService = _FakeSync();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(_FakeNotification()),
+            syncServiceProvider.overrideWithValue(syncService),
+            eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+            googleDriveAuthServiceProvider.overrideWithValue(authService),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      expect(authService.restorePreviousSignInCalls, 2);
+      expect(authService.authorizationHeadersCalls, 1);
+      expect(authService.signInCalls, 0);
+      expect(syncService.startCalls, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('settings shows restored Google Drive account after restart', (
     tester,
   ) async {
@@ -665,6 +877,52 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('settings displays both app version and build number', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    FlutterSecureStorage.setMockInitialValues({});
+    PackageInfo.setMockInitialValues(
+      appName: 'Daily',
+      packageName: 'com.littlebit0.daily',
+      version: '2.7.1',
+      buildNumber: '1',
+      buildSignature: '',
+    );
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final authService = _FakeGoogleDriveAuthService(account: null);
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: authService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(authService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+        ],
+        child: const MaterialApp(home: SettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -2200));
+    await tester.pumpAndSettle();
+
+    expect(find.text('버전 2.7.1 (1) · com.littlebit0.daily'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('swiping the monthly calendar moves to the next month', (
     tester,
   ) async {
@@ -705,6 +963,64 @@ void main() {
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('day schedule sheet expands and keeps its list draggable', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({
+      'onboardingCompleted': true,
+      'defaultCalendarView': 'month',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(_FakeNotification()),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(),
+          ),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(DailyApp)),
+    );
+    final month = container.read(visibleMonthProvider);
+    final dayCell = find
+        .byKey(ValueKey('day-cell-${month.year}-${month.month}-15'))
+        .hitTestable();
+    expect(dayCell, findsOneWidget);
+
+    await tester.tap(dayCell);
+    await tester.pumpAndSettle();
+
+    final sheet = tester.widget<DraggableScrollableSheet>(
+      find.byType(DraggableScrollableSheet),
+    );
+    expect(sheet.initialChildSize, 0.68);
+    expect(sheet.minChildSize, 0.4);
+    expect(sheet.maxChildSize, 0.96);
+    expect(sheet.snap, isTrue);
+    expect(
+      tester
+          .widget<EventDetailsPanel>(find.byType(EventDetailsPanel))
+          .scrollController,
+      isNotNull,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('Daily reschedules saved event notifications on app start', (
@@ -1017,6 +1333,7 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
     this.signInAccount,
     this.signInCompleter,
     this.canCancelOnResume = false,
+    this.restoreFailuresRemaining = 0,
   });
 
   GoogleDriveAccount? account;
@@ -1024,6 +1341,7 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
   final GoogleDriveAccount? signInAccount;
   final Completer<GoogleDriveAccount?>? signInCompleter;
   final bool canCancelOnResume;
+  int restoreFailuresRemaining;
   var cancelPendingSignInCalls = 0;
   var authorizationHeadersCalls = 0;
   var restorePreviousSignInCalls = 0;
@@ -1042,6 +1360,10 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
   @override
   Future<GoogleDriveAccount?> restorePreviousSignIn() async {
     restorePreviousSignInCalls += 1;
+    if (restoreFailuresRemaining > 0) {
+      restoreFailuresRemaining -= 1;
+      throw const GoogleDriveAuthException('temporary restore failure');
+    }
     account ??= restoredAccount;
     return account;
   }
@@ -1284,6 +1606,39 @@ class _FakeEventRepository implements EventRepository {
 class _MissingEntitlementSecureStorage extends FlutterSecureStorage {
   const _MissingEntitlementSecureStorage();
 
+  PlatformException get _error => PlatformException(
+    code: 'Unexpected security result code',
+    message: "A required entitlement isn't present.",
+    details: -34018,
+  );
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    throw _error;
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    throw _error;
+  }
+
   @override
   Future<void> delete({
     required String key,
@@ -1294,11 +1649,7 @@ class _MissingEntitlementSecureStorage extends FlutterSecureStorage {
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
   }) {
-    throw PlatformException(
-      code: 'Unexpected security result code',
-      message: "A required entitlement isn't present.",
-      details: -34018,
-    );
+    throw _error;
   }
 }
 

@@ -112,6 +112,29 @@ void main() {
     expect(savedDraft, isNotNull);
     expect(savedDraft!.reminderMinutesBeforeList, [10, 30, 60]);
   });
+
+  testWidgets('new event starts with every selected default reminder', (
+    tester,
+  ) async {
+    EventDraft? savedDraft;
+    await tester.pumpWidget(
+      _DialogHost(
+        builder: (context) => EventEditorDialog(
+          initialDate: DateTime(2026, 5, 28, 10),
+          defaultReminderMinutesList: const [10, 30, 60],
+        ),
+        onSaved: (draft) => savedDraft = draft,
+      ),
+    );
+
+    await tester.tap(find.text('열기'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '기본 복수 알림');
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+
+    expect(savedDraft!.reminderMinutesBeforeList, [10, 30, 60]);
+  });
 }
 
 class _DialogHost extends StatelessWidget {

@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../auth/apple_account.dart';
 import '../auth/daily_account.dart';
 import '../auth/google_account.dart';
+import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_category.dart';
 import 'app_settings.dart';
 
@@ -23,6 +24,7 @@ class SettingsRepository {
   final FlutterSecureStorage _secureStorage;
 
   static const _defaultReminderKey = 'defaultReminderMinutes';
+  static const _defaultReminderListKey = 'defaultReminderMinutesList';
   static const _allDayReminderHourKey = 'allDayReminderHour';
   static const _allDayReminderMinuteKey = 'allDayReminderMinute';
   static const _briefingHourKey = 'morningBriefingHour';
@@ -60,7 +62,7 @@ class SettingsRepository {
 
   AppSettings load() {
     return AppSettings(
-      defaultReminderMinutes: _preferences.getInt(_defaultReminderKey) ?? 60,
+      defaultReminderMinutesList: _loadDefaultReminderMinutes(),
       allDayReminderHour: _preferences.getInt(_allDayReminderHourKey) ?? 9,
       allDayReminderMinute: _preferences.getInt(_allDayReminderMinuteKey) ?? 0,
       morningBriefingHour: _preferences.getInt(_briefingHourKey) ?? 8,
@@ -98,10 +100,18 @@ class SettingsRepository {
   }
 
   Future<void> save(AppSettings settings) async {
-    await _preferences.setInt(
-      _defaultReminderKey,
-      settings.defaultReminderMinutes,
+    await _preferences.setString(
+      _defaultReminderListKey,
+      jsonEncode(settings.defaultReminderMinutesList),
     );
+    if (settings.defaultReminderMinutesList.isEmpty) {
+      await _preferences.remove(_defaultReminderKey);
+    } else {
+      await _preferences.setInt(
+        _defaultReminderKey,
+        settings.defaultReminderMinutesList.first,
+      );
+    }
     await _preferences.setInt(
       _allDayReminderHourKey,
       settings.allDayReminderHour,
@@ -174,6 +184,23 @@ class SettingsRepository {
       settings.appLockBiometricsEnabled,
     );
     await _preferences.setBool(_use24HourTimeKey, settings.use24HourTime);
+  }
+
+  List<int> _loadDefaultReminderMinutes() {
+    final raw = _preferences.getString(_defaultReminderListKey);
+    if (raw != null) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          return normalizeReminderMinutes(decoded.whereType<int>());
+        }
+      } on FormatException {
+        // Fall through to the legacy single-value setting.
+      }
+    }
+    return normalizeReminderMinutes([
+      _preferences.getInt(_defaultReminderKey) ?? 60,
+    ]);
   }
 
   Future<void> completeOnboarding() async {
@@ -277,7 +304,10 @@ class SettingsRepository {
 
   Future<void> saveAppLockPin(String pin) async {
     await _secureStorage.write(key: _appLockPinHashKey, value: _hashPin(pin));
-    await _secureStorage.write(key: _appLockPinLengthKey, value: '${pin.length}');
+    await _secureStorage.write(
+      key: _appLockPinLengthKey,
+      value: '${pin.length}',
+    );
   }
 
   Future<void> deleteAppLockPin() async {

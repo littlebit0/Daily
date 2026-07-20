@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
 import '../../../core/settings/settings_repository.dart';
+import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 import '../../events/domain/event_draft.dart';
 import '../../events/domain/recurrence_rule.dart';
@@ -20,6 +21,7 @@ class GeminiScheduleParser implements ScheduleParser {
     required DateTime baseDate,
     DateTime? selectedDate,
     required int defaultReminderMinutes,
+    List<int>? defaultReminderMinutesList,
   }) async {
     final apiKey = await _settingsRepository.geminiApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -38,6 +40,7 @@ class GeminiScheduleParser implements ScheduleParser {
           baseDate: baseDate,
           selectedDate: selectedDate,
           defaultReminderMinutes: defaultReminderMinutes,
+          defaultReminderMinutesList: defaultReminderMinutesList,
         ),
       ),
     ]);
@@ -77,8 +80,10 @@ class GeminiScheduleParser implements ScheduleParser {
         allDay: allDay,
         category: category,
         colorValue: category.colorValue,
-        reminderMinutesBefore:
-            decoded['reminderMinutesBefore'] as int? ?? defaultReminderMinutes,
+        reminderMinutesBeforeList: _resolvedReminders(
+          decoded['reminderMinutesBefore'],
+          defaultReminderMinutesList ?? [defaultReminderMinutes],
+        ),
         recurrence: RecurrenceRule(frequency: recurrenceFrequency),
       ),
     );
@@ -89,12 +94,15 @@ class GeminiScheduleParser implements ScheduleParser {
     required DateTime baseDate,
     required DateTime? selectedDate,
     required int defaultReminderMinutes,
+    required List<int>? defaultReminderMinutesList,
   }) {
+    final defaultReminders =
+        defaultReminderMinutesList ?? [defaultReminderMinutes];
     return '''
 너는 개인 캘린더 앱의 일정 파서다. 사용자의 한국어 문장을 일정 JSON으로 변환한다.
 기준 날짜: ${baseDate.toIso8601String()}
 선택된 날짜: ${selectedDate?.toIso8601String() ?? '없음'}
-기본 알림: $defaultReminderMinutes분 전
+기본 알림: ${defaultReminders.map((minutes) => '$minutes분 전').join(', ')}
 
 반드시 JSON 객체만 반환한다.
 필드:
@@ -110,6 +118,13 @@ recurrenceFrequency one of none, daily, weekly, monthly, yearly
 
 입력: $input
 ''';
+  }
+
+  List<int> _resolvedReminders(Object? parsed, List<int> defaults) {
+    if (parsed is int) {
+      return <int>[parsed];
+    }
+    return normalizeReminderMinutes(defaults);
   }
 
   String _stripFences(String value) {

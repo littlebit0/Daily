@@ -68,33 +68,3 @@ fi
 
 cd "$project_root"
 "$flutter_bin" "$@"
-status=$?
-
-if [[ $status -eq 0 && "${1:-}" == "build" && "${2:-}" == "macos" ]]; then
-  is_debug_build=false
-  if [[ $# -eq 2 ]]; then
-    is_debug_build=true
-  else
-    for arg in "$@"; do
-      if [[ "$arg" == "--debug" ]]; then
-        is_debug_build=true
-        break
-      fi
-    done
-  fi
-
-  app_path="$tmp_build_path/macos/Build/Products/Debug/Daily.app"
-  entitlements_path="$project_root/macos/Runner/DebugProfile.entitlements"
-  if [[ "$is_debug_build" == true && -d "$app_path" && -f "$entitlements_path" ]]; then
-    processed_entitlements="$(mktemp "${TMPDIR:-/tmp}/daily-entitlements.XXXXXX.plist")"
-    entitlements_to_use="$entitlements_path"
-    if codesign -d --entitlements :- "$app_path" >"$processed_entitlements" 2>/dev/null; then
-      entitlements_to_use="$processed_entitlements"
-    fi
-    xattr -cr "$app_path" 2>/dev/null || true
-    codesign --force --deep --sign - --entitlements "$entitlements_to_use" "$app_path" >/dev/null
-    rm -f "$processed_entitlements"
-  fi
-fi
-
-exit "$status"

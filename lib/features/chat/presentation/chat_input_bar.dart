@@ -92,6 +92,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             baseDate: DateTime.now(),
             selectedDate: selectedDate,
             defaultReminderMinutes: settings.defaultReminderMinutes,
+            defaultReminderMinutesList: settings.defaultReminderMinutesList,
           );
 
       if (!mounted) {

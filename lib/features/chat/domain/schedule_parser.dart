@@ -6,5 +6,6 @@ abstract interface class ScheduleParser {
     required DateTime baseDate,
     DateTime? selectedDate,
     required int defaultReminderMinutes,
+    List<int>? defaultReminderMinutesList,
   });
 }

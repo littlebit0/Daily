@@ -1,4 +1,4 @@
-name: Release IPA
+name: Release Installers
 
 on:
   push:
@@ -7,58 +7,142 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v2.5.17"
+        description: "Release tag, for example v2.7.1"
         required: true
         type: string
 
 permissions:
   contents: write
 
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
 jobs:
   ios:
     name: iOS unsigned IPA
     runs-on: macos-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: "3.44.0"
           cache: true
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Build unsigned iOS app
-        run: flutter build ios --release --no-codesign --no-pub
-
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign --no-pub
       - name: Stage IPA
         shell: bash
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            version="${{ inputs.tag }}"
-            version="${version#v}"
-          fi
+          version="${RELEASE_TAG#v}"
           mkdir -p dist Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           /usr/bin/zip -qry "dist/daily-ios-${version}-unsigned.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-ios
+          path: dist/*.ipa
+          if-no-files-found: error
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+  macos:
+    name: macOS unsigned DMG
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.0"
+          cache: true
+      - run: flutter pub get
+      - name: Build macOS app
+        env:
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: flutter build macos --release --no-pub --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$GOOGLE_DESKTOP_CLIENT_SECRET"
+      - name: Stage DMG
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          mkdir -p dist dmg-root
+          cp -R build/macos/Build/Products/Release/Daily.app dmg-root/
+          hdiutil create -volname Daily -srcfolder dmg-root -ov -format UDZO "dist/daily-macos-${version}-unsigned.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  android:
+    name: Android debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.0"
+          cache: true
+      - run: flutter pub get
+      - run: flutter build apk --debug --no-pub
+      - name: Stage APK
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-debug.apk "dist/daily-android-${version}-debug.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/*.apk
+          if-no-files-found: error
+
+  windows:
+    name: Windows release ZIP
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.0"
+          cache: true
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+      - name: Build Windows app
+        shell: pwsh
+        env:
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: flutter build windows --release --no-pub --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$env:GOOGLE_DESKTOP_CLIENT_SECRET"
+      - name: Stage ZIP
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_TAG.TrimStart("v")
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath "dist/daily-windows-$version.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [ios, macos, android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: Daily ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          body: |
-            Daily iOS IPA release.
-
-            Changes:
-            - Fixes GitHub issues #15 and #16.
-            - Clarifies Apple login behavior for re-signed IPA installs.
-            - Refreshes restored Google Drive AppData settings immediately.
-            - Keeps this GitHub Release limited to the iOS IPA asset as requested.
-          files: dist/daily-ios-*-unsigned.ipa
+          body_path: docs/RELEASE_NOTES_2.7.1.md
+          files: dist/*
           fail_on_unmatched_files: true

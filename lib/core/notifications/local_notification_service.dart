@@ -177,7 +177,7 @@ class LocalNotificationService implements NotificationService {
     await _cancelPendingNotification(_legacyEventNotificationId(eventId));
     final reminderMinutes = {
       ..._commonReminderMinutes,
-      _settingsRepository.load().defaultReminderMinutes,
+      ..._settingsRepository.load().defaultReminderMinutesList,
       ...reminderMinutesBeforeList,
     };
     for (final minutes in reminderMinutes) {

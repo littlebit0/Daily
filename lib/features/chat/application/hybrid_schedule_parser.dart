@@ -21,6 +21,7 @@ class HybridScheduleParser implements ScheduleParser {
     required DateTime baseDate,
     DateTime? selectedDate,
     required int defaultReminderMinutes,
+    List<int>? defaultReminderMinutesList,
   }) async {
     final settings = _settingsRepository.load();
     final ruleResult = await _ruleBasedParser.parse(
@@ -28,6 +29,7 @@ class HybridScheduleParser implements ScheduleParser {
       baseDate: baseDate,
       selectedDate: selectedDate,
       defaultReminderMinutes: defaultReminderMinutes,
+      defaultReminderMinutesList: defaultReminderMinutesList,
     );
 
     if (ruleResult.hasDraft && (!_looksComplex(input) || !settings.aiEnabled)) {
@@ -43,6 +45,7 @@ class HybridScheduleParser implements ScheduleParser {
       baseDate: baseDate,
       selectedDate: selectedDate,
       defaultReminderMinutes: defaultReminderMinutes,
+      defaultReminderMinutesList: defaultReminderMinutesList,
     );
 
     return aiResult.hasDraft ? aiResult : ruleResult;

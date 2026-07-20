@@ -1,3 +1,4 @@
+import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_category.dart';
 
 enum AppTextSize {
@@ -35,8 +36,9 @@ enum CalendarViewMode {
 }
 
 class AppSettings {
-  const AppSettings({
-    this.defaultReminderMinutes = 60,
+  AppSettings({
+    int? defaultReminderMinutes = 60,
+    List<int>? defaultReminderMinutesList,
     this.allDayReminderHour = 9,
     this.allDayReminderMinute = 0,
     this.morningBriefingHour = 8,
@@ -60,14 +62,22 @@ class AppSettings {
     this.appLockEnabled = false,
     this.appLockBiometricsEnabled = false,
     this.use24HourTime = true,
-  });
+  }) : defaultReminderMinutesList = normalizeReminderMinutes(
+         defaultReminderMinutesList ??
+             (defaultReminderMinutes == null
+                 ? const <int>[]
+                 : <int>[defaultReminderMinutes]),
+       );
 
   static const _defaultCategories = <EventCategory>[
     EventCategory.basic,
     EventCategory.holiday,
   ];
 
-  final int defaultReminderMinutes;
+  final List<int> defaultReminderMinutesList;
+  int get defaultReminderMinutes => defaultReminderMinutesList.isEmpty
+      ? 60
+      : defaultReminderMinutesList.first;
   final int allDayReminderHour;
   final int allDayReminderMinute;
   final int morningBriefingHour;
@@ -94,6 +104,7 @@ class AppSettings {
 
   AppSettings copyWith({
     int? defaultReminderMinutes,
+    List<int>? defaultReminderMinutesList,
     int? allDayReminderHour,
     int? allDayReminderMinute,
     int? morningBriefingHour,
@@ -119,8 +130,11 @@ class AppSettings {
     bool? use24HourTime,
   }) {
     return AppSettings(
-      defaultReminderMinutes:
-          defaultReminderMinutes ?? this.defaultReminderMinutes,
+      defaultReminderMinutesList:
+          defaultReminderMinutesList ??
+          (defaultReminderMinutes == null
+              ? this.defaultReminderMinutesList
+              : <int>[defaultReminderMinutes]),
       allDayReminderHour: allDayReminderHour ?? this.allDayReminderHour,
       allDayReminderMinute: allDayReminderMinute ?? this.allDayReminderMinute,
       morningBriefingHour: morningBriefingHour ?? this.morningBriefingHour,

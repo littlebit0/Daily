@@ -150,12 +150,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
               ],
               const Divider(height: 1),
-              _PresetMinutesTile(
+              _DefaultRemindersTile(
                 title: '기본 일정 알림',
-                value: settings.defaultReminderMinutes,
+                values: settings.defaultReminderMinutesList,
                 presets: const [0, 10, 30, 60, 1440],
-                onChanged: (value) =>
-                    _save(settings.copyWith(defaultReminderMinutes: value)),
+                onChanged: (values) => _save(
+                  settings.copyWith(defaultReminderMinutesList: values),
+                ),
                 onCustom: () async {
                   final value = await _showNumberDialog(
                     context: context,
@@ -165,7 +166,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   );
                   if (value != null && value >= 0) {
                     await _save(
-                      settings.copyWith(defaultReminderMinutes: value),
+                      settings.copyWith(
+                        defaultReminderMinutesList: normalizeReminderMinutes([
+                          ...settings.defaultReminderMinutesList,
+                          value,
+                        ]),
+                      ),
                     );
                   }
                 },
@@ -1190,7 +1196,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         await authService.signOut();
       }
       await ref.read(appleSignInServiceProvider).signOut();
-      ref.read(appSettingsProvider.notifier).state = const AppSettings();
+      ref.read(appSettingsProvider.notifier).state = AppSettings();
       if (mounted) {
         setState(() {
           _appleAccount = null;
@@ -1344,13 +1350,19 @@ class _AppVersionTile extends StatelessWidget {
       builder: (context, snapshot) {
         final info = snapshot.data;
         final version = info?.version ?? '확인 중';
+        final buildNumber = info?.buildNumber.trim() ?? '';
         final packageName = info?.packageName ?? '';
+        final versionLabel = buildNumber.isEmpty
+            ? version
+            : '$version ($buildNumber)';
         return ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.info_outline),
           title: const Text('Daily 버전'),
           subtitle: Text(
-            packageName.isEmpty ? '버전 $version' : '버전 $version · $packageName',
+            packageName.isEmpty
+                ? '버전 $versionLabel'
+                : '버전 $versionLabel · $packageName',
           ),
         );
       },
@@ -1358,45 +1370,65 @@ class _AppVersionTile extends StatelessWidget {
   }
 }
 
-class _PresetMinutesTile extends StatelessWidget {
-  const _PresetMinutesTile({
+class _DefaultRemindersTile extends StatelessWidget {
+  const _DefaultRemindersTile({
     required this.title,
-    required this.value,
+    required this.values,
     required this.presets,
     required this.onChanged,
     required this.onCustom,
   });
 
   final String title;
-  final int value;
+  final List<int> values;
   final List<int> presets;
-  final ValueChanged<int> onChanged;
+  final ValueChanged<List<int>> onChanged;
   final VoidCallback onCustom;
 
   @override
   Widget build(BuildContext context) {
-    final selectedValue = presets.contains(value) ? value : -1;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(title),
-      subtitle: Text(_minutesLabel(value)),
-      trailing: DropdownButton<int>(
-        value: selectedValue,
-        items: [
-          for (final preset in presets)
-            DropdownMenuItem(value: preset, child: Text(_minutesLabel(preset))),
-          const DropdownMenuItem(value: -1, child: Text('직접 입력')),
+    final selected = values.toSet();
+    final options = normalizeReminderMinutes([...presets, ...values]);
+    final summary = values.isEmpty
+        ? '새 일정에 알림을 자동으로 추가하지 않습니다.'
+        : values.map(_minutesLabel).join(', ');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title),
+          const SizedBox(height: 4),
+          Text(summary, style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              FilterChip(
+                label: const Text('없음'),
+                selected: values.isEmpty,
+                onSelected: (_) => onChanged(const <int>[]),
+              ),
+              for (final minutes in options)
+                FilterChip(
+                  label: Text(_minutesLabel(minutes)),
+                  selected: selected.contains(minutes),
+                  onSelected: (enabled) {
+                    final next = values.toSet();
+                    enabled ? next.add(minutes) : next.remove(minutes);
+                    onChanged(normalizeReminderMinutes(next));
+                  },
+                ),
+              IconButton.outlined(
+                tooltip: '기본 알림 직접 입력',
+                onPressed: onCustom,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            ],
+          ),
         ],
-        onChanged: (next) {
-          if (next == null) {
-            return;
-          }
-          if (next == -1) {
-            onCustom();
-          } else {
-            onChanged(next);
-          }
-        },
       ),
     );
   }

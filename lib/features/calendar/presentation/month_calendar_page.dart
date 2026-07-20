@@ -413,10 +413,21 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
   ) {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
-      builder: (_) => SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.68,
-        child: EventDetailsPanel(date: date, events: events),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.68,
+        minChildSize: 0.4,
+        maxChildSize: 0.96,
+        snap: true,
+        snapSizes: const [0.68],
+        builder: (context, scrollController) => EventDetailsPanel(
+          date: date,
+          events: events,
+          scrollController: scrollController,
+        ),
       ),
     );
   }
@@ -713,6 +724,8 @@ class _WeekPageViewState extends State<_WeekPageView> {
   late final DateTime _anchorDate;
   var _currentPage = _initialPage;
   var _applyingExternalDate = false;
+  var _externalAnimationRevision = 0;
+  DateTime? _lastPointerWeekMoveAt;
 
   @override
   void initState() {
@@ -732,10 +745,7 @@ class _WeekPageViewState extends State<_WeekPageView> {
     if (targetPage == _currentPage) {
       return;
     }
-    _applyingExternalDate = true;
-    _currentPage = targetPage;
-    _controller.jumpToPage(targetPage);
-    _applyingExternalDate = false;
+    _animateToExternalPage(targetPage);
   }
 
   @override
@@ -746,29 +756,76 @@ class _WeekPageViewState extends State<_WeekPageView> {
 
   @override
   Widget build(BuildContext context) {
-    return PageView.builder(
-      controller: _controller,
-      allowImplicitScrolling: true,
-      physics: const _ResponsiveMonthPagePhysics(),
-      onPageChanged: (index) {
-        if (_applyingExternalDate || index == _currentPage) {
-          return;
-        }
-        final delta = index - _currentPage;
-        _currentPage = index;
-        widget.onWeekDelta(delta);
-      },
-      itemBuilder: (context, index) {
-        final pageDate = _anchorDate.add(
-          Duration(days: (index - _initialPage) * 7),
-        );
-        return _CalendarWeekPage(
-          selectedDate: pageDate,
-          settings: widget.settings,
-          searchQuery: widget.searchQuery,
-          onDateSelected: widget.onDateSelected,
-        );
-      },
+    return Listener(
+      key: const ValueKey('week-pointer-navigation'),
+      behavior: HitTestBehavior.opaque,
+      onPointerSignal: _handlePointerSignal,
+      child: PageView.builder(
+        controller: _controller,
+        allowImplicitScrolling: true,
+        physics: const _ResponsiveMonthPagePhysics(),
+        onPageChanged: (index) {
+          if (_applyingExternalDate || index == _currentPage) {
+            return;
+          }
+          final delta = index - _currentPage;
+          _currentPage = index;
+          widget.onWeekDelta(delta);
+        },
+        itemBuilder: (context, index) {
+          final pageDate = _anchorDate.add(
+            Duration(days: (index - _initialPage) * 7),
+          );
+          return _CalendarWeekPage(
+            selectedDate: pageDate,
+            settings: widget.settings,
+            searchQuery: widget.searchQuery,
+            onDateSelected: widget.onDateSelected,
+          );
+        },
+      ),
+    );
+  }
+
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (!_isMacHorizontalPageScroll(context, event) ||
+        !_controller.hasClients) {
+      return;
+    }
+    final now = DateTime.now();
+    final lastMoveAt = _lastPointerWeekMoveAt;
+    if (lastMoveAt != null &&
+        now.difference(lastMoveAt) < const Duration(milliseconds: 280)) {
+      return;
+    }
+    _lastPointerWeekMoveAt = now;
+    final scroll = event as PointerScrollEvent;
+    final nextPage = _currentPage + (scroll.scrollDelta.dx > 0 ? 1 : -1);
+    unawaited(
+      _controller.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+
+  void _animateToExternalPage(int targetPage) {
+    final revision = ++_externalAnimationRevision;
+    _applyingExternalDate = true;
+    _currentPage = targetPage;
+    unawaited(
+      _controller
+          .animateToPage(
+            targetPage,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+          )
+          .whenComplete(() {
+            if (mounted && revision == _externalAnimationRevision) {
+              _applyingExternalDate = false;
+            }
+          }),
     );
   }
 
@@ -838,6 +895,8 @@ class _DayPageViewState extends State<_DayPageView> {
   late final DateTime _anchorDate;
   var _currentPage = _initialPage;
   var _applyingExternalDate = false;
+  var _externalAnimationRevision = 0;
+  DateTime? _lastPointerDayMoveAt;
 
   @override
   void initState() {
@@ -857,10 +916,7 @@ class _DayPageViewState extends State<_DayPageView> {
     if (targetPage == _currentPage) {
       return;
     }
-    _applyingExternalDate = true;
-    _currentPage = targetPage;
-    _controller.jumpToPage(targetPage);
-    _applyingExternalDate = false;
+    _animateToExternalPage(targetPage);
   }
 
   @override
@@ -871,26 +927,75 @@ class _DayPageViewState extends State<_DayPageView> {
 
   @override
   Widget build(BuildContext context) {
-    return PageView.builder(
-      controller: _controller,
-      allowImplicitScrolling: true,
-      physics: const _ResponsiveMonthPagePhysics(),
-      onPageChanged: (index) {
-        if (_applyingExternalDate || index == _currentPage) {
-          return;
-        }
-        final delta = index - _currentPage;
-        _currentPage = index;
-        widget.onDayDelta(delta);
-      },
-      itemBuilder: (context, index) {
-        final pageDate = _anchorDate.add(Duration(days: index - _initialPage));
-        return _CalendarDayPage(
-          date: pageDate,
-          settings: widget.settings,
-          searchQuery: widget.searchQuery,
-        );
-      },
+    return Listener(
+      key: const ValueKey('day-pointer-navigation'),
+      behavior: HitTestBehavior.opaque,
+      onPointerSignal: _handlePointerSignal,
+      child: PageView.builder(
+        controller: _controller,
+        allowImplicitScrolling: true,
+        physics: const _ResponsiveMonthPagePhysics(),
+        onPageChanged: (index) {
+          if (_applyingExternalDate || index == _currentPage) {
+            return;
+          }
+          final delta = index - _currentPage;
+          _currentPage = index;
+          widget.onDayDelta(delta);
+        },
+        itemBuilder: (context, index) {
+          final pageDate = _anchorDate.add(
+            Duration(days: index - _initialPage),
+          );
+          return _CalendarDayPage(
+            date: pageDate,
+            settings: widget.settings,
+            searchQuery: widget.searchQuery,
+          );
+        },
+      ),
+    );
+  }
+
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (!_isMacHorizontalPageScroll(context, event) ||
+        !_controller.hasClients) {
+      return;
+    }
+    final now = DateTime.now();
+    final lastMoveAt = _lastPointerDayMoveAt;
+    if (lastMoveAt != null &&
+        now.difference(lastMoveAt) < const Duration(milliseconds: 280)) {
+      return;
+    }
+    _lastPointerDayMoveAt = now;
+    final scroll = event as PointerScrollEvent;
+    final nextPage = _currentPage + (scroll.scrollDelta.dx > 0 ? 1 : -1);
+    unawaited(
+      _controller.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+
+  void _animateToExternalPage(int targetPage) {
+    final revision = ++_externalAnimationRevision;
+    _applyingExternalDate = true;
+    _currentPage = targetPage;
+    unawaited(
+      _controller
+          .animateToPage(
+            targetPage,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+          )
+          .whenComplete(() {
+            if (mounted && revision == _externalAnimationRevision) {
+              _applyingExternalDate = false;
+            }
+          }),
     );
   }
 
@@ -955,6 +1060,7 @@ class _MonthPageViewState extends State<_MonthPageView> {
   late final DateTime _anchorMonth;
   var _currentPage = _initialPage;
   var _applyingExternalMonth = false;
+  var _externalAnimationRevision = 0;
   DateTime? _lastPointerMonthMoveAt;
 
   @override
@@ -973,10 +1079,7 @@ class _MonthPageViewState extends State<_MonthPageView> {
     }
     final targetPage =
         _currentPage + _monthDelta(_monthForPage(_currentPage), widget.month);
-    _applyingExternalMonth = true;
-    _currentPage = targetPage;
-    _controller.jumpToPage(targetPage);
-    _applyingExternalMonth = false;
+    _animateToExternalPage(targetPage);
   }
 
   @override
@@ -987,39 +1090,32 @@ class _MonthPageViewState extends State<_MonthPageView> {
 
   @override
   Widget build(BuildContext context) {
-    return ScrollConfiguration(
-      behavior: ScrollConfiguration.of(context).copyWith(
-        dragDevices: const {
-          PointerDeviceKind.touch,
-          PointerDeviceKind.stylus,
-          PointerDeviceKind.invertedStylus,
+    return Listener(
+      key: const ValueKey('month-pointer-navigation'),
+      behavior: HitTestBehavior.opaque,
+      onPointerSignal: _handlePointerSignal,
+      child: PageView.builder(
+        controller: _controller,
+        allowImplicitScrolling: true,
+        physics: const _ResponsiveMonthPagePhysics(),
+        onPageChanged: (index) {
+          if (_applyingExternalMonth || index == _currentPage) {
+            return;
+          }
+          final delta = index - _currentPage;
+          _currentPage = index;
+          widget.onMonthDelta(delta);
         },
-      ),
-      child: Listener(
-        onPointerSignal: _handlePointerSignal,
-        child: PageView.builder(
-          controller: _controller,
-          allowImplicitScrolling: true,
-          physics: const _ResponsiveMonthPagePhysics(),
-          onPageChanged: (index) {
-            if (_applyingExternalMonth || index == _currentPage) {
-              return;
-            }
-            final delta = index - _currentPage;
-            _currentPage = index;
-            widget.onMonthDelta(delta);
-          },
-          itemBuilder: (context, index) {
-            final pageMonth = _monthForPage(index);
-            return _CalendarMonthPage(
-              month: pageMonth,
-              selectedDate: widget.selectedDate,
-              settings: widget.settings,
-              searchQuery: widget.searchQuery,
-              onDateSelected: widget.onDateSelected,
-            );
-          },
-        ),
+        itemBuilder: (context, index) {
+          final pageMonth = _monthForPage(index);
+          return _CalendarMonthPage(
+            month: pageMonth,
+            selectedDate: widget.selectedDate,
+            settings: widget.settings,
+            searchQuery: widget.searchQuery,
+            onDateSelected: widget.onDateSelected,
+          );
+        },
       ),
     );
   }
@@ -1049,6 +1145,25 @@ class _MonthPageViewState extends State<_MonthPageView> {
       nextPage,
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _animateToExternalPage(int targetPage) {
+    final revision = ++_externalAnimationRevision;
+    _applyingExternalMonth = true;
+    _currentPage = targetPage;
+    unawaited(
+      _controller
+          .animateToPage(
+            targetPage,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+          )
+          .whenComplete(() {
+            if (mounted && revision == _externalAnimationRevision) {
+              _applyingExternalMonth = false;
+            }
+          }),
     );
   }
 
@@ -1082,6 +1197,19 @@ class _ResponsiveMonthPagePhysics extends PageScrollPhysics {
     stiffness: 520,
     ratio: 1.05,
   );
+}
+
+bool _isMacHorizontalPageScroll(
+  BuildContext context,
+  PointerSignalEvent event,
+) {
+  if (Theme.of(context).platform != TargetPlatform.macOS ||
+      event is! PointerScrollEvent) {
+    return false;
+  }
+  final horizontal = event.scrollDelta.dx.abs();
+  final vertical = event.scrollDelta.dy.abs();
+  return horizontal >= 18 && horizontal > vertical;
 }
 
 class _CalendarMonthPage extends ConsumerWidget {
@@ -1128,7 +1256,7 @@ class _CalendarMonthPage extends ConsumerWidget {
             start,
             end,
             settings.categories,
-            settings.defaultReminderMinutes,
+            settings.defaultReminderMinutesList,
           ),
         );
       },
@@ -1149,7 +1277,7 @@ class _CalendarMonthPage extends ConsumerWidget {
           start,
           end,
           settings.categories,
-          settings.defaultReminderMinutes,
+          settings.defaultReminderMinutesList,
         ),
       ),
     );
@@ -1161,7 +1289,7 @@ class _CalendarMonthPage extends ConsumerWidget {
     DateTime start,
     DateTime end,
     List<EventCategory> categories,
-    int defaultReminderMinutes,
+    List<int> defaultReminderMinutesList,
   ) async {
     final draft = await showDialog<EventDraft>(
       context: context,
@@ -1170,7 +1298,7 @@ class _CalendarMonthPage extends ConsumerWidget {
         initialEndDate: end,
         initialAllDay: true,
         categories: categories,
-        defaultReminderMinutes: defaultReminderMinutes,
+        defaultReminderMinutesList: defaultReminderMinutesList,
       ),
     );
     if (draft != null) {

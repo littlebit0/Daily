@@ -1,3 +1,4 @@
+import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 import '../../events/domain/event_draft.dart';
 import '../../events/domain/recurrence_rule.dart';
@@ -28,6 +29,7 @@ class RuleBasedScheduleParser implements ScheduleParser {
     required DateTime baseDate,
     DateTime? selectedDate,
     required int defaultReminderMinutes,
+    List<int>? defaultReminderMinutesList,
   }) async {
     final normalized = input.trim();
     if (normalized.isEmpty) {
@@ -40,7 +42,12 @@ class RuleBasedScheduleParser implements ScheduleParser {
     final parsedTimes = _parseTimes(normalized);
     final parsedTime = parsedTimes.isEmpty ? null : parsedTimes[0];
     final parsedEndTime = parsedTimes.length > 1 ? parsedTimes[1] : null;
-    final reminder = _parseReminder(normalized) ?? defaultReminderMinutes;
+    final reminder = _parseReminder(normalized);
+    final reminders = reminder == null
+        ? normalizeReminderMinutes(
+            defaultReminderMinutesList ?? [defaultReminderMinutes],
+          )
+        : <int>[reminder];
     final recurrence = _parseRecurrence(normalized);
     final title = _cleanTitle(normalized);
     final category = EventCategory.classify(normalized);
@@ -70,7 +77,7 @@ class RuleBasedScheduleParser implements ScheduleParser {
         allDay: allDay,
         category: category,
         colorValue: category.colorValue,
-        reminderMinutesBefore: allDay ? null : reminder,
+        reminderMinutesBeforeList: allDay ? const <int>[] : reminders,
         recurrence: recurrence,
       ),
     );

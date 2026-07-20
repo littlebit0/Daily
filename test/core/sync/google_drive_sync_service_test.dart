@@ -524,6 +524,7 @@ void main() {
             'schemaVersion': 2,
             'type': 'settings',
             'settings': {
+              'defaultReminderMinutesList': [0, 10, 60],
               'categories': [
                 {
                   'id': 'basic',
@@ -569,6 +570,7 @@ void main() {
         (category) => category.id == 'custom-work',
       );
       expect(work.colorValue, 0xff10b981);
+      expect(restored.defaultReminderMinutesList, [0, 10, 60]);
       expect(restored.appTextSize, AppTextSize.large);
       expect(service.settingsRevisionNotifier.value, 1);
     },

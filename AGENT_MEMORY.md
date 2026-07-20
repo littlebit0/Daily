@@ -1743,9 +1743,166 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 
 ## 2026-07-20 Version 2.7.1
 
-- Raised the user-facing release version to `2.7.1` and reset the new release
-  build number to `1` for Apple builds.
+- Raised the user-facing release version to `2.7.1`. The current Flutter/Apple
+  build metadata also resolves to `2.7.1`, so installed Apple builds display
+  `2.7.1 (2.7.1)`.
 - Windows uses the required four-part package version `2.7.1.1`.
 - This version includes the macOS desktop layout correction: one-line header
   toolbar, no iOS-style bottom bar, desktop text scaling, dynamic month rows,
   and increased event visibility at the minimum window size.
+
+## 2026-07-20 macOS Issue #24
+
+- Added the Keychain Sharing entitlement required by
+  `flutter_secure_storage` to both macOS DebugProfile and Release builds. This
+  allows the app-lock PIN hash and configured PIN length to persist correctly.
+- Added horizontal macOS pointer-scroll navigation to weekly and daily views.
+  Vertical pointer scrolling remains available to the event lists and does not
+  change the selected week or day.
+- Restored monthly trackpad scrolling by removing a month-only drag-device
+  override that excluded macOS trackpad input. The month view now uses the same
+  full-area pointer listener pattern as week/day and still supports both
+  horizontal and vertical two-finger month navigation.
+- Previous/next controls now animate the week, month, and day PageViews instead
+  of jumping directly to the target page. Repeated button input is guarded so
+  an older animation cannot clear the state of a newer transition.
+- Automated verification covers an intermediate animation frame, weekly and
+  daily horizontal pointer navigation, and vertical-scroll date preservation.
+- Manual macOS verification: configure and relaunch with app lock enabled;
+  horizontally scroll week/day with a trackpad; vertically scroll long event
+  lists; and use previous/next in every calendar view to inspect transitions.
+
+## 2026-07-20 Google Session Persistence (Issues #25 and #27)
+
+- Issues #25 and #27 are handled as the same persisted-session defect. An app
+  update exposes the same path as a normal process restart: the OAuth service
+  is recreated and must restore its durable credential without opening an
+  interactive Google login window.
+- Desktop OAuth storage no longer treats a missing Keychain entitlement as a
+  successful read or write. A Google connection is accepted only after the
+  refresh token and account email can be read back from secure storage.
+- Refreshed access tokens are persisted before replacing the in-memory token.
+  If account metadata was unavailable during restore, it is fetched again and
+  persisted together with the refreshed token.
+- iOS now includes the Keychain Sharing entitlement used by
+  `flutter_secure_storage`. macOS DebugProfile and Release already received the
+  same entitlement while resolving issue #24.
+- Startup restore is non-interactive and serialized. When a Daily account has
+  a linked Google identity, temporary restore failures are retried after 1, 3,
+  and 8 seconds. Failure never blocks local calendar use and never deletes the
+  saved Daily/Google account link.
+- Android lightweight account restoration now allows 10 seconds instead of 3
+  seconds. Android and Windows receive the shared startup retry behavior;
+  Windows desktop OAuth also receives secure-storage write/readback
+  verification.
+- Automated verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - Full `./tool/flutter.sh test --no-pub` suite (69 tests)
+  - iOS no-codesign device build
+  - macOS debug build and code-sign verification
+- Latest macOS test app installed at
+  `/Users/kimhwi/Applications/Daily.app`.
+- Manual platform verification still required:
+  - Connect Google, fully terminate Daily, reopen it, and confirm sync resumes
+    without a Google prompt.
+  - Install an update over the connected app and repeat the same check.
+  - Temporarily start offline, then restore the network within the retry
+    window and confirm sync resumes without losing the linked account.
+  - Run the above on real iPhone and Android devices and on Windows. This Mac
+    environment verified builds and automated behavior but not those three
+    runtime environments.
+
+## 2026-07-20 Expandable Day Schedule Sheet (Issue #26)
+
+- The compact calendar's selected-day schedule view is no longer fixed at 68%
+  of the screen height. It uses a draggable sheet with a 68% initial height,
+  40% minimum height, and 96% maximum height inside the safe area.
+- Dragging upward expands the sheet first; at its maximum height, the same
+  gesture continues scrolling the event list. The empty-day state uses the
+  same scroll controller, so the sheet can still expand and collapse when no
+  events exist.
+- The existing add, open, edit, and delete actions remain unchanged.
+- This is shared Flutter behavior for iOS, Android, macOS, and Windows. Manual
+  verification should open days with zero, one, and many events; drag between
+  minimum, initial, and maximum heights; scroll a long list at maximum height;
+  and confirm the sheet respects notches, home indicators, and desktop window
+  bounds.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - Focused `test/widget_test.dart` suite (26 tests)
+  - Full `./tool/flutter.sh test --no-pub` suite (70 tests)
+
+## 2026-07-20 Version and Build Display
+
+- Settings > App Info now displays both the user-facing version and the native
+  build number, for example
+  `버전 2.7.1 (2.7.1) · com.littlebit0.daily.macos`.
+- If a platform does not provide a build number, the UI falls back to the
+  version-only label instead of showing empty parentheses.
+- The version values themselves were not raised by this change. The project
+  remains version `2.7.1`, current Apple build metadata `2.7.1`, and Windows
+  package version `2.7.1.1`.
+- The latest macOS test build was installed and launched from
+  `/Users/kimhwi/Applications/Daily.app`.
+
+## 2026-07-20 macOS Distribution-Equivalent Keychain Verification
+
+- The macOS Xcode project was already configured for automatic Apple
+  Development signing, but `tool/flutter.sh` replaced every debug build's
+  valid signature with an ad-hoc signature after Flutter finished building.
+  That removed the effective application identifier and caused Keychain error
+  `-34018`, so Google OAuth credentials could not be restored or saved.
+- Removed that post-build ad-hoc re-sign step. Flutter/Xcode now preserves its
+  original Apple Development signature and embedded provisioning profile.
+- macOS DebugProfile and Release entitlements now declare the concrete group
+  through `$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)`. The resulting
+  development build contains:
+  - application identifier `A6Y73X2ZLS.com.littlebit0.daily.macos`
+  - team identifier `A6Y73X2ZLS`
+  - Keychain group `A6Y73X2ZLS.com.littlebit0.daily.macos`
+  - Sign in with Apple entitlement
+- Installed provisioning profiles were inspected:
+  - `Mac Team Provisioning Profile: com.littlebit0.daily.macos` contains Sign
+    in with Apple and the allowed `A6Y73X2ZLS.*` Keychain group.
+  - The existing Mac App Store distribution profile allows the Keychain group
+    but does not currently list Sign in with Apple. Refresh/regenerate that
+    distribution profile before submitting a macOS App Store build.
+- Runtime verification passed with the newly signed app:
+  - the Keychain configuration error disappeared;
+  - linked Google account `kimhui0407@gmail.com` restored without an
+    interactive login window;
+  - synced calendar data appeared;
+  - after a complete process termination and relaunch, Settings still showed
+    Apple and Google connected and a successful sync timestamp.
+- Verification passed:
+  - signed app and embedded provisioning profile inspection
+  - `bash -n tool/flutter.sh`
+  - `./tool/flutter.sh analyze --no-pub`
+
+## 2026-07-21 Multiple Default Event Reminders (Issue #4)
+
+- Clarified issue #4 as the Settings > `기본 일정 알림` default, rather than
+  the already-supported per-event reminder selector.
+- Replaced the single default-reminder dropdown with a shared cross-platform
+  multi-select control. Users can combine start time, 10 minutes, 30 minutes,
+  1 hour, 1 day, and custom minute values; selecting `없음` clears all default
+  reminders.
+- New events opened from the calendar and selected-day details receive every
+  selected default reminder. Existing events retain their own saved reminder
+  list when edited.
+- Rule-based and Gemini-assisted quick entry receive the same default reminder
+  list. A reminder explicitly written in the user's input replaces the defaults
+  for that event.
+- Settings now persist `defaultReminderMinutesList`. Existing
+  `defaultReminderMinutes` values migrate to a one-item list, and the legacy
+  field remains in Google Drive settings data for older-backup compatibility.
+  Google Drive v2 backup/restore also stores and restores the full list.
+- Event notification cancellation now includes every configured default value,
+  preventing stale pending notifications after defaults change.
+- Shared Flutter behavior applies to iOS, Android, macOS, and Windows. Manual
+  verification on each platform should select several defaults, create an
+  event through both the calendar and quick entry, restart the app, and confirm
+  every selected reminder remains visible and is delivered separately.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - Full `./tool/flutter.sh test --no-pub` suite (77 tests)

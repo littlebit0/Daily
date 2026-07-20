@@ -21,10 +21,12 @@ class EventDetailsPanel extends ConsumerWidget {
     super.key,
     required this.date,
     required this.events,
+    this.scrollController,
   });
 
   final DateTime date;
   final List<CalendarEvent> events;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -58,50 +60,59 @@ class EventDetailsPanel extends ConsumerWidget {
                     context,
                     ref,
                     settings.categories,
-                    settings.defaultReminderMinutes,
+                    settings.defaultReminderMinutesList,
                   ),
                   icon: const Icon(Icons.add),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            if (dayEvents.isEmpty)
-              Text('일정이 없습니다.', style: Theme.of(context).textTheme.labelMedium)
-            else
-              Expanded(
-                child: ListView.separated(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  itemBuilder: (context, index) {
-                    final event = dayEvents[index];
-                    return _EventTile(
-                      event: event,
-                      hideSensitive: hideSensitive,
-                      onOpen: () => _openEventDetails(
-                        context,
-                        ref,
-                        event,
-                        settings.categories,
-                        settings.defaultReminderMinutes,
-                      ),
-                      onEdit: event.readOnly
-                          ? null
-                          : () => _editEvent(
-                              context,
-                              ref,
-                              event,
-                              settings.categories,
-                              settings.defaultReminderMinutes,
-                            ),
-                      onDelete: event.readOnly
-                          ? null
-                          : () => _deleteEvent(context, ref, event),
-                    );
-                  },
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 8),
-                  itemCount: dayEvents.length,
-                ),
-              ),
+            Expanded(
+              child: dayEvents.isEmpty
+                  ? ListView(
+                      controller: scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        Text(
+                          '일정이 없습니다.',
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                      ],
+                    )
+                  : ListView.separated(
+                      controller: scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemBuilder: (context, index) {
+                        final event = dayEvents[index];
+                        return _EventTile(
+                          event: event,
+                          hideSensitive: hideSensitive,
+                          onOpen: () => _openEventDetails(
+                            context,
+                            ref,
+                            event,
+                            settings.categories,
+                            settings.defaultReminderMinutesList,
+                          ),
+                          onEdit: event.readOnly
+                              ? null
+                              : () => _editEvent(
+                                  context,
+                                  ref,
+                                  event,
+                                  settings.categories,
+                                  settings.defaultReminderMinutesList,
+                                ),
+                          onDelete: event.readOnly
+                              ? null
+                              : () => _deleteEvent(context, ref, event),
+                        );
+                      },
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 8),
+                      itemCount: dayEvents.length,
+                    ),
+            ),
           ],
         ),
       ),
@@ -113,7 +124,7 @@ class EventDetailsPanel extends ConsumerWidget {
     WidgetRef ref,
     CalendarEvent event,
     List<EventCategory> categories,
-    int defaultReminderMinutes,
+    List<int> defaultReminderMinutesList,
   ) async {
     if (event.sensitive && !ref.read(sensitiveEventsUnlockedProvider)) {
       final authenticated = await authenticateSensitiveEventAccess(
@@ -145,7 +156,7 @@ class EventDetailsPanel extends ConsumerWidget {
                     ref,
                     event,
                     categories,
-                    defaultReminderMinutes,
+                    defaultReminderMinutesList,
                   ),
                 );
               },
@@ -163,14 +174,14 @@ class EventDetailsPanel extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     List<EventCategory> categories,
-    int defaultReminderMinutes,
+    List<int> defaultReminderMinutesList,
   ) async {
     final draft = await showDialog<EventDraft>(
       context: context,
       builder: (_) => EventEditorDialog(
         initialDate: date,
         categories: categories,
-        defaultReminderMinutes: defaultReminderMinutes,
+        defaultReminderMinutesList: defaultReminderMinutesList,
       ),
     );
     if (draft != null) {
@@ -183,7 +194,7 @@ class EventDetailsPanel extends ConsumerWidget {
     WidgetRef ref,
     CalendarEvent event,
     List<EventCategory> categories,
-    int defaultReminderMinutes,
+    List<int> defaultReminderMinutesList,
   ) async {
     final commandService = ref.read(eventCommandServiceProvider);
     final draft = await showDialog<EventDraft>(
@@ -192,7 +203,7 @@ class EventDetailsPanel extends ConsumerWidget {
         initialDate: event.startAt,
         event: event,
         categories: categories,
-        defaultReminderMinutes: defaultReminderMinutes,
+        defaultReminderMinutesList: defaultReminderMinutesList,
       ),
     );
     if (draft == null) {

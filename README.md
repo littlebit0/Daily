@@ -15,21 +15,17 @@ Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로�
 
 GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 
-이번 2.6.0 릴리스는 iOS 계정/Google Drive 동기화 수정과 macOS 데스크톱
-OAuth 안정화 내용을 포함합니다.
+이번 2.7.1 릴리스는 기본 일정 복수 알림, Google 세션 자동 복원, macOS Keychain
+및 달력 이동 개선, 확장형 날짜 일정 시트를 포함합니다.
 
-- GitHub Release IPA: `daily-ios-2.6.0-unsigned.ipa`
-- GitHub Release macOS DMG: `daily-macos-2.6.0-unsigned.dmg`
-- 로컬 GitHub 업로드용 IPA: `dist/release-2.6.0/daily-ios-2.6.0.ipa`
-- 로컬 GitHub 업로드용 macOS DMG: `dist/release-2.6.0/daily-macos-2.6.0.dmg`
-- App Store Connect Transporter 업로드용 IPA: `dist/transporter-upload/Daily-iOS-Transporter-2.6.0.ipa`
-- 실사용 iPhone 설치 확인용 IPA: `dist/device-install/Daily-iOS-Device-2.6.0.ipa`
-- iOS IPA SHA-256: `a748b495d37ff918f5bcd71bcc334a6d4ff12b75b88d139e65645db4a485427c`
-- macOS DMG SHA-256: `59da7dd629f40b9023cda8b337223e4b394e3b8de36850ef97717d1a2e8346f7`
+- GitHub Release IPA: `daily-ios-2.7.1-unsigned.ipa`
+- GitHub Release macOS DMG: `daily-macos-2.7.1-unsigned.dmg`
+- GitHub Release Android APK: `daily-android-2.7.1-debug.apk`
+- GitHub Release Windows ZIP: `daily-windows-2.7.1.zip`
 
-Android와 Windows는 이번 GitHub Release 파일에 포함하지 않습니다. 두 플랫폼은
-동일한 계정 UX와 동기화 정책을 적용했으며, 실제 OS 환경에서의 체크리스트 검증이
-남아 있습니다.
+복수 기본 알림 설정은 Google Drive 동기화 대상이므로 네 플랫폼 산출물을 같은
+릴리스에 제공합니다. Android와 Windows는 자동 빌드 검증 후 실제 OS에서 계정,
+동기화, 알림 흐름을 추가로 확인해야 합니다.
 
 ## 지원 플랫폼
 
@@ -73,6 +69,7 @@ iOS 앱 `DailyCalendar`는 Apple App Store Connect에 등록되었고, 2.6.0 심
 - 주 시작 요일 설정
 - 사용자 분류 추가/삭제
 - 로컬 알림, 하루 종일 일정 알림, 아침 브리핑 알림
+- 복수 기본 일정 알림과 일정별 복수 알림
 - 앱 잠금 PIN과 민감 일정 숨김
 - Android 월간/오늘/D-day 위젯 진입점
 - Windows 창 닫기 후 백그라운드/트레이 유지
@@ -263,6 +260,7 @@ Android keystore는 이후 Play Store 업데이트에 필요하므로 별도 안
 ## 문서
 
 - [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)
+- [릴리스 노트 2.7.1](docs/RELEASE_NOTES_2.7.1.md)
 - [릴리스 노트 2.6.0](docs/RELEASE_NOTES_2.6.0.md)
 - [릴리스 노트 2.0.4](docs/RELEASE_NOTES_2.0.4.md)
 - [릴리스 노트 2.5.17](docs/RELEASE_NOTES_2.5.17.md)
