@@ -8,7 +8,7 @@
 PRODUCT_NAME = Daily
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.macos
+PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright 2026 littlebit0. All rights reserved.

@@ -1906,3 +1906,27 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Verification passed:
   - `./tool/flutter.sh analyze --no-pub`
   - Full `./tool/flutter.sh test --no-pub` suite (77 tests)
+
+## 2026-07-21 macOS App Store Bundle ID Correction
+
+- The macOS App Store target now uses `com.littlebit0.daily`, exactly matching
+  the existing iOS DailyCalendar App Store Connect record. The former
+  `com.littlebit0.daily.macos` identifier must not be used for App Store builds.
+- `macos/Runner/Configs/AppInfo.xcconfig` and the bundled Google service metadata
+  were corrected together. macOS Google Drive authentication continues to use
+  the desktop OAuth path and is not coupled to the old product bundle ID.
+- A fresh macOS App Store archive and installer package were generated with the
+  corrected identifier. Verification confirmed:
+  - version/build `2.7.1 (2.7.1)`;
+  - application identifier `A6Y73X2ZLS.com.littlebit0.daily`;
+  - Sign in with Apple, sandbox, network, and matching Keychain entitlements;
+  - valid Apple application and installer signatures.
+- Transporter recognizes the replacement package as `DailyCalendar 2.7.1
+  (2.7.1)` and shows it as ready to send. The previous application-record error
+  for `com.littlebit0.daily.macos` is resolved.
+- Because the product identifier and Keychain group changed from the prior local
+  test build, that old macOS app container is not the App Store identity. Test
+  the corrected App Store build as a fresh install and restore user data through
+  the supported account/sync flow where needed.
+- Current Transporter package:
+  `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0/dist/transporter-2.7.1/Daily-macOS-AppStore-2.7.1.pkg`
