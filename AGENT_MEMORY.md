@@ -1933,4 +1933,19 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0/dist/transporter-2.7.1/Daily-macOS-AppStore-2.7.1.pkg`
 - Transporter uploaded this corrected macOS package to App Store Connect at
   2026-07-21 02:54 KST. The transfer completed successfully and entered Apple
-  processing without the previous 16 error 90284 code-signing failures.
+  processing without the previous 16 error 90284 code-signing failures. Apple
+  then rejected the duplicate macOS build number `2.7.1`, which had already
+  been consumed by the earlier failed delivery.
+- macOS now keeps marketing version `2.7.1` but uses its own App Store build
+  number `2.7.2`. iOS remains unchanged. The macOS build number is declared as
+  `MACOS_BUILD_NUMBER` in `macos/Runner/Configs/AppInfo.xcconfig` and must be
+  incremented for every subsequent macOS upload attempt.
+- To prevent selecting the adjacent iOS IPA in Transporter, the final macOS
+  package was also copied to a macOS-only upload directory with the build
+  number in its filename:
+  `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0/dist/transporter-macos-2.7.1/Daily-macOS-AppStore-2.7.1-build-2.7.2.pkg`.
+- Transporter identified that package separately with the macOS application
+  icon and metadata `2.7.1 (2.7.2)`. Its upload completed at 2026-07-21 03:21
+  KST and entered Apple processing. The earlier iOS `2.7.1 (2.7.1)` duplicate
+  failure remained as a separate card, confirming that the final delivery was
+  the macOS build rather than another iOS IPA attempt.
