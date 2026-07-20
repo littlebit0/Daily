@@ -1931,3 +1931,6 @@ Historical app-version notes below `2.0.0` were intentionally removed on
     match `A6Y73X2ZLS.com.littlebit0.daily`.
 - Current Transporter package:
   `/Users/kimhwi/Documents/Codex/2026-05-26/littlebit0-daily-https-github-com-littlebit0/dist/transporter-2.7.1/Daily-macOS-AppStore-2.7.1.pkg`
+- Transporter uploaded this corrected macOS package to App Store Connect at
+  2026-07-21 02:54 KST. The transfer completed successfully and entered Apple
+  processing without the previous 16 error 90284 code-signing failures.
