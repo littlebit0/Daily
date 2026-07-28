@@ -152,6 +152,15 @@ class AppleWidgetSnapshotBuilder {
       'todayRemainingCount': todayEvents.length > 8
           ? todayEvents.length - 8
           : 0,
+      'scheduleEvents':
+          (visibleMonthEvents.toList()..sort((left, right) {
+                if (left.allDay != right.allDay) {
+                  return left.allDay ? -1 : 1;
+                }
+                return left.startAt.compareTo(right.startAt);
+              }))
+              .map(_eventJson)
+              .toList(growable: false),
       'ddays': ddayEvents
           .take(6)
           .map((event) {
@@ -183,12 +192,15 @@ class AppleWidgetSnapshotBuilder {
 
   static Map<String, Object?> _eventJson(CalendarEvent event) {
     return {
-      'id': event.id,
+      'id': event.occurrenceId ?? event.id,
       'title': _widgetTitle(event),
       'timeLabel': event.allDay
           ? '종일'
           : '${_two(event.startAt.hour)}:${_two(event.startAt.minute)}',
       'color': event.colorValue,
+      'startAt': event.startAt.millisecondsSinceEpoch,
+      'endAt': event.endAt.millisecondsSinceEpoch,
+      'allDay': event.allDay,
     };
   }
 

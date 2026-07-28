@@ -39,6 +39,12 @@ void main() {
           .cast<Map<String, Object?>>();
       expect(todayEvents.map((event) => event['title']), ['회의', '비공개 일정']);
       expect(snapshot.toString(), isNot(contains('노출되면 안 되는 일정')));
+      final scheduleEvents = (snapshot['scheduleEvents']! as List)
+          .cast<Map<String, Object?>>();
+      expect(scheduleEvents, hasLength(3));
+      expect(scheduleEvents.first['startAt'], isA<int>());
+      expect(scheduleEvents.first['endAt'], isA<int>());
+      expect(scheduleEvents.first['allDay'], isFalse);
 
       final ddays = (snapshot['ddays']! as List).cast<Map<String, Object?>>();
       expect(ddays.single['title'], '출시');

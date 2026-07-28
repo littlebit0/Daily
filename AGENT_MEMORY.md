@@ -2059,9 +2059,17 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Added the App Group entitlement to the iOS/macOS hosts and widget extensions.
   `tool/configure_apple_widgets.rb` idempotently creates and maintains the
   `DailyWidgets` iOS target and `DailyMacWidgets` macOS target.
-- Lock Screen widgets are intentionally deferred. Before implementing them,
-  decide which compact/accessory families to support and how much private
-  calendar data may appear while the device is locked.
+- iOS/iPadOS Lock Screen widgets are implemented as additional families of the
+  existing `오늘 일정` widget:
+  - inline shows the next remaining event;
+  - circular shows the count of remaining events today;
+  - rectangular shows up to two remaining events and an `외 N개` count.
+- Lock Screen widgets never show D-day or weekly/monthly content. Event titles
+  use SwiftUI privacy redaction while times and counts remain visible. Events
+  marked sensitive by Daily remain exported as `비공개 일정`.
+- The shared snapshot includes timestamped schedule events so the extension can
+  select the current day after midnight without requiring the app to relaunch.
+  Widget timelines refresh at midnight and at event start/end boundaries.
 - Runtime verification:
   - iPhone 17 simulator widget gallery found `Daily Test`;
   - the `오늘 일정` widget and the medium weekly widget were added to the
