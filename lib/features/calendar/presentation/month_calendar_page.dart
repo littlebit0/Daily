@@ -1395,7 +1395,8 @@ class _CalendarHeader extends ConsumerWidget {
 
     if (macOS) {
       final viewSwitch = SegmentedButton<CalendarViewMode>(
-        selected: {viewMode},
+        selected: quickAccessSelected ? const {} : {viewMode},
+        emptySelectionAllowed: quickAccessSelected,
         showSelectedIcon: false,
         style: ButtonStyle(
           visualDensity: VisualDensity.compact,
@@ -1410,7 +1411,9 @@ class _CalendarHeader extends ConsumerWidget {
           ButtonSegment(value: CalendarViewMode.day, label: Text('일')),
         ],
         onSelectionChanged: (selection) {
-          onCalendarViewSelected(selection.first);
+          if (selection.isNotEmpty) {
+            onCalendarViewSelected(selection.first);
+          }
         },
       );
       final quickAccessButton = IconButton(

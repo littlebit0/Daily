@@ -21,7 +21,7 @@ import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 import '../../events/presentation/sensitive_event_access.dart';
 
-const _fallbackAppVersion = '2.5.14';
+const _fallbackAppVersion = '2.7.3';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -527,11 +527,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final info = await PackageInfo.fromPlatform();
       return _AppVersionInfo(
         version: info.version.isEmpty ? _fallbackAppVersion : info.version,
-        buildNumber: info.buildNumber,
+        buildNumber: info.version.isEmpty ? _fallbackAppVersion : info.version,
         packageName: info.packageName,
       );
     } on Object {
-      return const _AppVersionInfo(version: _fallbackAppVersion);
+      return const _AppVersionInfo(
+        version: _fallbackAppVersion,
+        buildNumber: _fallbackAppVersion,
+      );
     }
   }
 

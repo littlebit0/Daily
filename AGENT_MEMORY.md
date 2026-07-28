@@ -1949,3 +1949,55 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   KST and entered Apple processing. The earlier iOS `2.7.1 (2.7.1)` duplicate
   failure remained as a separate card, confirming that the final delivery was
   the macOS build rather than another iOS IPA attempt.
+
+## 2026-07-28 Version 2.7.3 and Issues #28/#31
+
+- Raised the shared user-facing version and build label to `2.7.3 (2.7.3)`.
+  - iOS and macOS bundle metadata both resolve to version `2.7.3`, build
+    `2.7.3`.
+  - Android uses version name `2.7.3` and the required integer version code
+    `273`; Daily displays `2.7.3 (2.7.3)` in Settings.
+  - Windows uses the required four-part MSIX version `2.7.3.3`; Daily displays
+    `2.7.3 (2.7.3)` in Settings.
+- Fixed issue #28 on the macOS quick-access toolbar. While quick access is
+  active, the previous week/month/day segment is no longer left selected.
+  Pressing that same segment now returns to its calendar view, matching the
+  behavior of selecting either of the other views.
+- Fixed issue #31 in the selected-day event panel. The event detail surface,
+  edit button, and delete button now own separate hit-test regions. Edit and
+  delete each use a stable 48-by-48 target, and the surrounding event body
+  opens details without competing with those actions. This shared Flutter
+  change applies to all four platforms.
+- Added regression coverage for:
+  - quick access -> same week/month/day segment restoration;
+  - all four inset corners of the event body, edit target, and delete target;
+  - matching user-facing version/build labels.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - full `./tool/flutter.sh test --no-pub` suite (78 tests)
+  - iOS simulator debug build; built plist is `2.7.3 (2.7.3)`
+  - macOS debug build; built plist is `2.7.3 (2.7.3)`
+- Android could not be built locally because this Mac has no Android SDK.
+  Windows cannot be built on macOS. GitHub Actions must verify both platform
+  builds after these changes are pushed.
+
+## 2026-07-28 Test App Identification and Local Cleanup
+
+- Keep the App Store-installed macOS app at `/Applications/Daily.app` intact.
+  It has the App Store receipt, display name `DailyCalendar macOS`, and bundle
+  identifier `com.littlebit0.daily`.
+- Removed the previously installed development app from
+  `/Users/kimhwi/Applications` and removed the development app from the iPhone
+  17 simulator. The simulator was shut down after cleanup.
+- Debug builds are now visibly named `Daily Test` on iOS and macOS. Release and
+  Profile builds keep their production names, so App Store packages are not
+  renamed.
+- macOS test builds must be installed at
+  `/Users/kimhwi/Applications/Daily Test.app`. Do not replace or delete the App
+  Store app when refreshing a test build.
+- The test name is intentionally different while the production bundle
+  identifier remains unchanged, preserving the existing Apple/Google signing
+  and authentication configuration.
+- Verification passed: `./tool/flutter.sh build macos --debug --no-pub`
+  produced `build/macos/Build/Products/Debug/Daily Test.app`, whose display
+  name and bundle name are both `Daily Test`.

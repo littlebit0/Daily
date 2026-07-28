@@ -415,136 +415,160 @@ class _EventTile extends StatelessWidget {
     final title = hidden ? '비공개 일정' : event.title;
     return Material(
       color: color.withValues(alpha: event.holiday ? 0.07 : 0.08),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onOpen,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.20)),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 4,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
+        side: BorderSide(color: color.withValues(alpha: 0.20)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: InkWell(
+              key: ValueKey('event-open-${event.id}'),
+              onTap: onOpen,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Row(
+                    Container(
+                      width: 4,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              if (hidden) ...[
-                                const Icon(Icons.lock_outline, size: 16),
-                                const SizedBox(width: 6),
-                              ],
                               Expanded(
-                                child: Text(
-                                  title,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14,
-                                  ),
+                                child: Row(
+                                  children: [
+                                    if (hidden) ...[
+                                      const Icon(Icons.lock_outline, size: 16),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
+                              if (event.readOnly)
+                                const Icon(Icons.lock_outline, size: 16),
                             ],
                           ),
-                        ),
-                        if (event.readOnly)
-                          const Icon(Icons.lock_outline, size: 16),
-                      ],
-                    ),
-                    if (!hidden) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        timeLabel,
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                    ],
-                    if (!hidden && event.showDday)
-                      Text(
-                        _formatDday(event),
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: color,
-                              fontWeight: FontWeight.w800,
+                          if (!hidden) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              timeLabel,
+                              style: Theme.of(context).textTheme.labelMedium,
                             ),
+                          ],
+                          if (!hidden && event.showDday)
+                            Text(
+                              _formatDday(event),
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: color,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                          if (!hidden &&
+                              event.location != null &&
+                              event.location!.isNotEmpty)
+                            Text(
+                              event.location!,
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
+                          if (!hidden &&
+                              event.location != null &&
+                              event.location!.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: () =>
+                                  MapLauncher().openLocation(event.location!),
+                              icon: const Icon(Icons.map_outlined, size: 16),
+                              label: const Text('지도 바로가기'),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: const Size(0, 28),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          if (!hidden &&
+                              event.weather != null &&
+                              event.weather!.isNotEmpty)
+                            Text(
+                              '날씨: ${event.weather!}',
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
+                          if (!hidden &&
+                              event.url != null &&
+                              event.url!.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: () => _openUrl(event.url!),
+                              icon: const Icon(Icons.link, size: 16),
+                              label: Text(
+                                event.url!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: const Size(0, 28),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                        ],
                       ),
-                    if (!hidden &&
-                        event.location != null &&
-                        event.location!.isNotEmpty)
-                      Text(
-                        event.location!,
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                    if (!hidden &&
-                        event.location != null &&
-                        event.location!.isNotEmpty)
-                      TextButton.icon(
-                        onPressed: () =>
-                            MapLauncher().openLocation(event.location!),
-                        icon: const Icon(Icons.map_outlined, size: 16),
-                        label: const Text('지도 바로가기'),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: const Size(0, 28),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                    if (!hidden &&
-                        event.weather != null &&
-                        event.weather!.isNotEmpty)
-                      Text(
-                        '날씨: ${event.weather!}',
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                    if (!hidden && event.url != null && event.url!.isNotEmpty)
-                      TextButton.icon(
-                        onPressed: () => _openUrl(event.url!),
-                        icon: const Icon(Icons.link, size: 16),
-                        label: Text(
-                          event.url!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: const Size(0, 28),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
+                    ),
                   ],
                 ),
               ),
-              if (!hidden && !event.readOnly) ...[
-                IconButton(
-                  tooltip: '수정',
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-                IconButton(
-                  tooltip: '삭제',
-                  onPressed: onDelete == null
-                      ? null
-                      : () => unawaited(onDelete!()),
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
+          if (!hidden && !event.readOnly)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox.square(
+                    dimension: 48,
+                    child: IconButton(
+                      key: ValueKey('event-edit-${event.id}'),
+                      tooltip: '수정',
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                  ),
+                  SizedBox.square(
+                    dimension: 48,
+                    child: IconButton(
+                      key: ValueKey('event-delete-${event.id}'),
+                      tooltip: '삭제',
+                      onPressed: onDelete == null
+                          ? null
+                          : () => unawaited(onDelete!()),
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

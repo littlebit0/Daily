@@ -688,6 +688,28 @@ void main() {
     );
     expect(find.byKey(const ValueKey('calendar-bottom-bar')), findsNothing);
 
+    final viewSwitch = find.byType(SegmentedButton<CalendarViewMode>);
+    for (final entry in const [
+      (CalendarViewMode.week, '주'),
+      (CalendarViewMode.month, '월'),
+      (CalendarViewMode.day, '일'),
+    ]) {
+      container.read(calendarViewModeProvider.notifier).state = entry.$1;
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('빠른 보기'));
+      await tester.pumpAndSettle();
+
+      final segment = find.descendant(
+        of: viewSwitch,
+        matching: find.text(entry.$2),
+      );
+      await tester.tap(segment);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PageView), findsOneWidget);
+      expect(container.read(calendarViewModeProvider), entry.$1);
+    }
+
     debugDefaultTargetPlatformOverride = null;
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -877,7 +899,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('settings displays both app version and build number', (
+  testWidgets('settings displays matching app version and build label', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
@@ -918,7 +940,10 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -2200));
     await tester.pumpAndSettle();
 
-    expect(find.text('버전 2.7.1 (1) · com.littlebit0.daily'), findsOneWidget);
+    expect(
+      find.text('버전 2.7.1 (2.7.1) · com.littlebit0.daily'),
+      findsOneWidget,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

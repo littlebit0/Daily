@@ -6,22 +6,22 @@ Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로�
 
 ## 현재 버전
 
-- 앱 버전: `2.7.1`
+- 앱 버전: `2.7.3 (2.7.3)`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 다음 릴리스 후보: `2.7.1`
+- 다음 릴리스 후보: `2.7.3`
 - 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
 
 ## 배포 파일
 
 GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 
-이번 2.7.1 릴리스는 기본 일정 복수 알림, Google 세션 자동 복원, macOS Keychain
-및 달력 이동 개선, 확장형 날짜 일정 시트를 포함합니다.
+이번 2.7.3 릴리스는 기본 일정 복수 알림과 Google 세션 자동 복원 개선에 더해
+빠른 보기 전환 및 일정 카드 클릭 영역 오류 수정을 포함합니다.
 
-- GitHub Release IPA: `daily-ios-2.7.1-unsigned.ipa`
-- GitHub Release macOS DMG: `daily-macos-2.7.1-unsigned.dmg`
-- GitHub Release Android APK: `daily-android-2.7.1-debug.apk`
-- GitHub Release Windows ZIP: `daily-windows-2.7.1.zip`
+- GitHub Release IPA: `daily-ios-2.7.3-unsigned.ipa`
+- GitHub Release macOS DMG: `daily-macos-2.7.3-unsigned.dmg`
+- GitHub Release Android APK: `daily-android-2.7.3-debug.apk`
+- GitHub Release Windows ZIP: `daily-windows-2.7.3.zip`
 
 복수 기본 알림 설정은 Google Drive 동기화 대상이므로 네 플랫폼 산출물을 같은
 릴리스에 제공합니다. Android와 Windows는 자동 빌드 검증 후 실제 OS에서 계정,
@@ -260,7 +260,7 @@ Android keystore는 이후 Play Store 업데이트에 필요하므로 별도 안
 ## 문서
 
 - [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)
-- [릴리스 노트 2.7.1](docs/RELEASE_NOTES_2.7.1.md)
+- [릴리스 노트 2.7.3](docs/RELEASE_NOTES_2.7.3.md)
 - [릴리스 노트 2.6.0](docs/RELEASE_NOTES_2.6.0.md)
 - [릴리스 노트 2.0.4](docs/RELEASE_NOTES_2.0.4.md)
 - [릴리스 노트 2.5.17](docs/RELEASE_NOTES_2.5.17.md)

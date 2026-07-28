@@ -32,7 +32,8 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
+        // Android requires an integer versionCode. 273 represents Daily 2.7.3.
+        versionCode = 273
         versionName = flutter.versionName
     }
 

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v2.7.1"
+        description: "Release tag, for example v2.7.3"
         required: true
         type: string
 
@@ -143,6 +143,6 @@ jobs:
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: Daily ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          body_path: docs/RELEASE_NOTES_2.7.1.md
+          body_path: docs/RELEASE_NOTES_2.7.3.md
           files: dist/*
           fail_on_unmatched_files: true

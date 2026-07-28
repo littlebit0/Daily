@@ -4,6 +4,7 @@ import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_category.dart';
 import 'package:daily/features/events/domain/event_repository.dart';
 import 'package:daily/features/events/presentation/event_details_panel.dart';
+import 'package:daily/features/events/presentation/event_editor_dialog.dart';
 import 'package:daily/features/events/presentation/sensitive_event_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,7 +51,48 @@ void main() {
     expect(find.text('수정'), findsOneWidget);
     expect(find.text('삭제'), findsOneWidget);
   });
+
+  testWidgets('event card and action boxes respond across their full bounds', (
+    tester,
+  ) async {
+    final event = _sensitiveEvent();
+    await _pumpPanel(tester, event: event, unlocked: true);
+
+    final openArea = find.byKey(ValueKey('event-open-${event.id}'));
+    for (final point in _insetCorners(tester.getRect(openArea))) {
+      await tester.tapAt(point);
+      await tester.pumpAndSettle();
+      expect(find.text('시간'), findsOneWidget);
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
+    }
+
+    final editArea = find.byKey(ValueKey('event-edit-${event.id}'));
+    for (final point in _insetCorners(tester.getRect(editArea))) {
+      await tester.tapAt(point);
+      await tester.pumpAndSettle();
+      expect(find.byType(EventEditorDialog), findsOneWidget);
+      await tester.tap(find.text('취소').last);
+      await tester.pumpAndSettle();
+    }
+
+    final deleteArea = find.byKey(ValueKey('event-delete-${event.id}'));
+    for (final point in _insetCorners(tester.getRect(deleteArea))) {
+      await tester.tapAt(point);
+      await tester.pumpAndSettle();
+      expect(find.text('일정 삭제'), findsOneWidget);
+      await tester.tap(find.text('취소').last);
+      await tester.pumpAndSettle();
+    }
+  });
 }
+
+List<Offset> _insetCorners(Rect rect) => [
+  rect.topLeft + const Offset(4, 4),
+  rect.topRight + const Offset(-4, 4),
+  rect.bottomLeft + const Offset(4, -4),
+  rect.bottomRight + const Offset(-4, -4),
+];
 
 Future<void> _pumpPanel(
   WidgetTester tester, {
