@@ -14,7 +14,7 @@ APP_DISPLAY_NAME = DailyCalendar macOS
 PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily
 
 // macOS App Store build number. Keep this independent from the iOS build.
-MACOS_BUILD_NUMBER = 2.7.3
+MACOS_BUILD_NUMBER = 3.0.0
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright 2026 littlebit0. All rights reserved.

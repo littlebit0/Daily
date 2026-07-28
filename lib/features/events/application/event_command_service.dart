@@ -15,12 +15,14 @@ class EventCommandService {
     required SettingsRepository settingsRepository,
     required NotificationService notificationService,
     required SyncService syncService,
+    Future<void> Function()? onEventsChanged,
     KoreaTime? clock,
     Uuid? uuid,
   }) : _repository = repository,
        _settingsRepository = settingsRepository,
        _notificationService = notificationService,
        _syncService = syncService,
+       _onEventsChanged = onEventsChanged,
        _clock = clock ?? const KoreaTime(),
        _uuid = uuid ?? const Uuid();
 
@@ -28,6 +30,7 @@ class EventCommandService {
   final SettingsRepository _settingsRepository;
   final NotificationService _notificationService;
   final SyncService _syncService;
+  final Future<void> Function()? _onEventsChanged;
   final KoreaTime _clock;
   final Uuid _uuid;
 
@@ -58,6 +61,7 @@ class EventCommandService {
     );
     await _rescheduleMorningBriefingIfNeeded();
     await _syncService.queueEventUpsert(updated);
+    await _refreshWidgets();
   }
 
   Future<void> delete(String eventId) async {
@@ -70,6 +74,7 @@ class EventCommandService {
     );
     await _rescheduleMorningBriefingIfNeeded();
     await _syncService.queueEventDelete(eventId);
+    await _refreshWidgets();
   }
 
   Future<void> updateCategoryUsage({
@@ -94,6 +99,15 @@ class EventCommandService {
       await _syncService.queueEventUpsert(event);
     }
     await _rescheduleMorningBriefingIfNeeded();
+    await _refreshWidgets();
+  }
+
+  Future<void> _refreshWidgets() async {
+    try {
+      await _onEventsChanged?.call();
+    } on Object {
+      // Widget refresh is best-effort and must not fail calendar mutations.
+    }
   }
 
   List<int> _combinedReminderMinutes(

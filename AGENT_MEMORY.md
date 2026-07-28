@@ -2001,3 +2001,96 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Verification passed: `./tool/flutter.sh build macos --debug --no-pub`
   produced `build/macos/Build/Products/Debug/Daily Test.app`, whose display
   name and bundle name are both `Daily Test`.
+
+## 2026-07-28 Version 3.0.0 Development Baseline
+
+- Commit `fd2a8b5` preserves the completed `2.7.3` work before starting the
+  next issue cycle.
+- Raised the active development version and user-facing build label to
+  `3.0.0 (3.0.0)` on iOS, macOS, Android, and Windows.
+- Platform-required representations are Android version code `300` and Windows
+  MSIX version `3.0.0.0`; both still display `3.0.0 (3.0.0)` inside Daily.
+- Historical `2.7.3` release notes and artifact names remain unchanged.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - settings version/build widget regression test
+
+## 2026-07-28 Apple Home and Desktop Widgets
+
+- The user assigned Android and Windows work to the Windows agent. This Mac
+  task implemented only iOS/iPadOS and macOS widgets. Do not treat Android or
+  Windows widget parity as completed by this change.
+- Added a shared WidgetKit extension source with three production widgets:
+  - `오늘 일정`: today's events in time order, in small and large families;
+  - `주간 및 월간 캘린더`: a 7-day schedule in the short medium family and
+    a 6-week month grid in the large family;
+  - `D-day`: upcoming D-day events.
+- The short medium widget family is reserved for the 7-day weekly schedule.
+  Today, month, and D-day views must not expose alternative medium layouts.
+- The weekly and month calendar views show event titles rather than color-only
+  dots.
+  - Weekly shows up to three titles per day and a `+N` count for additional
+    events.
+  - The large month grid shows two titles per day and a `+N` count for
+    additional events.
+  - Labels use the event category color as a subtle background. Sensitive
+    titles remain exported as `비공개 일정`.
+  - A continuous multi-day occurrence renders as one horizontal bar spanning
+    its covered day columns. At a week boundary the bar continues on the next
+    calendar row. Recurring occurrences retain distinct occurrence IDs and are
+    not collapsed together.
+- iOS/iPadOS exposes these widgets on the Home Screen. macOS exposes the same
+  widgets through one WidgetKit extension in both Notification Center and the
+  desktop widget gallery on macOS 14 or later.
+- Flutter writes a privacy-safe event snapshot to a platform-appropriate App
+  Group container and reloads WidgetKit after event create/update/delete,
+  category changes, Drive restore, app start/resume, and local data reset.
+  - iOS/iPadOS: `group.com.littlebit0.daily.widgets`.
+  - macOS: `A6Y73X2ZLS.com.littlebit0.daily.widgets`. Apple documents this
+    team-identifier form for macOS App Groups; it avoids the unrelated-app data
+    permission prompt that occurred with the registered `group.` form in the
+    local macOS test build.
+- The snapshot is an atomically replaced `daily-widget-snapshot.json` file in
+  the App Group container. Do not revert this to shared `UserDefaults`: the
+  macOS widget extension was observed hanging in `cfprefsd` while reading that
+  store.
+- Sensitive event titles are always exported as `비공개 일정`. Hidden
+  categories, deleted events, and disabled holiday events are excluded.
+- Added the App Group entitlement to the iOS/macOS hosts and widget extensions.
+  `tool/configure_apple_widgets.rb` idempotently creates and maintains the
+  `DailyWidgets` iOS target and `DailyMacWidgets` macOS target.
+- Lock Screen widgets are intentionally deferred. Before implementing them,
+  decide which compact/accessory families to support and how much private
+  calendar data may appear while the device is locked.
+- Runtime verification:
+  - iPhone 17 simulator widget gallery found `Daily Test`;
+  - the `오늘 일정` widget and the medium weekly widget were added to the
+    iPhone 17 simulator Home Screen and rendered;
+  - the iOS weekly widget was visually checked at its real Home Screen size:
+    continuous events span their covered day columns as long bars, the current
+    day highlight is visible, and labels do not clip;
+  - macOS debug app was installed at
+    `/Users/kimhwi/Applications/Daily Test.app` without touching the App Store
+    app;
+  - `pluginkit` registered
+    `com.littlebit0.daily.widgets.macos (3.0.0)`;
+  - the installed macOS host and embedded extension passed strict deep code
+    signature verification;
+  - the macOS host wrote a 4,322-byte real snapshot without a permission
+    prompt, and WidgetKit Simulator loaded timelines in 0.04-0.16 seconds;
+  - dark-mode WidgetKit rendering was checked for Today small, weekly medium,
+    month large, and D-day small. Explicit foreground colors prevent the
+    previous white-on-white text loss;
+  - the weekly medium layout renders seven equal day columns, highlights today,
+    and shows continuous events as long bars spanning their covered dates.
+- Verification passed after the weekly widget and continuous-event fix:
+  - `./tool/flutter.sh analyze --no-pub`;
+  - full `./tool/flutter.sh test --no-pub` suite (81 tests);
+  - iOS simulator debug build with the embedded `DailyWidgets.appex`;
+  - macOS debug build with the embedded `DailyMacWidgets.appex`.
+- Keep the iOS `Embed App Extensions` build phase before Flutter's
+  `Thin Binary` phase. Flutter declares `Runner.app/Info.plist` as a Thin
+  Binary output; reversing these phases creates an Xcode dependency cycle.
+- Windows agent follow-up: implement and manually verify equivalent Android
+  and Windows widgets separately. Do not edit Apple widget targets from the
+  Windows workspace unless explicitly requested.

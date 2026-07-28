@@ -2,7 +2,43 @@ import Flutter
 import AuthenticationServices
 import UIKit
 import UserNotifications
+import WidgetKit
 import flutter_local_notifications
+
+private final class DailyAppleWidgets {
+  static let channelName = "daily/apple_widgets"
+  static let appGroup = "group.com.littlebit0.daily.widgets"
+  static let snapshotFileName = "daily-widget-snapshot.json"
+
+  static func register(with binaryMessenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: channelName, binaryMessenger: binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "updateSnapshot",
+            let snapshot = call.arguments as? [String: Any],
+            JSONSerialization.isValidJSONObject(snapshot) else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      do {
+        let data = try JSONSerialization.data(withJSONObject: snapshot)
+        guard let containerURL = FileManager.default.containerURL(
+          forSecurityApplicationGroupIdentifier: appGroup
+        ) else {
+          result(FlutterError(code: "app_group_unavailable", message: "위젯 공유 저장소를 열 수 없습니다.", details: nil))
+          return
+        }
+        try data.write(
+          to: containerURL.appendingPathComponent(snapshotFileName),
+          options: .atomic
+        )
+        WidgetCenter.shared.reloadAllTimelines()
+        result(nil)
+      } catch {
+        result(FlutterError(code: "widget_snapshot_failed", message: error.localizedDescription, details: nil))
+      }
+    }
+  }
+}
 
 private final class DailyGoogleOAuthSession: NSObject, ASWebAuthenticationPresentationContextProviding {
   static let channelName = "daily/google_oauth"
@@ -325,6 +361,9 @@ private final class DailyMapLauncher {
     }
     if let registrar = registrar(forPlugin: "DailyMapLauncher") {
       DailyMapLauncher.register(with: registrar.messenger())
+    }
+    if let registrar = registrar(forPlugin: "DailyAppleWidgets") {
+      DailyAppleWidgets.register(with: registrar.messenger())
     }
     return launched
   }

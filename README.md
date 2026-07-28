@@ -6,9 +6,9 @@ Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로�
 
 ## 현재 버전
 
-- 앱 버전: `2.7.3 (2.7.3)`
+- 앱 버전: `3.0.0 (3.0.0)`
 - Android 패키지명: `com.littlebit0.dailycalendar`
-- 다음 릴리스 후보: `2.7.3`
+- 다음 릴리스 후보: `3.0.0`
 - 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
 
 ## 배포 파일
@@ -71,6 +71,8 @@ iOS 앱 `DailyCalendar`는 Apple App Store Connect에 등록되었고, 2.6.0 심
 - 로컬 알림, 하루 종일 일정 알림, 아침 브리핑 알림
 - 복수 기본 일정 알림과 일정별 복수 알림
 - 앱 잠금 PIN과 민감 일정 숨김
+- iPhone/iPad 홈 화면용 오늘 일정, 월간 달력, D-day 위젯
+- macOS 알림 센터와 바탕화면용 오늘 일정, 월간 달력, D-day 위젯
 - Android 월간/오늘/D-day 위젯 진입점
 - Windows 창 닫기 후 백그라운드/트레이 유지
 - Windows 트레이 미니 캘린더
@@ -81,6 +83,11 @@ iOS 앱 `DailyCalendar`는 Apple App Store Connect에 등록되었고, 2.6.0 심
 - Apple/Google 계정 연결 상태 자동 복원
 - 설정의 통합 로그아웃과 계정 삭제
 - Google Drive AppData 기반 백업, 복원, 자동 동기화
+
+Apple 위젯은 앱의 로컬 일정 스냅샷을 App Group으로 공유하며, 민감 일정의
+제목은 위젯에서 항상 `비공개 일정`으로 가립니다. iPhone 잠금화면 위젯은
+별도 디자인과 표시 정보 범위를 정한 뒤 추가할 예정이며 현재 버전에는 포함하지
+않습니다.
 
 ## 동기화 구조
 

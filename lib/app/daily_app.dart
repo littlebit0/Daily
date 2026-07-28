@@ -436,6 +436,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
     WidgetsBinding.instance.addObserver(this);
     _startLocalNotificationServices();
     _startSyncIfConnected();
+    _refreshAppleWidgets();
   }
 
   @override
@@ -462,6 +463,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
         _syncRestoreRetryTimer?.cancel();
         _syncRestoreRetryIndex = 0;
         _startSyncIfConnected();
+        _refreshAppleWidgets();
         break;
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
@@ -474,7 +476,20 @@ class _AppHomeState extends ConsumerState<_AppHome>
   }
 
   @override
-  Widget build(BuildContext context) => const MonthCalendarPage();
+  Widget build(BuildContext context) {
+    ref.listen<AppSettings>(appSettingsProvider, (previous, next) {
+      if (previous != next) {
+        _refreshAppleWidgets();
+      }
+    });
+    return const MonthCalendarPage();
+  }
+
+  void _refreshAppleWidgets() {
+    unawaited(
+      ref.read(appleWidgetServiceProvider).refresh().catchError((_) {}),
+    );
+  }
 
   Future<void> _startSyncIfConnected() async {
     final activeOperation = _syncStartOperation;

@@ -24,6 +24,7 @@ class GoogleDriveSyncService implements SyncService {
     http.Client? httpClient,
     Duration backupRestoreDelay = _defaultBackupRestoreDelay,
     Duration changeSyncDelay = _defaultChangeSyncDelay,
+    Future<void> Function()? onEventsChanged,
   }) : _authService = authService,
        _eventRepository = eventRepository,
        _notificationService = notificationService,
@@ -31,7 +32,8 @@ class GoogleDriveSyncService implements SyncService {
        _httpClient = httpClient ?? http.Client(),
        _ownsHttpClient = httpClient == null,
        _backupRestoreDelay = backupRestoreDelay,
-       _changeSyncDelay = changeSyncDelay;
+       _changeSyncDelay = changeSyncDelay,
+       _onEventsChanged = onEventsChanged;
 
   static const _legacySyncFileName = 'daily-sync-v1.json';
   static const _settingsFileName = 'daily-sync-v2-settings.json';
@@ -52,6 +54,7 @@ class GoogleDriveSyncService implements SyncService {
   final bool _ownsHttpClient;
   final Duration _backupRestoreDelay;
   final Duration _changeSyncDelay;
+  final Future<void> Function()? _onEventsChanged;
   Future<void>? _syncInFlight;
   StreamSubscription<GoogleDriveAccount?>? _accountSubscription;
   Timer? _changeSyncTimer;
@@ -362,6 +365,15 @@ class GoogleDriveSyncService implements SyncService {
   Future<void> _restore(Map<String, String> authHeaders) async {
     await _restoreSettings(authHeaders, _settingsRepository.load());
     await _restoreAllEvents(authHeaders);
+    await _refreshWidgets();
+  }
+
+  Future<void> _refreshWidgets() async {
+    try {
+      await _onEventsChanged?.call();
+    } on Object {
+      // Widget refresh is best-effort and must not fail account sync.
+    }
   }
 
   Future<void> _backupSettings(

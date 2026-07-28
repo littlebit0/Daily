@@ -20,6 +20,7 @@ import '../settings/settings_repository.dart';
 import '../sync/google_drive_auth_service.dart';
 import '../sync/google_drive_sync_service.dart';
 import '../sync/sync_service.dart';
+import '../widgets/apple_widget_service.dart';
 
 class CalendarRange {
   const CalendarRange(this.start, this.end);
@@ -54,6 +55,13 @@ final eventRepositoryProvider = Provider<EventRepository>((ref) {
   return DriftEventRepository(ref.watch(databaseProvider));
 });
 
+final appleWidgetServiceProvider = Provider<AppleWidgetService>((ref) {
+  return AppleWidgetService(
+    eventRepository: ref.watch(eventRepositoryProvider),
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+  );
+});
+
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   return LocalNotificationService(
     settingsRepository: ref.watch(settingsRepositoryProvider),
@@ -81,6 +89,7 @@ final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
     eventRepository: ref.watch(eventRepositoryProvider),
     notificationService: ref.watch(notificationServiceProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
+    onEventsChanged: ref.watch(appleWidgetServiceProvider).refresh,
   );
   ref.onDispose(service.dispose);
   return service;
@@ -96,6 +105,7 @@ final eventCommandServiceProvider = Provider<EventCommandService>((ref) {
     settingsRepository: ref.watch(settingsRepositoryProvider),
     notificationService: ref.watch(notificationServiceProvider),
     syncService: ref.watch(syncServiceProvider),
+    onEventsChanged: ref.watch(appleWidgetServiceProvider).refresh,
   );
 });
 

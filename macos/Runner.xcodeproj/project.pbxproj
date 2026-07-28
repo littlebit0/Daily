@@ -27,11 +27,21 @@
 		33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F22044A3C60003C045 /* Assets.xcassets */; };
 		33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F42044A3C60003C045 /* MainMenu.xib */; };
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
-		7DDA1B022EBC000100000001 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7DDA1B012EBC000100000001 /* GoogleService-Info.plist */; };
+		71EF19311E011E2DBFCDD240 /* DailyMacWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6FA792B30BF139D3A974B4C3 /* DailyMacWidgets.appex */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
+		7DDA1B022EBC000100000001 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7DDA1B012EBC000100000001 /* GoogleService-Info.plist */; };
+		EA52C5B2E1BD412CFA0D0065 /* DailyWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 609A6B6568DD37F77D02DE96 /* DailyWidgets.swift */; };
+		F2922B7F66E1D16EB8E20128 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7F99C849E34B586D918C3621 /* Cocoa.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		0A4C57859D2BCC79C941DA07 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 33CC10E52044A3C60003C045 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 65B586043F1C72DD427AB6D4;
+			remoteInfo = DailyMacWidgets;
+		};
 		331C80D9294CF71000263BE5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 33CC10E52044A3C60003C045 /* Project object */;
@@ -59,6 +69,17 @@
 			name = "Bundle Framework";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		69C4E48B7B388D47B779D001 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				71EF19311E011E2DBFCDD240 /* DailyMacWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -66,7 +87,7 @@
 		331C80D7294CF71000263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		333000ED22D3DE5D00554162 /* Warnings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Warnings.xcconfig; sourceTree = "<group>"; };
 		335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GeneratedPluginRegistrant.swift; sourceTree = "<group>"; };
-		33CC10ED2044A3C60003C045 /* daily.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "daily.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		33CC10ED2044A3C60003C045 /* daily.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = daily.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		33CC10F02044A3C60003C045 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		33CC10F22044A3C60003C045 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Runner/Assets.xcassets; sourceTree = "<group>"; };
 		33CC10F52044A3C60003C045 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
@@ -78,10 +99,15 @@
 		33E51913231747F40026EE4D /* DebugProfile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DebugProfile.entitlements; sourceTree = "<group>"; };
 		33E51914231749380026EE4D /* Release.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = Release.entitlements; sourceTree = "<group>"; };
 		33E5194F232828860026EE4D /* AppInfo.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AppInfo.xcconfig; sourceTree = "<group>"; };
-		7DDA1B012EBC000100000001 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
-		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
-		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		609A6B6568DD37F77D02DE96 /* DailyWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DailyWidgets.swift; sourceTree = "<group>"; };
+		6B16E45DE37BE0659471FDDE /* DailyMacWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = DailyMacWidgets.entitlements; sourceTree = "<group>"; };
+		6FA792B30BF139D3A974B4C3 /* DailyMacWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DailyMacWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
+		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		7DDA1B012EBC000100000001 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		7F99C849E34B586D918C3621 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		B7623A302B3A8AAE2AC6D2F4 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,6 +123,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D453EF902324A792F9E016F0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F2922B7F66E1D16EB8E20128 /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -130,6 +164,7 @@
 				331C80D6294CF71000263BE5 /* RunnerTests */,
 				33CC10EE2044A3C60003C045 /* Products */,
 				D73912EC22F37F3D000D13A0 /* Frameworks */,
+				69A13448145D02F0035B1667 /* DailyWidgets */,
 			);
 			sourceTree = "<group>";
 		};
@@ -138,6 +173,7 @@
 			children = (
 				33CC10ED2044A3C60003C045 /* daily.app */,
 				331C80D5294CF71000263BE5 /* RunnerTests.xctest */,
+				6FA792B30BF139D3A974B4C3 /* DailyMacWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -179,11 +215,31 @@
 			path = Runner;
 			sourceTree = "<group>";
 		};
+		69A13448145D02F0035B1667 /* DailyWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				609A6B6568DD37F77D02DE96 /* DailyWidgets.swift */,
+				B7623A302B3A8AAE2AC6D2F4 /* Info.plist */,
+				6B16E45DE37BE0659471FDDE /* DailyMacWidgets.entitlements */,
+			);
+			name = DailyWidgets;
+			path = ../apple_widgets;
+			sourceTree = "<group>";
+		};
 		D73912EC22F37F3D000D13A0 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				F0D662B14859C711E9377594 /* OS X */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		F0D662B14859C711E9377594 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				7F99C849E34B586D918C3621 /* Cocoa.framework */,
+			);
+			name = "OS X";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -208,9 +264,6 @@
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 		33CC10EC2044A3C60003C045 /* Runner */ = {
-			packageProductDependencies = (
-				78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */,
-			);
 			isa = PBXNativeTarget;
 			buildConfigurationList = 33CC10FB2044A3C60003C045 /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
@@ -220,24 +273,43 @@
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
 				3A5D66A12C04D5A100A1B2C3 /* Strip Extended Attributes */,
+				69C4E48B7B388D47B779D001 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				33CC11202044C79F0003C045 /* PBXTargetDependency */,
+				0DCF026690410E1A3529B61E /* PBXTargetDependency */,
 			);
 			name = Runner;
+			packageProductDependencies = (
+				78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */,
+			);
 			productName = Runner;
 			productReference = 33CC10ED2044A3C60003C045 /* daily.app */;
 			productType = "com.apple.product-type.application";
+		};
+		65B586043F1C72DD427AB6D4 /* DailyMacWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3B62442C86BB252A85372C1D /* Build configuration list for PBXNativeTarget "DailyMacWidgets" */;
+			buildPhases = (
+				2925ED8A61859CDE937C71AC /* Sources */,
+				D453EF902324A792F9E016F0 /* Frameworks */,
+				D368E142BAA23583771F40C3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DailyMacWidgets;
+			productName = DailyMacWidgets;
+			productReference = 6FA792B30BF139D3A974B4C3 /* DailyMacWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
 		33CC10E52044A3C60003C045 /* Project object */ = {
-			packageReferences = (
-				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */,
-			);
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
@@ -251,13 +323,17 @@
 					};
 					33CC10EC2044A3C60003C045 = {
 						CreatedOnToolsVersion = 9.2;
+						DevelopmentTeam = A6Y73X2ZLS;
 						LastSwiftMigration = 1100;
 						ProvisioningStyle = Automatic;
 						SystemCapabilities = {
-							com.apple.SignInWithApple = {
+							com.apple.ApplicationGroups.mac = {
 								enabled = 1;
 							};
 							com.apple.Sandbox = {
+								enabled = 1;
+							};
+							com.apple.SignInWithApple = {
 								enabled = 1;
 							};
 						};
@@ -265,6 +341,15 @@
 					33CC111A2044C6BA0003C045 = {
 						CreatedOnToolsVersion = 9.2;
 						ProvisioningStyle = Manual;
+					};
+					65B586043F1C72DD427AB6D4 = {
+						DevelopmentTeam = A6Y73X2ZLS;
+						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.mac = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -277,6 +362,9 @@
 				Base,
 			);
 			mainGroup = 33CC10E42044A3C60003C045;
+			packageReferences = (
+				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */,
+			);
 			productRefGroup = 33CC10EE2044A3C60003C045 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -284,6 +372,7 @@
 				33CC10EC2044A3C60003C045 /* Runner */,
 				331C80D4294CF70F00263BE5 /* RunnerTests */,
 				33CC111A2044C6BA0003C045 /* Flutter Assemble */,
+				65B586043F1C72DD427AB6D4 /* DailyMacWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -303,6 +392,13 @@
 				33CC10F32044A3C60003C045 /* Assets.xcassets in Resources */,
 				7DDA1B022EBC000100000001 /* GoogleService-Info.plist in Resources */,
 				33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D368E142BAA23583771F40C3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -327,25 +423,6 @@
 			shellPath = /bin/sh;
 			shellScript = "echo \"$PRODUCT_NAME.app\" > \"$PROJECT_DIR\"/Flutter/ephemeral/.app_filename && \"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh embed\n";
 		};
-		3A5D66A12C04D5A100A1B2C3 /* Strip Extended Attributes */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Strip Extended Attributes";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "APP_PATH=\"$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME\"\nif [ -d \"$APP_PATH\" ]; then\n  /usr/bin/xattr -cr \"$APP_PATH\" || true\n  /usr/sbin/dot_clean -m \"$APP_PATH\" || true\n\n  RESOURCES_PATH=\"$APP_PATH/Contents/Resources\"\n  if [ -d \"$RESOURCES_PATH\" ]; then\n    /usr/bin/find \"$RESOURCES_PATH\" -type d -name '*.bundle' -print0 | while IFS= read -r -d '' RESOURCE_BUNDLE; do\n      RESOURCE_INFO=\"$RESOURCE_BUNDLE/Contents/Info.plist\"\n      if [ -f \"$RESOURCE_INFO\" ] && ! /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' \"$RESOURCE_INFO\" >/dev/null 2>&1; then\n        /bin/rm -rf \"$RESOURCE_BUNDLE/Contents/_CodeSignature\"\n      fi\n    done\n  fi\nfi\n";
-		};
 		33CC111E2044C6BF0003C045 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -366,9 +443,36 @@
 			shellPath = /bin/sh;
 			shellScript = "\"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh && touch Flutter/ephemeral/tripwire";
 		};
+		3A5D66A12C04D5A100A1B2C3 /* Strip Extended Attributes */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Strip Extended Attributes";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "APP_PATH=\"$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME\"\nif [ -d \"$APP_PATH\" ]; then\n  /usr/bin/xattr -cr \"$APP_PATH\" || true\n  /usr/sbin/dot_clean -m \"$APP_PATH\" || true\n\n  RESOURCES_PATH=\"$APP_PATH/Contents/Resources\"\n  if [ -d \"$RESOURCES_PATH\" ]; then\n    /usr/bin/find \"$RESOURCES_PATH\" -type d -name '*.bundle' -print0 | while IFS= read -r -d '' RESOURCE_BUNDLE; do\n      RESOURCE_INFO=\"$RESOURCE_BUNDLE/Contents/Info.plist\"\n      if [ -f \"$RESOURCE_INFO\" ] && ! /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' \"$RESOURCE_INFO\" >/dev/null 2>&1; then\n        /bin/rm -rf \"$RESOURCE_BUNDLE/Contents/_CodeSignature\"\n      fi\n    done\n  fi\nfi\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		2925ED8A61859CDE937C71AC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EA52C5B2E1BD412CFA0D0065 /* DailyWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		331C80D1294CF70F00263BE5 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -390,6 +494,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		0DCF026690410E1A3529B61E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = DailyMacWidgets;
+			target = 65B586043F1C72DD427AB6D4 /* DailyMacWidgets */;
+			targetProxy = 0A4C57859D2BCC79C941DA07 /* PBXContainerItemProxy */;
+		};
 		331C80DA294CF71000263BE5 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 33CC10EC2044A3C60003C045 /* Runner */;
@@ -419,9 +529,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CURRENT_PROJECT_VERSION = 2.7.3;
+				CURRENT_PROJECT_VERSION = 3.0.0;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 2.7.3;
+				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -433,9 +543,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CURRENT_PROJECT_VERSION = 2.7.3;
+				CURRENT_PROJECT_VERSION = 3.0.0;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 2.7.3;
+				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -447,9 +557,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CURRENT_PROJECT_VERSION = 2.7.3;
+				CURRENT_PROJECT_VERSION = 3.0.0;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 2.7.3;
+				MARKETING_VERSION = 3.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -657,8 +767,8 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				PRODUCT_NAME = "Daily Test";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
@@ -699,6 +809,86 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
+		};
+		6F91170755A13487B99B07FE /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ../apple_widgets/DailyMacWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3.0.0;
+				DEVELOPMENT_TEAM = A6Y73X2ZLS;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ../apple_widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 3.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.widgets.macos;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Profile;
+		};
+		CD9DA88C90B50D4BF5B35751 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ../apple_widgets/DailyMacWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3.0.0;
+				DEVELOPMENT_TEAM = A6Y73X2ZLS;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ../apple_widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 3.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.widgets.macos;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		F353F4525202EB318DE557B4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ../apple_widgets/DailyMacWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3.0.0;
+				DEVELOPMENT_TEAM = A6Y73X2ZLS;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ../apple_widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 3.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.widgets.macos;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -743,13 +933,25 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		3B62442C86BB252A85372C1D /* Build configuration list for PBXNativeTarget "DailyMacWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CD9DA88C90B50D4BF5B35751 /* Release */,
+				F353F4525202EB318DE557B4 /* Debug */,
+				6F91170755A13487B99B07FE /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
 /* Begin XCLocalSwiftPackageReference section */
-		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */ = {
+		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage;
 		};
 /* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */ = {
 			isa = XCSwiftPackageProductDependency;

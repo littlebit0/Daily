@@ -1,6 +1,49 @@
 import Cocoa
 import FlutterMacOS
 import UserNotifications
+import WidgetKit
+
+private final class DailyAppleWidgets {
+  static let channelName = "daily/apple_widgets"
+  static let appGroup = "A6Y73X2ZLS.com.littlebit0.daily.widgets"
+  static let snapshotFileName = "daily-widget-snapshot.json"
+
+  static func register(with flutterViewController: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: channelName,
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "updateSnapshot",
+            let snapshot = call.arguments as? [String: Any],
+            JSONSerialization.isValidJSONObject(snapshot) else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      do {
+        let data = try JSONSerialization.data(withJSONObject: snapshot)
+        guard let containerURL = FileManager.default.containerURL(
+          forSecurityApplicationGroupIdentifier: appGroup
+        ) else {
+          NSLog("[DailyWidgets] App Group container is unavailable")
+          result(FlutterError(code: "app_group_unavailable", message: "위젯 공유 저장소를 열 수 없습니다.", details: nil))
+          return
+        }
+        try data.write(
+          to: containerURL.appendingPathComponent(snapshotFileName),
+          options: .atomic
+        )
+        if #available(macOS 11.0, *) {
+          WidgetCenter.shared.reloadAllTimelines()
+        }
+        result(nil)
+      } catch {
+        NSLog("[DailyWidgets] Snapshot update failed: \(error.localizedDescription)")
+        result(FlutterError(code: "widget_snapshot_failed", message: error.localizedDescription, details: nil))
+      }
+    }
+  }
+}
 
 private final class DailyNotificationCenterDelegate: NSObject, UNUserNotificationCenterDelegate {
   static let shared = DailyNotificationCenterDelegate()
@@ -304,6 +347,7 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
     DailyNativeNotifications.register(with: flutterViewController)
     DailyMapLauncher.register(with: flutterViewController)
+    DailyAppleWidgets.register(with: flutterViewController)
     DailyNotificationCenterDelegate.install()
 
     super.awakeFromNib()

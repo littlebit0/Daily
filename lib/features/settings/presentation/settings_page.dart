@@ -21,7 +21,7 @@ import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 import '../../events/presentation/sensitive_event_access.dart';
 
-const _fallbackAppVersion = '2.7.3';
+const _fallbackAppVersion = '3.0.0';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -1200,6 +1200,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       }
       await ref.read(appleSignInServiceProvider).signOut();
       ref.read(appSettingsProvider.notifier).state = AppSettings();
+      unawaited(
+        ref.read(appleWidgetServiceProvider).refresh().catchError((_) {}),
+      );
       if (mounted) {
         setState(() {
           _appleAccount = null;
