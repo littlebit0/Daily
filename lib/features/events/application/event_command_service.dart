@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../../../core/notifications/notification_service.dart';
+import '../../../core/alarms/alarm_service.dart';
 import '../../../core/settings/settings_repository.dart';
 import '../../../core/sync/sync_service.dart';
 import '../../../core/time/korea_time.dart';
@@ -14,6 +15,7 @@ class EventCommandService {
     required EventRepository repository,
     required SettingsRepository settingsRepository,
     required NotificationService notificationService,
+    AlarmService alarmService = const UnsupportedAlarmService(),
     required SyncService syncService,
     Future<void> Function()? onEventsChanged,
     KoreaTime? clock,
@@ -21,6 +23,7 @@ class EventCommandService {
   }) : _repository = repository,
        _settingsRepository = settingsRepository,
        _notificationService = notificationService,
+       _alarmService = alarmService,
        _syncService = syncService,
        _onEventsChanged = onEventsChanged,
        _clock = clock ?? const KoreaTime(),
@@ -29,10 +32,12 @@ class EventCommandService {
   final EventRepository _repository;
   final SettingsRepository _settingsRepository;
   final NotificationService _notificationService;
+  final AlarmService _alarmService;
   final SyncService _syncService;
   final Future<void> Function()? _onEventsChanged;
   final KoreaTime _clock;
   final Uuid _uuid;
+  Future<void> _categoryUpdateTail = Future<void>.value();
 
   Future<CalendarEvent> create(EventDraft draft) async {
     final now = _clock.now();
@@ -59,9 +64,48 @@ class EventCommandService {
       updated,
       allowImmediate: true,
     );
+    await _alarmService.cancelEventAlarm(updated.id);
+    await _alarmService.scheduleEventAlarm(updated);
     await _rescheduleMorningBriefingIfNeeded();
     await _syncService.queueEventUpsert(updated);
     await _refreshWidgets();
+  }
+
+  Future<Set<String>> importBatch(Iterable<CalendarEvent> events) async {
+    final importedIds = <String>{};
+    for (final event in events) {
+      final imported = event
+          .copyWith(updatedAt: _clock.now(), syncStatus: 'pending')
+          .normalizeAllDayBounds();
+      try {
+        await _repository.save(imported);
+      } on Object {
+        continue;
+      }
+
+      importedIds.add(imported.id);
+      try {
+        await _notificationService.scheduleEventReminder(imported);
+      } on Object {
+        // Import must preserve the event even if notification scheduling fails.
+      }
+      try {
+        await _alarmService.scheduleEventAlarm(imported);
+      } on Object {
+        // Imported events do not enable alarms by default; keep this best-effort.
+      }
+      try {
+        await _syncService.queueEventUpsert(imported);
+      } on Object {
+        // The pending sync status lets a later lifecycle sync retry the upload.
+      }
+    }
+
+    if (importedIds.isNotEmpty) {
+      await _rescheduleMorningBriefingIfNeeded();
+      await _refreshWidgets();
+    }
+    return importedIds;
   }
 
   Future<void> delete(String eventId) async {
@@ -72,12 +116,27 @@ class EventCommandService {
       reminderMinutesBeforeList:
           existing?.reminderMinutesBeforeList ?? const [],
     );
+    await _alarmService.cancelEventAlarm(eventId);
     await _rescheduleMorningBriefingIfNeeded();
     await _syncService.queueEventDelete(eventId);
     await _refreshWidgets();
   }
 
   Future<void> updateCategoryUsage({
+    required EventCategory previous,
+    required EventCategory updated,
+  }) {
+    final operation = _categoryUpdateTail.then(
+      (_) => _updateCategoryUsage(previous: previous, updated: updated),
+    );
+    _categoryUpdateTail = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return operation;
+  }
+
+  Future<void> _updateCategoryUsage({
     required EventCategory previous,
     required EventCategory updated,
   }) async {
@@ -91,14 +150,8 @@ class EventCommandService {
     }
 
     for (final event in affected) {
-      await _notificationService.cancelEventReminder(
-        event.id,
-        reminderMinutesBeforeList: event.reminderMinutesBeforeList,
-      );
-      await _notificationService.scheduleEventReminder(event);
       await _syncService.queueEventUpsert(event);
     }
-    await _rescheduleMorningBriefingIfNeeded();
     await _refreshWidgets();
   }
 

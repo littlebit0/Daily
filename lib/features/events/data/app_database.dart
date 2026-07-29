@@ -37,6 +37,9 @@ class EventRecords extends Table {
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();
   BoolColumn get showDday => boolean().withDefault(const Constant(false))();
   BoolColumn get sensitive => boolean().withDefault(const Constant(false))();
+  BoolColumn get alarmEnabled => boolean().withDefault(const Constant(false))();
+  IntColumn get allDayAlarmMinutes =>
+      integer().withDefault(const Constant(9 * 60))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -46,8 +49,10 @@ class EventRecords extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
+  AppDatabase.forTesting(super.executor);
+
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -77,8 +82,26 @@ class AppDatabase extends _$AppDatabase {
             "UPDATE event_records SET reminder_minutes_before_list = '[' || reminder_minutes_before || ']' WHERE reminder_minutes_before IS NOT NULL",
           );
         }
+        if (from < 5) {
+          if (!await _eventRecordsHasColumn('alarm_enabled')) {
+            await migrator.addColumn(eventRecords, eventRecords.alarmEnabled);
+          }
+          if (!await _eventRecordsHasColumn('all_day_alarm_minutes')) {
+            await migrator.addColumn(
+              eventRecords,
+              eventRecords.allDayAlarmMinutes,
+            );
+          }
+        }
       },
     );
+  }
+
+  Future<bool> _eventRecordsHasColumn(String columnName) async {
+    final columns = await customSelect(
+      'PRAGMA table_info(event_records)',
+    ).get();
+    return columns.any((row) => row.read<String>('name') == columnName);
   }
 
   Future<File> databaseFile() async {

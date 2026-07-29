@@ -50,6 +50,8 @@ class SettingsRepository {
   static const _appLockEnabledKey = 'appLockEnabled';
   static const _appLockBiometricsEnabledKey = 'appLockBiometricsEnabled';
   static const _use24HourTimeKey = 'use24HourTime';
+  static const _settingsSyncPendingKey = 'settingsSyncPending';
+  static const _settingsSyncRevisionKey = 'settingsSyncRevision';
   static const _deviceIdKey = 'deviceId';
   static const _appleUserIdentifierKey = 'appleUserIdentifier';
   static const _appleEmailKey = 'appleEmail';
@@ -99,7 +101,7 @@ class SettingsRepository {
     );
   }
 
-  Future<void> save(AppSettings settings) async {
+  Future<void> save(AppSettings settings, {bool markSyncPending = true}) async {
     await _preferences.setString(
       _defaultReminderListKey,
       jsonEncode(settings.defaultReminderMinutesList),
@@ -184,6 +186,26 @@ class SettingsRepository {
       settings.appLockBiometricsEnabled,
     );
     await _preferences.setBool(_use24HourTimeKey, settings.use24HourTime);
+    if (markSyncPending) {
+      await _preferences.setInt(
+        _settingsSyncRevisionKey,
+        settingsSyncRevision + 1,
+      );
+      await _preferences.setBool(_settingsSyncPendingKey, true);
+    }
+  }
+
+  bool get hasPendingSettingsSync =>
+      _preferences.getBool(_settingsSyncPendingKey) ?? false;
+
+  int get settingsSyncRevision =>
+      _preferences.getInt(_settingsSyncRevisionKey) ?? 0;
+
+  Future<void> markSettingsSyncedIfRevision(int revision) async {
+    if (settingsSyncRevision != revision) {
+      return;
+    }
+    await _preferences.setBool(_settingsSyncPendingKey, false);
   }
 
   List<int> _loadDefaultReminderMinutes() {

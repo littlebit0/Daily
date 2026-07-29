@@ -28,6 +28,8 @@ class GoogleDriveAuthService {
 
   static const driveAppDataScope =
       'https://www.googleapis.com/auth/drive.appdata';
+  static const calendarReadonlyScope =
+      'https://www.googleapis.com/auth/calendar.readonly';
   static const scopes = <String>[driveAppDataScope];
   static const _desktopScopes = <String>[
     'openid',
@@ -489,10 +491,35 @@ class GoogleDriveAuthService {
 
   Future<Map<String, String>?> authorizationHeaders({
     bool promptIfNecessary = false,
+  }) => authorizationHeadersForScopes(
+    scopes,
+    promptIfNecessary: promptIfNecessary,
+  );
+
+  Future<Map<String, String>?> authorizationHeadersForScopes(
+    Iterable<String> requestedScopes, {
+    bool promptIfNecessary = false,
   }) async {
     await initialize();
+    final normalizedScopes = requestedScopes
+        .map((scope) => scope.trim())
+        .where((scope) => scope.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedScopes.isEmpty) {
+      return null;
+    }
     if (_usesDesktopOAuth) {
       try {
+        if (promptIfNecessary &&
+            normalizedScopes.any((scope) => !scopes.contains(scope))) {
+          await _signInWithDesktopOAuth(
+            requestedScopes: {
+              ..._desktopScopes,
+              ...normalizedScopes,
+            }.toList(growable: false),
+          );
+        }
         return await _desktopAuthorizationHeaders(
           promptIfNecessary: promptIfNecessary,
         );
@@ -510,6 +537,10 @@ class GoogleDriveAuthService {
       try {
         user = await _attemptLightweightAuthentication();
         _setCurrentUser(user);
+        if (user == null && promptIfNecessary) {
+          await signIn();
+          user = _currentUser;
+        }
       } on Object {
         _setCurrentUser(null);
         if (promptIfNecessary) {
@@ -523,7 +554,10 @@ class GoogleDriveAuthService {
           ? _mobileUserApprovalTimeout
           : _mobileSilentAuthorizationTimeout;
       final headers = await user?.authorizationClient
-          .authorizationHeaders(scopes, promptIfNecessary: promptIfNecessary)
+          .authorizationHeaders(
+            normalizedScopes,
+            promptIfNecessary: promptIfNecessary,
+          )
           .timeout(timeout);
       if (headers == null && promptIfNecessary) {
         _setCurrentUser(null);
@@ -623,14 +657,18 @@ class GoogleDriveAuthService {
       'macOS Google Drive 연결을 사용하려면 keychain sharing entitlement가 필요합니다. '
       '새 빌드에서도 같은 오류가 나면 Apple 개발 팀 서명 설정을 확인해 주세요.';
 
-  Future<GoogleDriveAccount?> _signInWithDesktopOAuth() async {
+  Future<GoogleDriveAccount?> _signInWithDesktopOAuth({
+    List<String> requestedScopes = _desktopScopes,
+  }) async {
     if (_configuredOAuthClientId.isEmpty) {
       throw UnsupportedError(
         'Google Drive 연결 설정이 아직 완료되지 않았습니다. 앱 업데이트 후 다시 시도해 주세요.',
       );
     }
 
-    final codeResponse = await _requestDesktopAuthorizationCode();
+    final codeResponse = await _requestDesktopAuthorizationCode(
+      requestedScopes,
+    );
     final tokens = await _exchangeAuthorizationCode(codeResponse);
     final account = await _fetchDesktopAccount(tokens.accessToken);
     await _saveDesktopSession(tokens, account);
@@ -669,9 +707,11 @@ class GoogleDriveAuthService {
     return {'Authorization': 'Bearer $accessToken'};
   }
 
-  Future<_DesktopCodeResponse> _requestDesktopAuthorizationCode() async {
+  Future<_DesktopCodeResponse> _requestDesktopAuthorizationCode(
+    List<String> requestedScopes,
+  ) async {
     if (Platform.isIOS) {
-      return _requestIosAuthorizationCode();
+      return _requestIosAuthorizationCode(requestedScopes);
     }
     final cancelCompleter = Completer<void>();
     _desktopSignInCancelCompleter = cancelCompleter;
@@ -694,7 +734,7 @@ class GoogleDriveAuthService {
       'client_id': _configuredOAuthClientId,
       'redirect_uri': redirectUri,
       'response_type': 'code',
-      'scope': _desktopScopes.join(' '),
+      'scope': requestedScopes.join(' '),
       'access_type': 'offline',
       'include_granted_scopes': 'true',
       'prompt': 'consent',
@@ -757,7 +797,9 @@ class GoogleDriveAuthService {
     }
   }
 
-  Future<_DesktopCodeResponse> _requestIosAuthorizationCode() async {
+  Future<_DesktopCodeResponse> _requestIosAuthorizationCode(
+    List<String> requestedScopes,
+  ) async {
     final redirectScheme = _configuredIosRedirectScheme;
     if (redirectScheme.isEmpty) {
       throw const GoogleDriveAuthException(
@@ -772,7 +814,7 @@ class GoogleDriveAuthService {
       'client_id': _configuredOAuthClientId,
       'redirect_uri': redirectUri,
       'response_type': 'code',
-      'scope': _desktopScopes.join(' '),
+      'scope': requestedScopes.join(' '),
       'access_type': 'offline',
       'include_granted_scopes': 'true',
       'prompt': 'consent',

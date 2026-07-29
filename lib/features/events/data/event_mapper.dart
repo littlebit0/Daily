@@ -46,6 +46,8 @@ extension EventRecordMapper on EventRecord {
       syncStatus: syncStatus,
       showDday: showDday,
       sensitive: sensitive,
+      alarmEnabled: alarmEnabled,
+      allDayAlarmMinutes: allDayAlarmMinutes,
       holiday: mappedCategory.id == EventCategory.holiday.id,
     ).normalizeAllDayBounds();
   }

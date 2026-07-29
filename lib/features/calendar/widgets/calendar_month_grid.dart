@@ -40,18 +40,33 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
   DateTime? _rangeEnd;
   bool _mouseRangeActive = false;
   bool _longPressRangeActive = false;
+  late List<DateTime> _days;
+  late List<List<DateTime>> _weeks;
+  late Set<DateTime> _holidayDays;
+
+  @override
+  void initState() {
+    super.initState();
+    _rebuildCalendarCache();
+  }
+
+  @override
+  void didUpdateWidget(covariant CalendarMonthGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.month != widget.month ||
+        oldWidget.weekStartsOnMonday != widget.weekStartsOnMonday) {
+      _rebuildDayCache();
+    }
+    if (!identical(oldWidget.events, widget.events)) {
+      _holidayDays = _holidayDaysFor(widget.events);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final days = _visibleDays(widget.month, widget.weekStartsOnMonday);
-    final weeks = List.generate(
-      days.length ~/ 7,
-      (weekIndex) => days.skip(weekIndex * 7).take(7).toList(),
-    );
     final width = MediaQuery.sizeOf(context).width;
     final compact = width < 720;
     final maxFlags = _standardMaxFlagsForWidth(width);
-    final holidayDays = _holidayDays(widget.events);
 
     return Padding(
       padding: compact
@@ -88,7 +103,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                       _longPressRangeActive = false;
                       _startRangeSelection(
                         event.localPosition,
-                        days,
+                        _days,
                         constraints,
                       );
                     },
@@ -98,7 +113,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                       }
                       _updateRangeSelection(
                         event.localPosition,
-                        days,
+                        _days,
                         constraints,
                       );
                     },
@@ -126,7 +141,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                         _longPressRangeActive = true;
                         _startRangeSelection(
                           details.localPosition,
-                          days,
+                          _days,
                           constraints,
                         );
                       },
@@ -136,7 +151,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                         }
                         _updateRangeSelection(
                           details.localPosition,
-                          days,
+                          _days,
                           constraints,
                         );
                       },
@@ -156,7 +171,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                       },
                       child: Column(
                         children: [
-                          for (final week in weeks)
+                          for (final week in _weeks)
                             Expanded(
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -170,7 +185,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                                   weekDays: week,
                                   events: widget.events,
                                   maxFlags: maxFlags,
-                                  holidayDays: holidayDays,
+                                  holidayDays: _holidayDays,
                                   showLunarDates: widget.showLunarDates,
                                   showEventTimes: !compact,
                                   hideSensitiveEvents:
@@ -190,6 +205,20 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
           ),
         ),
       ),
+    );
+  }
+
+  void _rebuildCalendarCache() {
+    _rebuildDayCache();
+    _holidayDays = _holidayDaysFor(widget.events);
+  }
+
+  void _rebuildDayCache() {
+    _days = _visibleDays(widget.month, widget.weekStartsOnMonday);
+    _weeks = List.generate(
+      _days.length ~/ 7,
+      (weekIndex) => _days.sublist(weekIndex * 7, weekIndex * 7 + 7),
+      growable: false,
     );
   }
 
@@ -282,7 +311,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
     );
   }
 
-  Set<DateTime> _holidayDays(List<CalendarEvent> events) {
+  Set<DateTime> _holidayDaysFor(List<CalendarEvent> events) {
     final days = <DateTime>{};
     for (final event in events.where((event) => event.holiday)) {
       var cursor = DateTime(

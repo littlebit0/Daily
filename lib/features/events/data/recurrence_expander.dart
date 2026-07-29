@@ -18,6 +18,15 @@ class RecurrenceExpander {
     final until = event.recurrence.until;
     final maxCount = event.recurrence.count;
 
+    final fastForward = _fastForward(
+      current: current,
+      duration: duration,
+      rangeStart: rangeStart,
+      rule: event.recurrence,
+    );
+    current = fastForward.current;
+    generated = fastForward.skippedOccurrences;
+
     while (current.isBefore(rangeEnd)) {
       generated += 1;
       if (until != null && current.isAfter(until)) {
@@ -48,6 +57,40 @@ class RecurrenceExpander {
     }
 
     return occurrences;
+  }
+
+  _FastForwardResult _fastForward({
+    required DateTime current,
+    required Duration duration,
+    required DateTime rangeStart,
+    required RecurrenceRule rule,
+  }) {
+    final step = switch (rule.frequency) {
+      RecurrenceFrequency.daily => Duration(
+        days: rule.interval < 1 ? 1 : rule.interval,
+      ),
+      RecurrenceFrequency.weekly => Duration(
+        days: 7 * (rule.interval < 1 ? 1 : rule.interval),
+      ),
+      _ => null,
+    };
+    if (step == null) {
+      return _FastForwardResult(current, 0);
+    }
+
+    final earliestRelevantStart = rangeStart.subtract(duration);
+    if (!earliestRelevantStart.isAfter(current)) {
+      return _FastForwardResult(current, 0);
+    }
+
+    final elapsedMicroseconds = earliestRelevantStart
+        .difference(current)
+        .inMicroseconds;
+    final skipped = elapsedMicroseconds ~/ step.inMicroseconds;
+    if (skipped <= 0) {
+      return _FastForwardResult(current, 0);
+    }
+    return _FastForwardResult(current.add(step * skipped), skipped);
   }
 
   DateTime _next(DateTime current, RecurrenceRule rule) {
@@ -96,4 +139,11 @@ class RecurrenceExpander {
   int _daysInMonth(int year, int month) {
     return DateTime(year, month + 1, 0).day;
   }
+}
+
+class _FastForwardResult {
+  const _FastForwardResult(this.current, this.skippedOccurrences);
+
+  final DateTime current;
+  final int skippedOccurrences;
 }

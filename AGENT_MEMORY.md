@@ -2102,3 +2102,339 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Windows agent follow-up: implement and manually verify equivalent Android
   and Windows widgets separately. Do not edit Apple widget targets from the
   Windows workspace unless explicitly requested.
+
+## 2026-07-29 Apple Event Alarms
+
+- Implemented GitHub issue #17 for iOS/iPadOS using Apple's AlarmKit. This is
+  a real system alarm that can ring when Daily is not running; it is not a
+  relabeled local notification.
+- Scope is deliberately limited to a single non-recurring user event:
+  - timed events ring at their start time;
+  - all-day events expose a separate alarm-time picker;
+  - recurring-event alarms are disabled with a message that this behavior will
+    belong to the future Routine feature;
+  - read-only holidays are not schedulable as alarms.
+- Existing event reminders remain available. When an event alarm is enabled,
+  only the exact-start (`0` minute) reminder is replaced by AlarmKit; earlier
+  reminders such as 10 or 30 minutes before are preserved.
+- AlarmKit requests permission on the first iOS app start. On unsupported iOS
+  versions or denied permission, the alarm control is disabled and explains
+  the reason instead of silently falling back to a normal notification.
+- Alarm presentation includes Stop and a 10-minute Snooze action. The alarm
+  title includes the event title and a short memo excerpt. Sensitive events
+  send only `비공개 일정` and never expose their title or memo to AlarmKit.
+- Saving, editing, deleting, Drive-restoring, resetting, and account deletion
+  cancel or reschedule the corresponding native alarm. Alarm settings are
+  persisted in Drift schema version 5 and Google Drive v2 event JSON.
+- Added an AlarmKit Live Activity to the existing iOS widget extension for the
+  snooze countdown. Keep `DailyAlarmMetadata.swift` shared by Runner and
+  DailyWidgets, and keep the iOS `Embed App Extensions` phase before Flutter's
+  `Thin Binary` phase to avoid an Xcode dependency cycle.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`;
+  - full `./tool/flutter.sh test --no-pub` suite (86 tests);
+  - iOS 26.5 simulator debug build with embedded DailyWidgets extension;
+  - macOS debug build, confirming shared Dart changes do not break macOS;
+  - iPhone 17 simulator displayed the real AlarmKit permission prompt;
+  - after allowing permission, the event editor exposed the enabled timed alarm
+    control and the all-day alarm-time picker;
+  - a 03:20 test event rang as a native system alarm while Daily was fully
+    terminated, showing the Daily app name, event title, Snooze, and Stop;
+  - Snooze dismissed the alarm and entered the configured 10-minute snooze;
+  - deleting the test event removed its pending native alarm.
+- The live iOS check also exposed and fixed a pre-existing Flutter time-picker
+  crash at Daily's `0.8` basic text scale. System time pickers now use the
+  standard text scale, and a widget regression test opens their direct-input
+  mode without a constraint exception.
+- Remaining manual verification on a physical iPhone: verify audible alarm
+  sound/vibration, Stop and 10-minute Snooze, and editing/deleting pending
+  alarms. The simulator verified UI and scheduling behavior but cannot replace
+  a physical-device audio test.
+- Added the equivalent behavior supported by macOS through
+  `UNUserNotificationCenter`. AlarmKit itself is unavailable on macOS, so this
+  is a scheduled native macOS notification rather than an imitation AlarmKit
+  interface:
+  - it is scheduled for a timed event's start or an all-day event's selected
+    alarm time and remains deliverable after Daily exits;
+  - it uses the default alert sound and the time-sensitive interruption level;
+  - its notification category exposes `10분 후 다시 알림` and `중지` actions;
+  - Snooze removes the delivered notification and schedules the same content
+    again in 10 minutes;
+  - event edits, deletes, reset, and account deletion use the same cancel and
+    reschedule path as iOS.
+- The macOS event editor describes this platform-specific behavior instead of
+  implying that it will show iOS AlarmKit's persistent full-screen alarm UI.
+- A live macOS test exposed a partially completed schema-4-to-5 migration where
+  `alarm_enabled` existed but SQLite's user version had not advanced. Migration
+  5 now checks `PRAGMA table_info(event_records)` before adding each alarm
+  column, preserving data and repairing the migration on the next launch.
+- macOS native build, platform-channel wiring, editor rendering, and the
+  partial-migration regression were verified locally. Android and Windows
+  still show the feature as unsupported and need separate native designs if
+  those platforms are brought into scope later.
+- Final verification after adding macOS support:
+  - `./tool/flutter.sh analyze --no-pub` passed;
+  - the full Flutter suite passed with 89 tests;
+  - macOS debug build passed with the native notification channel;
+  - iOS simulator debug build passed, preserving the existing AlarmKit path;
+  - the macOS editor reported notification authorization as available and two
+    future alarms saved without a platform-channel error;
+  - no notification banner was visible in the GUI snapshots after terminating
+    both the production and test Daily processes. Treat audible delivery and
+    the delivered Notification Center entry/actions as still requiring a
+    manual macOS check; do not claim that portion as verified until observed.
+
+## 2026-07-29 Calendar Data Import (GitHub Issue #29)
+
+- Added `설정 > 달력 > 캘린더 데이터 옮기기` on iOS/iPadOS and Android.
+- iOS/iPadOS imports Apple Calendar data through EventKit after requesting full
+  calendar access. Google-backed EventKit calendars are excluded from this
+  source so the same events are not also imported through Google Calendar API.
+- Android imports Samsung Calendar data through `CalendarContract` after
+  requesting `READ_CALENDAR`. The provider filter includes Samsung and Samsung
+  local calendar accounts and excludes Google accounts.
+- Google Calendar import is available on both platforms. It reuses the signed-in
+  Google account when possible and requests the additional
+  `calendar.readonly` OAuth scope only when the user opens the Google import
+  source. Existing Drive AppData authorization remains included when the OAuth
+  grant is refreshed.
+- Users first load a source, select one or more calendars, and then import them.
+  Imported data includes title, memo, location, URL, start/end, all-day state,
+  supported recurrence interval/end/count, source calendar color, and popup or
+  alert reminder minutes.
+- Imported source events receive deterministic IDs based on provider, calendar,
+  and source event ID. Re-importing skips an event already imported into Daily
+  and does not overwrite later user edits.
+- Import saves events in a batch: per-event notifications and sync upserts are
+  scheduled, while morning briefing and WidgetKit refresh run only once after
+  the batch. This avoids repeated full refresh work on large calendars.
+- Verification completed on this Mac:
+  - `./tool/flutter.sh analyze --no-pub` passed;
+  - full Flutter test suite passed with 96 tests;
+  - 7 focused calendar import tests passed;
+  - iOS simulator debug build passed and was installed/launched on the existing
+    iPhone 17 simulator.
+- Required external configuration before production Google import testing:
+  enable Google Calendar API for the production Google Cloud project and ensure
+  the OAuth consent configuration permits
+  `https://www.googleapis.com/auth/calendar.readonly`.
+- Android SDK is not installed in this Mac workspace, so the Android APK could
+  not be compiled here. A Windows/Android agent must build and manually verify:
+  Samsung calendar discovery on a physical Samsung device, runtime permission
+  denial/retry, timed and all-day event conversion, alert preservation, Google
+  account consent, large imports, and duplicate re-import behavior.
+
+## 2026-07-29 Active Platform And Test Install Rules
+
+- From this point forward, this Mac agent must not edit Android or Windows
+  implementation files. Work only on iOS/iPadOS, macOS, and shared code whose
+  Apple-platform effects are intended by the user.
+- Keep exactly one installed macOS test app at
+  `/Users/kimhwi/Applications/Daily Test.app`. Before a future update, remove
+  stray `Daily Test` previous/failed/partial copies and other Daily alarm test
+  apps, then replace this one target with the new build so its external app data
+  container remains available. Launch only when the user explicitly requests
+  it.
+- For the current iPhone simulator request, install the new build only. Do not
+  launch it; the user will perform the launch and test manually.
+
+## 2026-07-29 Imported Categories And Category Visibility
+
+- Calendar import now creates one Daily category per selected source calendar.
+  The category preserves the source calendar title and color, and every event
+  imported from that calendar is assigned to it.
+- Imported category IDs are deterministic from provider plus source calendar
+  ID. Calendars with the same visible title remain separate when their source
+  IDs or providers differ. Re-import preserves a category name or color that
+  the user has subsequently customized in Daily.
+- Category add/edit keeps the existing preset palette and adds one standalone
+  rainbow palette icon without a labeled chip or visible button box. It opens
+  an interactive color picker with a draggable saturation/value field and hue
+  strip while retaining exact 0-255 red, green, and blue sliders and inputs.
+- Every category row in Settings now has a calendar visibility checkbox.
+  Clearing it stores the category ID in `hiddenCategoryIds`; month, week, day,
+  quick view, search, and Apple widget snapshot filtering use this same setting.
+  Deleting a category also removes its obsolete hidden-category ID.
+- This work intentionally did not edit Android or Windows implementation files,
+  following the active platform boundary requested by the user.
+- Verification passed with `./tool/flutter.sh analyze --no-pub`, the full 97-test
+  Flutter suite, an iOS simulator debug build, and a macOS debug build. The new
+  builds were subsequently installed as updates to the single macOS test app
+  and the existing iPhone 17 simulator app. Neither app was launched.
+- After the interactive picker update, all 97 tests and both Apple debug builds
+  passed again. `/Users/kimhwi/Applications/Daily Test.app` and the existing
+  iPhone 17 simulator were updated without launching. The generated macOS Debug
+  app was moved to Trash after installation so only one installed test app
+  remains discoverable outside Trash.
+
+## 2026-07-29 Category Color Race Fix
+
+- Investigated intermittent cases where one or a few events retained an older
+  category color after consecutive category edits. The event table update was
+  already batched, but an in-flight Google Drive restore could save its earlier
+  per-event snapshot after the local category update and overwrite only the
+  events reached later in that restore loop.
+- Google Drive restore now re-reads each local event immediately before saving
+  a restored snapshot. A newer local event, or a different locally pending
+  revision, is preserved and queued for upload instead of being overwritten.
+- Category-wide event updates are serialized so a previous color change cannot
+  finish after a newer one. The full settings backup triggered by category edit
+  now starts only after all affected event records and sync queues are updated.
+- Added a regression test that injects a newer local category color between the
+  restore merge and final event save; the newer color and pending sync state are
+  retained.
+- Verification passed with `./tool/flutter.sh analyze --no-pub`, all 98 Flutter
+  tests, an iOS simulator debug build, and a macOS debug build. The apps were
+  not installed or launched during this investigation.
+
+## 2026-07-29 Category Settings UI Correction
+
+- Replaced the custom RGB palette icon with the same circular `ChoiceChip`
+  shape used by the preset colors. Its circle uses a rainbow sweep gradient and
+  has no palette glyph or separate rectangular icon-button treatment.
+- The dark-screen freeze was reproduced in a widget test. `AlertDialog` asks
+  for intrinsic dimensions, but the picker's nested `LayoutBuilder` cannot
+  provide them, so Flutter added the modal barrier and then failed before
+  painting the dialog body. Both picker regions now receive a precomputed,
+  bounded width and contain no `LayoutBuilder`. Keyboard focus is also released
+  before opening the picker.
+- Moved each category visibility checkbox to the far-left leading position,
+  before the category color dot. Edit, delete, and lock actions remain at the
+  right.
+- Added a regression test that opens category edit, taps the rainbow choice,
+  and verifies the RGB dialog title and all three channel controls render.
+  `./tool/flutter.sh analyze --no-pub` and all 99 Flutter tests passed. Fresh
+  iOS simulator and macOS debug builds passed. The existing iPhone 17 simulator
+  app and `/Users/kimhwi/Applications/Daily Test.app` were updated in place;
+  neither was launched after installation.
+
+## 2026-07-29 Unified Category Color Palette
+
+- Replaced the separate saturation/value board and hue strip with one
+  integrated color palette. Horizontal movement selects hue; vertical movement
+  moves from white through the vivid hue to black.
+- Exact RGB sliders and numeric inputs remain available below the palette.
+- The RGB picker regression test now verifies that exactly one integrated
+  palette is rendered, preventing the two-board layout from returning.
+- `./tool/flutter.sh analyze --no-pub` and all 99 Flutter tests passed. Fresh
+  iOS simulator and macOS debug builds passed. The existing iPhone 17 simulator
+  app and `/Users/kimhwi/Applications/Daily Test.app` were updated; neither app
+  was launched after installation.
+- All preset and custom rainbow color choices now use an explicit `40 x 40`
+  footprint with a circular button surface and circular selection state. The
+  circular swatch artwork remains unchanged. The widget regression test verifies
+  equal width and height, `CircleBorder`, and disabled checkmarks for every
+  category color choice. Analysis and the focused widget test passed; fresh iOS
+  simulator and macOS debug builds were installed without launching either app.
+
+## 2026-07-29 Performance Optimization Pass
+
+- Calendar range queries now filter unrelated one-time events in SQLite before
+  mapping and recurrence expansion. A regression fixture with 120 historical
+  events reduced recurrence-expander inputs from 122 records to the two records
+  that can affect the requested month.
+- Old daily and weekly recurrences now fast-forward directly to the first
+  potentially visible occurrence while preserving recurrence count semantics.
+  Monthly and yearly recurrence behavior was intentionally left unchanged.
+- Solar-to-lunar conversions use a bounded 512-entry cache. The month grid also
+  retains its visible-day, week, and holiday calculations across internal
+  selection rebuilds.
+- Category label/color updates no longer cancel and recreate every affected OS
+  notification or morning briefing. Those values do not affect notification
+  timing or content. Event sync queueing and Apple widget refresh remain intact.
+- Apple widget refresh requests are coalesced while a refresh is in flight, and
+  month events are grouped by date once instead of rescanning the full event
+  list for all 42 cells.
+- Verification passed with `./tool/flutter.sh analyze --no-pub`, all 103 Flutter
+  tests, an iOS simulator debug build, and a macOS debug build. The existing
+  iPhone 17 simulator app and `/Users/kimhwi/Applications/Daily Test.app` were
+  updated; neither app was launched after installation.
+
+## 2026-07-29 macOS Google Session Validation
+
+- Investigated a macOS state where Settings still displayed the linked Google
+  email, but automatic backup did not run and `지금 동기화` opened Google login.
+  The Daily account-provider metadata had survived, while no usable Google
+  OAuth session was available to authorize Drive AppData requests.
+- Settings now treats linked account metadata and an authenticated Google Drive
+  session as separate states. Startup attempts only a silent session restore
+  and validates authorization headers without opening an interactive login.
+- When metadata exists but the session is missing or invalid, Settings keeps
+  the linked email visible, explains that authentication is required, and shows
+  `Google 다시 연결` instead of the misleading `지금 동기화` action. Automatic
+  synchronization resumes after one successful explicit reconnection.
+- Added a widget regression test for linked Google metadata with unavailable
+  authorization headers. Analysis passed, all 104 Flutter tests passed, and a
+  new macOS debug build was installed at
+  `/Users/kimhwi/Applications/Daily Test.app`.
+- The first reconnection attempt reached Google's callback but token exchange
+  failed because the latest local macOS build had not been compiled with the
+  Desktop OAuth client secret required by this configured Google client.
+- `tool/flutter.sh` now detects macOS build/run commands and, when no explicit
+  secret was supplied, reads the existing user-only
+  `~/Library/Application Support/Daily/google_desktop_oauth.json` with `plutil`
+  and injects the credential as a Dart define. The value is never printed or
+  committed. An explicitly supplied secret continues to take priority.
+- Rebuilt and replaced `/Users/kimhwi/Applications/Daily Test.app`. The stored
+  Google refresh token then restored silently, automatic sync completed, and a
+  full app restart again restored the session without showing Google login.
+  The GUI showed a new successful-sync timestamp and all 76 local event rows
+  had `sync_status = synced` with no pending rows.
+
+## 2026-07-29 Google Drive Backup and Restore Queue Fix
+
+- Investigated macOS and iOS reports that backup/restore appeared to run
+  indefinitely or did not apply. The shared synchronization queue returned the
+  currently running request's future to later callers, so `지금 동기화` could
+  report completion before its own queued backup/restore had executed.
+- Every sync caller now waits for its own request. Equivalent pending restore,
+  settings-backup, event-backup, and full-sync requests are coalesced, including
+  all callers' completion futures, so lifecycle restores cannot create an
+  unbounded duplicate queue.
+- A settings backup no longer uploads every event. It uploads only the settings
+  file; event creation, update, deletion, and conflict reconciliation upload
+  only their pending event IDs. Manual full sync still performs backup first,
+  waits the required three seconds, and then restores.
+- Restore now processes only events actually downloaded from Drive. Local-only
+  pending events are no longer incorrectly marked synced before upload. A local
+  event newer than its remote copy is queued for one conflict-reconciliation
+  upload, while an identical remote snapshot skips database writes and all
+  notification/alarm cancellation and rescheduling.
+- The existing Mac account exposed 42 locally newer events that the prior merge
+  had incorrectly left marked synced. The corrected build uploaded them once;
+  all 76 local rows are now synced. After that reconciliation, a real manual
+  backup, three-second gap, and 76-file restore check completed in 17.8 seconds
+  and updated the successful-sync timestamp.
+- Verification passed with static analysis, all 107 Flutter tests, a macOS debug
+  build, and an iOS simulator debug build. The final macOS build replaced
+  `/Users/kimhwi/Applications/Daily Test.app` and passed real-account sync. The
+  iOS build was installed as an update on the existing iPhone 17 simulator and
+  was not launched.
+
+## 2026-07-29 Category Color Sync Consistency Fix
+
+- Investigated category colors that changed correctly on the editing device but
+  did not remain consistent through Google Drive synchronization. Category
+  definitions live in the settings file while every event also stores its own
+  category color, and the prior category-edit path uploaded those two snapshots
+  through separate asynchronous requests.
+- Local settings now persist a sync-pending flag and monotonically increasing
+  revision. A restore cannot replace a locally pending category/settings edit
+  with an older remote settings file, and an upload only clears the pending flag
+  when the uploaded snapshot still matches the latest local revision.
+- Category add, edit, and delete now queue one pending-change backup after all
+  local category/event mutations finish. That backup uploads affected event
+  files first and the matching settings snapshot last, so repeated color edits
+  converge on the final selected color rather than mixing revisions.
+- Normal pending-change startup/exit synchronization now includes pending
+  settings even when there are no pending events. Existing event merge logic
+  still detects remotely stale event colors and queues those event IDs for a
+  corrective upload.
+- Added regression coverage proving that an event file and settings file upload
+  the same final category color and that restore preserves a locally pending
+  category color. Static analysis and all 109 Flutter tests passed.
+- Fresh macOS and iOS simulator debug builds passed. The macOS build replaced
+  `/Users/kimhwi/Applications/Daily Test.app`; a real-account manual sync
+  completed successfully and left all 76 local records synced with category
+  colors matching their definitions. The iOS build updated the existing iPhone
+  17 simulator app without launching it.

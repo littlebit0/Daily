@@ -4,6 +4,10 @@ import UIKit
 import UserNotifications
 import WidgetKit
 import flutter_local_notifications
+import AlarmKit
+import SwiftUI
+import CryptoKit
+import EventKit
 
 private final class DailyAppleWidgets {
   static let channelName = "daily/apple_widgets"
@@ -37,6 +41,190 @@ private final class DailyAppleWidgets {
         result(FlutterError(code: "widget_snapshot_failed", message: error.localizedDescription, details: nil))
       }
     }
+  }
+}
+
+private final class DailyCalendarImport {
+  static let channelName = "daily/calendar_import"
+  private static let store = EKEventStore()
+
+  static func register(with binaryMessenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: channelName, binaryMessenger: binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "listCalendars":
+        withAccess(result) { result(calendars()) }
+      case "loadEvents":
+        guard let arguments = call.arguments as? [String: Any],
+              let calendarIds = arguments["calendarIds"] as? [String] else {
+          result(FlutterError(code: "bad_arguments", message: "가져올 캘린더를 선택해 주세요.", details: nil))
+          return
+        }
+        withAccess(result) { result(events(calendarIds: Set(calendarIds))) }
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  private static func withAccess(
+    _ result: @escaping FlutterResult,
+    operation: @escaping () -> Void
+  ) {
+    let status = EKEventStore.authorizationStatus(for: .event)
+    if status == .authorized {
+      operation()
+      return
+    }
+    if #available(iOS 17.0, *), status == .fullAccess {
+      operation()
+      return
+    }
+    let hasInsufficientAccess: Bool
+    if #available(iOS 17.0, *) {
+      hasInsufficientAccess = status == .denied || status == .restricted || status == .writeOnly
+    } else {
+      hasInsufficientAccess = status == .denied || status == .restricted
+    }
+    if hasInsufficientAccess {
+      result(FlutterError(
+        code: "calendar_permission_denied",
+        message: "설정에서 Daily의 캘린더 전체 접근을 허용해 주세요.",
+        details: nil
+      ))
+      return
+    }
+    if #available(iOS 17.0, *) {
+      store.requestFullAccessToEvents { granted, error in
+        DispatchQueue.main.async {
+          finishAccess(granted: granted, error: error, result: result, operation: operation)
+        }
+      }
+    } else {
+      store.requestAccess(to: .event) { granted, error in
+        DispatchQueue.main.async {
+          finishAccess(granted: granted, error: error, result: result, operation: operation)
+        }
+      }
+    }
+  }
+
+  private static func finishAccess(
+    granted: Bool,
+    error: Error?,
+    result: @escaping FlutterResult,
+    operation: @escaping () -> Void
+  ) {
+    if let error = error {
+      result(FlutterError(code: "calendar_permission_failed", message: error.localizedDescription, details: nil))
+    } else if granted {
+      operation()
+    } else {
+      result(FlutterError(code: "calendar_permission_denied", message: "캘린더 접근이 허용되지 않았습니다.", details: nil))
+    }
+  }
+
+  private static func calendars() -> [[String: Any]] {
+    store.calendars(for: .event)
+      .filter { calendar in
+        calendar.type != .birthday && !isGoogleSource(calendar.source)
+      }
+      .map { calendar in
+        [
+          "id": calendar.calendarIdentifier,
+          "title": calendar.title,
+          "accountName": calendar.source.title,
+          "colorValue": colorValue(calendar.cgColor),
+        ]
+      }
+  }
+
+  private static func events(calendarIds: Set<String>) -> [[String: Any]] {
+    let selected = store.calendars(for: .event).filter {
+      calendarIds.contains($0.calendarIdentifier) && !isGoogleSource($0.source)
+    }
+    guard !selected.isEmpty else { return [] }
+    let start = Calendar(identifier: .gregorian).date(from: DateComponents(year: 1970, month: 1, day: 1))!
+    let end = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2101, month: 1, day: 1))!
+    let predicate = store.predicateForEvents(withStart: start, end: end, calendars: selected)
+    var seen = Set<String>()
+    var values: [[String: Any]] = []
+    for event in store.events(matching: predicate).sorted(by: { $0.startDate < $1.startDate }) {
+      let sourceId = event.calendarItemIdentifier
+      guard !sourceId.isEmpty, seen.insert(sourceId).inserted else { continue }
+      var value: [String: Any] = [
+        "sourceId": sourceId,
+        "calendarId": event.calendar.calendarIdentifier,
+        "title": event.title ?? "제목 없음",
+        "startMilliseconds": Int64(event.startDate.timeIntervalSince1970 * 1000),
+        "endMilliseconds": Int64(event.endDate.timeIntervalSince1970 * 1000),
+        "allDay": event.isAllDay,
+      ]
+      if let notes = event.notes, !notes.isEmpty { value["memo"] = notes }
+      if let location = event.location, !location.isEmpty { value["location"] = location }
+      if let url = event.url?.absoluteString { value["url"] = url }
+      if let rule = event.recurrenceRules?.first, let rrule = recurrenceValue(rule) {
+        value["recurrenceRule"] = rrule
+      }
+      let reminderMinutes = Set((event.alarms ?? []).compactMap { alarm -> Int? in
+        let secondsBefore: TimeInterval
+        if let absoluteDate = alarm.absoluteDate {
+          secondsBefore = event.startDate.timeIntervalSince(absoluteDate)
+        } else {
+          secondsBefore = -alarm.relativeOffset
+        }
+        guard secondsBefore >= 0 else { return nil }
+        return Int((secondsBefore / 60).rounded())
+      }).sorted()
+      if !reminderMinutes.isEmpty {
+        value["reminderMinutesBeforeList"] = reminderMinutes
+      }
+      values.append(value)
+    }
+    return values
+  }
+
+  private static func recurrenceValue(_ rule: EKRecurrenceRule) -> String? {
+    let frequency: String
+    switch rule.frequency {
+    case .daily: frequency = "DAILY"
+    case .weekly: frequency = "WEEKLY"
+    case .monthly: frequency = "MONTHLY"
+    case .yearly: frequency = "YEARLY"
+    @unknown default: return nil
+    }
+    var fields = ["FREQ=\(frequency)", "INTERVAL=\(max(rule.interval, 1))"]
+    if let count = rule.recurrenceEnd?.occurrenceCount, count > 0 {
+      fields.append("COUNT=\(count)")
+    } else if let date = rule.recurrenceEnd?.endDate {
+      let formatter = DateFormatter()
+      formatter.calendar = Calendar(identifier: .gregorian)
+      formatter.locale = Locale(identifier: "en_US_POSIX")
+      formatter.timeZone = TimeZone(secondsFromGMT: 0)
+      formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+      fields.append("UNTIL=\(formatter.string(from: date))")
+    }
+    return "RRULE:" + fields.joined(separator: ";")
+  }
+
+  private static func isGoogleSource(_ source: EKSource) -> Bool {
+    let title = source.title.lowercased()
+    return title.contains("google") || title.contains("gmail")
+  }
+
+  private static func colorValue(_ color: CGColor) -> Int64 {
+    let uiColor = UIColor(cgColor: color)
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+    var alpha: CGFloat = 0
+    guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+      return Int64(0xff2563eb)
+    }
+    return Int64(round(alpha * 255)) << 24 |
+      Int64(round(red * 255)) << 16 |
+      Int64(round(green * 255)) << 8 |
+      Int64(round(blue * 255))
   }
 }
 
@@ -237,6 +425,212 @@ private final class DailyNativeNotifications {
   }
 }
 
+private final class DailyAlarmKit {
+  static let channelName = "daily/alarm_kit"
+
+  static func register(with binaryMessenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: channelName, binaryMessenger: binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "authorizationState":
+        result(authorizationStateName())
+      case "requestAuthorization":
+        requestAuthorization(result)
+      case "schedule":
+        schedule(call, result)
+      case "cancel":
+        cancel(call, result)
+      case "cancelAll":
+        cancelAll(result)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  private static func authorizationStateName() -> String {
+    guard #available(iOS 26.0, *) else { return "unsupported" }
+    return stateName(AlarmManager.shared.authorizationState)
+  }
+
+  private static func requestAuthorization(_ result: @escaping FlutterResult) {
+    guard #available(iOS 26.0, *) else {
+      result("unsupported")
+      return
+    }
+    let current = AlarmManager.shared.authorizationState
+    guard current == .notDetermined else {
+      result(stateName(current))
+      return
+    }
+    Task { @MainActor in
+      do {
+        result(stateName(try await AlarmManager.shared.requestAuthorization()))
+      } catch {
+        result(FlutterError(code: "alarm_authorization_failed", message: error.localizedDescription, details: nil))
+      }
+    }
+  }
+
+  private static func schedule(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+    guard #available(iOS 26.0, *) else {
+      result(FlutterError(code: "unsupported", message: "이 iOS 버전에서는 일정 알람을 사용할 수 없습니다.", details: nil))
+      return
+    }
+    guard let arguments = call.arguments as? [String: Any],
+          let eventID = arguments["eventId"] as? String,
+          !eventID.isEmpty,
+          let title = arguments["title"] as? String,
+          let fireAtMilliseconds = int64Value(arguments["fireAtMilliseconds"]),
+          let snoozeMinutes = intValue(arguments["snoozeMinutes"]) else {
+      result(FlutterError(code: "bad_arguments", message: "일정 알람 정보가 올바르지 않습니다.", details: nil))
+      return
+    }
+    let id = alarmID(for: eventID)
+    guard AlarmManager.shared.authorizationState == .authorized else {
+      result(FlutterError(code: "alarm_permission_denied", message: "Daily의 알람 권한이 허용되지 않았습니다.", details: nil))
+      return
+    }
+
+    let memo = (arguments["memo"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let visibleMemo = memo.flatMap { $0.isEmpty ? nil : String($0.prefix(80)) }
+    let displayTitle = visibleMemo.map { "\(title)\n\($0)" } ?? title
+    let fireDate = Date(timeIntervalSince1970: Double(fireAtMilliseconds) / 1000)
+    guard fireDate > Date() else {
+      result(nil)
+      return
+    }
+
+    Task { @MainActor in
+      do {
+        try? AlarmManager.shared.cancel(id: id)
+        let secondaryButton = AlarmButton(
+          text: "\(snoozeMinutes)분 후 다시 알림",
+          textColor: .white,
+          systemImageName: "clock.arrow.circlepath"
+        )
+        let alert: AlarmPresentation.Alert
+        if #available(iOS 26.1, *) {
+          alert = AlarmPresentation.Alert(
+            title: LocalizedStringResource(stringLiteral: displayTitle),
+            secondaryButton: secondaryButton,
+            secondaryButtonBehavior: .countdown
+          )
+        } else {
+          let stopButton = AlarmButton(
+            text: "중지",
+            textColor: .white,
+            systemImageName: "stop.circle"
+          )
+          alert = AlarmPresentation.Alert(
+            title: LocalizedStringResource(stringLiteral: displayTitle),
+            stopButton: stopButton,
+            secondaryButton: secondaryButton,
+            secondaryButtonBehavior: .countdown
+          )
+        }
+        let countdown = AlarmPresentation.Countdown(
+          title: "다시 알림까지",
+          pauseButton: nil
+        )
+        let metadata = DailyAlarmMetadata(title: title, memo: visibleMemo)
+        let attributes = AlarmAttributes(
+          presentation: AlarmPresentation(alert: alert, countdown: countdown),
+          metadata: metadata,
+          tintColor: Color(red: 0.15, green: 0.39, blue: 0.92)
+        )
+        let configuration = AlarmManager.AlarmConfiguration(
+          countdownDuration: Alarm.CountdownDuration(
+            preAlert: nil,
+            postAlert: TimeInterval(snoozeMinutes * 60)
+          ),
+          schedule: .fixed(fireDate),
+          attributes: attributes,
+          sound: .default
+        )
+        _ = try await AlarmManager.shared.schedule(id: id, configuration: configuration)
+        result(nil)
+      } catch {
+        result(FlutterError(code: "alarm_schedule_failed", message: error.localizedDescription, details: nil))
+      }
+    }
+  }
+
+  private static func cancel(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+    guard #available(iOS 26.0, *) else {
+      result(nil)
+      return
+    }
+    guard let arguments = call.arguments as? [String: Any],
+          let eventID = arguments["eventId"] as? String,
+          !eventID.isEmpty else {
+      result(FlutterError(code: "bad_arguments", message: "일정 알람 ID가 올바르지 않습니다.", details: nil))
+      return
+    }
+    let id = alarmID(for: eventID)
+    do {
+      try AlarmManager.shared.cancel(id: id)
+      result(nil)
+    } catch {
+      // AlarmKit removes completed one-shot alarms, so an absent ID is already cancelled.
+      result(nil)
+    }
+  }
+
+  private static func cancelAll(_ result: @escaping FlutterResult) {
+    guard #available(iOS 26.0, *) else {
+      result(nil)
+      return
+    }
+    do {
+      for alarm in try AlarmManager.shared.alarms {
+        try? AlarmManager.shared.cancel(id: alarm.id)
+      }
+      result(nil)
+    } catch {
+      result(FlutterError(code: "alarm_cancel_failed", message: error.localizedDescription, details: nil))
+    }
+  }
+
+  @available(iOS 26.0, *)
+  private static func stateName(_ state: AlarmManager.AuthorizationState) -> String {
+    switch state {
+    case .authorized: return "authorized"
+    case .denied: return "denied"
+    case .notDetermined: return "notDetermined"
+    @unknown default: return "unsupported"
+    }
+  }
+
+  private static func intValue(_ value: Any?) -> Int? {
+    if let value = value as? Int { return value }
+    if let value = value as? NSNumber { return value.intValue }
+    return nil
+  }
+
+  private static func alarmID(for eventID: String) -> UUID {
+    if let id = UUID(uuidString: eventID) {
+      return id
+    }
+    var bytes = Array(SHA256.hash(data: Data(eventID.utf8)).prefix(16))
+    bytes[6] = (bytes[6] & 0x0f) | 0x50
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    return UUID(uuid: (
+      bytes[0], bytes[1], bytes[2], bytes[3],
+      bytes[4], bytes[5], bytes[6], bytes[7],
+      bytes[8], bytes[9], bytes[10], bytes[11],
+      bytes[12], bytes[13], bytes[14], bytes[15]
+    ))
+  }
+
+  private static func int64Value(_ value: Any?) -> Int64? {
+    if let value = value as? Int64 { return value }
+    if let value = value as? Int { return Int64(value) }
+    if let value = value as? NSNumber { return value.int64Value }
+    return nil
+  }
+}
+
 private final class DailyMapLauncher {
   static let channelName = "daily/map_launcher"
 
@@ -356,6 +750,9 @@ private final class DailyMapLauncher {
     if let registrar = registrar(forPlugin: "DailyNativeNotifications") {
       DailyNativeNotifications.register(with: registrar.messenger())
     }
+    if let registrar = registrar(forPlugin: "DailyAlarmKit") {
+      DailyAlarmKit.register(with: registrar.messenger())
+    }
     if let registrar = registrar(forPlugin: "DailyGoogleOAuthSession") {
       googleOAuthSession.register(with: registrar.messenger())
     }
@@ -364,6 +761,9 @@ private final class DailyMapLauncher {
     }
     if let registrar = registrar(forPlugin: "DailyAppleWidgets") {
       DailyAppleWidgets.register(with: registrar.messenger())
+    }
+    if let registrar = registrar(forPlugin: "DailyCalendarImport") {
+      DailyCalendarImport.register(with: registrar.messenger())
     }
     return launched
   }

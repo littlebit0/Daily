@@ -1,7 +1,9 @@
+import 'package:daily/core/alarms/alarm_service.dart';
 import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_category.dart';
 import 'package:daily/features/events/domain/event_draft.dart';
 import 'package:daily/features/events/presentation/event_editor_dialog.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -135,17 +137,124 @@ void main() {
 
     expect(savedDraft!.reminderMinutesBeforeList, [10, 30, 60]);
   });
+
+  testWidgets('saves AlarmKit selection for a single event', (tester) async {
+    EventDraft? savedDraft;
+    await tester.pumpWidget(
+      _DialogHost(
+        builder: (context) => EventEditorDialog(
+          initialDate: DateTime.now().add(const Duration(days: 1)),
+          alarmService: const _AuthorizedAlarmService(),
+        ),
+        onSaved: (draft) => savedDraft = draft,
+      ),
+    );
+
+    await tester.tap(find.text('열기'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '알람 일정');
+    await tester.ensureVisible(find.text('일정 알람'));
+    await tester.tap(find.text('일정 알람'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+
+    expect(savedDraft?.alarmEnabled, isTrue);
+  });
+
+  testWidgets('time picker input mode works with the basic text scale', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _DialogHost(
+        textScaler: const TextScaler.linear(0.8),
+        builder: (context) =>
+            EventEditorDialog(initialDate: DateTime(2026, 5, 28)),
+        onSaved: (_) {},
+      ),
+    );
+
+    await tester.tap(find.text('열기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('9:00 AM'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.keyboard_outlined));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Enter time'), findsOneWidget);
+  });
+
+  testWidgets('macOS editor exposes the system notification alarm control', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    try {
+      await tester.pumpWidget(
+        _DialogHost(
+          builder: (context) => EventEditorDialog(
+            initialDate: DateTime(2026, 5, 28),
+            alarmService: const _AuthorizedAlarmService(),
+          ),
+          onSaved: (_) {},
+        ),
+      );
+
+      await tester.tap(find.text('열기'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('일정 알람'), findsOneWidget);
+      expect(
+        find.text('시작 시각에 소리와 다시 알림이 있는 macOS 시스템 알림을 전달합니다.'),
+        findsOneWidget,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+}
+
+class _AuthorizedAlarmService implements AlarmService {
+  const _AuthorizedAlarmService();
+
+  @override
+  Future<AlarmAuthorizationState> authorizationState() async =>
+      AlarmAuthorizationState.authorized;
+
+  @override
+  Future<AlarmAuthorizationState> requestAuthorization() async =>
+      AlarmAuthorizationState.authorized;
+
+  @override
+  Future<void> cancelAllEventAlarms() async {}
+
+  @override
+  Future<void> cancelEventAlarm(String eventId) async {}
+
+  @override
+  Future<void> scheduleEventAlarm(CalendarEvent event) async {}
 }
 
 class _DialogHost extends StatelessWidget {
-  const _DialogHost({required this.builder, required this.onSaved});
+  const _DialogHost({
+    required this.builder,
+    required this.onSaved,
+    this.textScaler,
+  });
 
   final WidgetBuilder builder;
   final ValueChanged<EventDraft> onSaved;
+  final TextScaler? textScaler;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      builder: textScaler == null
+          ? null
+          : (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: child!,
+            ),
       home: Scaffold(
         body: Center(
           child: Builder(

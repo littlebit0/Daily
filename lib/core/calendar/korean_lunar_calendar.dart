@@ -22,23 +22,41 @@ class KoreanLunarDate {
 class KoreanLunarCalendar {
   const KoreanLunarCalendar();
 
+  static const _maxSolarCacheEntries = 512;
+  static final Map<int, KoreanLunarDate?> _solarCache = {};
+
   KoreanLunarDate? fromSolar(DateTime date) {
+    final cacheKey = date.year * 10000 + date.month * 100 + date.day;
+    if (_solarCache.containsKey(cacheKey)) {
+      return _solarCache[cacheKey];
+    }
     final supported = klc.setSolarDate(date.year, date.month, date.day);
     if (!supported) {
-      return null;
+      return _cacheSolarDate(cacheKey, null);
     }
     final iso = klc.getLunarIsoFormat();
     final parts = iso.split(' ');
     final dateParts = parts.first.split('-');
     if (dateParts.length != 3) {
-      return null;
+      return _cacheSolarDate(cacheKey, null);
     }
-    return KoreanLunarDate(
-      year: int.parse(dateParts[0]),
-      month: int.parse(dateParts[1]),
-      day: int.parse(dateParts[2]),
-      isLeapMonth: parts.length > 1,
+    return _cacheSolarDate(
+      cacheKey,
+      KoreanLunarDate(
+        year: int.parse(dateParts[0]),
+        month: int.parse(dateParts[1]),
+        day: int.parse(dateParts[2]),
+        isLeapMonth: parts.length > 1,
+      ),
     );
+  }
+
+  KoreanLunarDate? _cacheSolarDate(int key, KoreanLunarDate? value) {
+    if (_solarCache.length >= _maxSolarCacheEntries) {
+      _solarCache.remove(_solarCache.keys.first);
+    }
+    _solarCache[key] = value;
+    return value;
   }
 
   DateTime? toSolar({

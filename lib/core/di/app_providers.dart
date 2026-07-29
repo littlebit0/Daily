@@ -12,7 +12,12 @@ import '../../features/events/data/drift_event_repository.dart';
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
 import '../auth/apple_sign_in_service.dart';
+import '../alarms/alarm_service.dart';
+import '../alarms/native_alarm_service.dart';
 import '../calendar/korean_holiday_service.dart';
+import '../calendar_import/calendar_import_service.dart';
+import '../calendar_import/google_calendar_source.dart';
+import '../calendar_import/native_calendar_source.dart';
 import '../notifications/local_notification_service.dart';
 import '../notifications/notification_service.dart';
 import '../settings/app_settings.dart';
@@ -69,6 +74,10 @@ final notificationServiceProvider = Provider<NotificationService>((ref) {
   );
 });
 
+final alarmServiceProvider = Provider<AlarmService>((ref) {
+  return NativeAlarmService();
+});
+
 final koreanHolidayServiceProvider = Provider<KoreanHolidayService>((ref) {
   return KoreanHolidayService();
 });
@@ -88,6 +97,7 @@ final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
     authService: ref.watch(googleDriveAuthServiceProvider),
     eventRepository: ref.watch(eventRepositoryProvider),
     notificationService: ref.watch(notificationServiceProvider),
+    alarmService: ref.watch(alarmServiceProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     onEventsChanged: ref.watch(appleWidgetServiceProvider).refresh,
   );
@@ -104,8 +114,21 @@ final eventCommandServiceProvider = Provider<EventCommandService>((ref) {
     repository: ref.watch(eventRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     notificationService: ref.watch(notificationServiceProvider),
+    alarmService: ref.watch(alarmServiceProvider),
     syncService: ref.watch(syncServiceProvider),
     onEventsChanged: ref.watch(appleWidgetServiceProvider).refresh,
+  );
+});
+
+final calendarImportServiceProvider = Provider<CalendarImportService>((ref) {
+  return CalendarImportService(
+    nativeSource: NativeCalendarSource(),
+    googleSource: GoogleCalendarSource(
+      authService: ref.watch(googleDriveAuthServiceProvider),
+    ),
+    eventRepository: ref.watch(eventRepositoryProvider),
+    eventCommandService: ref.watch(eventCommandServiceProvider),
+    settingsRepository: ref.watch(settingsRepositoryProvider),
   );
 });
 

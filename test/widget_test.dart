@@ -948,6 +948,119 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('category RGB picker renders above the category editor', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 2600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    FlutterSecureStorage.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final authService = _FakeGoogleDriveAuthService(account: null);
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: authService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(authService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+        ],
+        child: const MaterialApp(home: SettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('분류 수정').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('분류 수정'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<ChoiceChip>(find.byType(ChoiceChip))
+          .every(
+            (chip) => chip.shape is CircleBorder && chip.showCheckmark == false,
+          ),
+      isTrue,
+    );
+    for (final chip in find.byType(ChoiceChip).evaluate()) {
+      final size = tester.getSize(
+        find.byElementPredicate((element) => element == chip),
+      );
+      expect(size.width, size.height);
+    }
+    await tester.tap(find.byTooltip('사용자 지정 색상'));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+
+    expect(find.text('사용자 지정 색상'), findsOneWidget);
+    expect(find.byKey(const Key('category-color-palette')), findsOneWidget);
+    expect(find.text('R'), findsOneWidget);
+    expect(find.text('G'), findsOneWidget);
+    expect(find.text('B'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('linked Google metadata requires a valid auth session to sync', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    FlutterSecureStorage.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    await settingsRepository.saveGoogleAccount(
+      const GoogleAccount(email: 'linked@example.com'),
+    );
+    final authService = _FakeGoogleDriveAuthService(
+      account: const GoogleDriveAccount(email: 'linked@example.com'),
+      authorizationAvailable: false,
+    );
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: authService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(authService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+        ],
+        child: const MaterialApp(home: SettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -2200));
+    await tester.pumpAndSettle();
+
+    expect(find.text('linked@example.com'), findsOneWidget);
+    expect(find.text('Google 다시 연결'), findsOneWidget);
+    expect(find.text('지금 동기화'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('swiping the monthly calendar moves to the next month', (
     tester,
   ) async {
@@ -1359,6 +1472,7 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
     this.signInCompleter,
     this.canCancelOnResume = false,
     this.restoreFailuresRemaining = 0,
+    this.authorizationAvailable = true,
   });
 
   GoogleDriveAccount? account;
@@ -1367,6 +1481,7 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
   final Completer<GoogleDriveAccount?>? signInCompleter;
   final bool canCancelOnResume;
   int restoreFailuresRemaining;
+  final bool authorizationAvailable;
   var cancelPendingSignInCalls = 0;
   var authorizationHeadersCalls = 0;
   var restorePreviousSignInCalls = 0;
@@ -1420,7 +1535,7 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
     bool promptIfNecessary = false,
   }) async {
     authorizationHeadersCalls += 1;
-    if (account == null) {
+    if (account == null || !authorizationAvailable) {
       return null;
     }
     return const {'Authorization': 'Bearer test-token'};

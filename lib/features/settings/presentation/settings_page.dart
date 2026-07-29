@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -20,6 +21,7 @@ import '../../../core/sync/google_drive_sync_service.dart';
 import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 import '../../events/presentation/sensitive_event_access.dart';
+import 'calendar_import_page.dart';
 
 const _fallbackAppVersion = '3.0.0';
 
@@ -45,6 +47,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   var _notificationBusy = false;
   var _biometricAvailable = false;
   AppleAccount? _appleAccount;
+  GoogleDriveAccount? _googleDriveAccount;
   DailyAccount? _dailyAccount;
   var _googleDriveConnectAttempt = 0;
   int? _activeGoogleDriveConnectAttempt;
@@ -68,18 +71,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final key = await ref.read(settingsRepositoryProvider).geminiApiKey();
       final settingsRepository = ref.read(settingsRepositoryProvider);
       AppleAccount? appleAccount;
+      GoogleDriveAccount? googleDriveAccount;
       var dailyAccount = settingsRepository.dailyAccount();
       try {
-        final driveAccount = await ref
+        googleDriveAccount = await ref
             .read(googleDriveAuthServiceProvider)
             .restorePreviousSignIn();
-        if (driveAccount != null &&
+        if (googleDriveAccount != null) {
+          final headers = await ref
+              .read(googleDriveAuthServiceProvider)
+              .authorizationHeaders();
+          if (headers == null) {
+            googleDriveAccount = null;
+          }
+        }
+        if (googleDriveAccount != null &&
             (dailyAccount?.googleAccount == null &&
                 !settingsRepository.hasStoredDailyAccount)) {
           await settingsRepository.saveGoogleAccount(
             GoogleAccount(
-              email: driveAccount.email,
-              displayName: driveAccount.displayName,
+              email: googleDriveAccount.email,
+              displayName: googleDriveAccount.displayName,
             ),
           );
           dailyAccount = settingsRepository.dailyAccount();
@@ -98,6 +110,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _apiKeyController.text = key ?? '';
         setState(() {
           _appleAccount = appleAccount;
+          _googleDriveAccount = googleDriveAccount;
           _dailyAccount = settingsRepository.dailyAccount();
         });
       }
@@ -270,6 +283,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsSection(
             title: '달력',
             children: [
+              if (defaultTargetPlatform == TargetPlatform.iOS ||
+                  defaultTargetPlatform == TargetPlatform.android) ...[
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.move_to_inbox_outlined),
+                  title: const Text('캘린더 데이터 옮기기'),
+                  subtitle: Text(
+                    defaultTargetPlatform == TargetPlatform.android
+                        ? 'Samsung 캘린더 또는 Google 캘린더에서 가져옵니다.'
+                        : 'Apple 캘린더 또는 Google 캘린더에서 가져옵니다.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const CalendarImportPage(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+              ],
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('주 시작 요일'),
@@ -403,6 +436,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               for (final category in settings.categories)
                 _CategoryTile(
                   category: category,
+                  visible: !settings.hiddenCategoryIds.contains(category.id),
+                  onVisibilityChanged: (visible) =>
+                      _setCategoryVisible(settings, category, visible),
                   onEdit: category.locked
                       ? null
                       : () => _editCategory(settings, category),
@@ -483,6 +519,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               const Divider(height: 1),
               _GoogleDriveSyncSettings(
                 email: account?.googleAccount?.email,
+                sessionConnected: _googleDriveAccount != null,
                 busy: _syncBusy,
                 message: _syncMessage,
                 onConnect: _connectGoogleDrive,
@@ -660,12 +697,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _save(AppSettings settings) async {
+  Future<void> _save(AppSettings settings, {bool backup = true}) async {
     await ref.read(settingsRepositoryProvider).save(settings);
     ref.read(appSettingsProvider.notifier).state = settings;
-    unawaited(
-      ref.read(googleDriveSyncServiceProvider).backupNow().catchError((_) {}),
-    );
+    if (backup) {
+      unawaited(
+        ref.read(googleDriveSyncServiceProvider).backupNow().catchError((_) {}),
+      );
+    }
   }
 
   Future<void> _setSensitiveEventsVisible(bool visible) async {
@@ -808,8 +847,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     ];
     await _save(
       settings.copyWith(categories: _normalizeCategories(categories)),
+      backup: false,
     );
-    _retrySettingsBackupAfterCategoryChange();
+    _queueCategoryBackup();
+  }
+
+  Future<void> _setCategoryVisible(
+    AppSettings settings,
+    EventCategory category,
+    bool visible,
+  ) async {
+    final hidden = settings.hiddenCategoryIds.toSet();
+    if (visible) {
+      hidden.remove(category.id);
+    } else {
+      hidden.add(category.id);
+    }
+    await _save(settings.copyWith(hiddenCategoryIds: hidden.toList()));
+    await ref.read(appleWidgetServiceProvider).refresh();
   }
 
   Future<void> _editCategory(
@@ -835,11 +890,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         categories: _normalizeCategories(categories),
         hiddenCategoryIds: hiddenCategoryIds,
       ),
+      backup: false,
     );
     await ref
         .read(eventCommandServiceProvider)
         .updateCategoryUsage(previous: category, updated: updatedCategory);
-    _retrySettingsBackupAfterCategoryChange();
+    _queueCategoryBackup();
   }
 
   Future<void> _deleteCategory(
@@ -871,14 +927,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         .where((item) => item.id != category.id)
         .toList();
     await _save(
-      settings.copyWith(categories: _normalizeCategories(categories)),
+      settings.copyWith(
+        categories: _normalizeCategories(categories),
+        hiddenCategoryIds: settings.hiddenCategoryIds
+            .where((id) => id != category.id)
+            .toList(),
+      ),
+      backup: false,
     );
-    _retrySettingsBackupAfterCategoryChange();
+    _queueCategoryBackup();
   }
 
-  void _retrySettingsBackupAfterCategoryChange() {
+  void _queueCategoryBackup() {
     unawaited(
-      ref.read(googleDriveSyncServiceProvider).backupNow().catchError((_) {}),
+      ref
+          .read(googleDriveSyncServiceProvider)
+          .syncPendingChangesNow()
+          .catchError((_) {}),
     );
   }
 
@@ -944,6 +1009,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           .read(settingsRepositoryProvider)
           .load();
       setState(() {
+        _googleDriveAccount = account;
         _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
         _syncMessage = 'Google Drive 연결이 완료되었습니다.';
       });
@@ -982,6 +1048,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final syncService = ref.read(googleDriveSyncServiceProvider);
       await syncService.startListeningOnly(flushPendingChanges: false);
       await syncService.syncPendingChangesNow(restoreAfterBackup: true);
+      if (mounted) {
+        setState(() => _googleDriveAccount = account);
+      }
       return true;
     } on Object {
       return false;
@@ -1098,6 +1167,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       await ref.read(settingsRepositoryProvider).deleteGoogleAccount();
       if (mounted) {
         setState(() {
+          _googleDriveAccount = null;
           _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
           _syncMessage = deleteBackup
               ? 'Google 연동과 Drive 백업을 삭제했습니다.'
@@ -1188,6 +1258,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     try {
       final events = await ref.read(eventRepositoryProvider).allEventsForSync();
       await _tryCancelNotificationsBeforeReset(events);
+      await ref.read(alarmServiceProvider).cancelAllEventAlarms();
       if (hasGoogleAccount) {
         await ref
             .read(googleDriveSyncServiceProvider)
@@ -1206,6 +1277,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (mounted) {
         setState(() {
           _appleAccount = null;
+          _googleDriveAccount = null;
           _dailyAccount = null;
           _syncMessage = hasDailyAccount
               ? 'Daily 계정 탈퇴가 완료되었습니다.'
@@ -1646,11 +1718,15 @@ class _NotificationTestTile extends StatelessWidget {
 class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
     required this.category,
+    required this.visible,
+    required this.onVisibilityChanged,
     required this.onEdit,
     required this.onDelete,
   });
 
   final EventCategory category;
+  final bool visible;
+  final ValueChanged<bool> onVisibilityChanged;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -1658,39 +1734,58 @@ class _CategoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: Container(
-        width: 14,
-        height: 14,
-        decoration: BoxDecoration(
-          color: Color(category.colorValue),
-          shape: BoxShape.circle,
-        ),
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: '캘린더에 표시',
+            child: Checkbox(
+              value: visible,
+              visualDensity: VisualDensity.compact,
+              onChanged: (value) => onVisibilityChanged(value ?? true),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              color: Color(category.colorValue),
+              shape: BoxShape.circle,
+            ),
+          ),
+        ],
       ),
       title: Text(category.label),
-      subtitle: Text(category.locked ? '수정 불가' : '사용자 분류'),
-      trailing: category.locked
-          ? Tooltip(
+      subtitle: Text(
+        '${visible ? '캘린더에 표시' : '캘린더에서 숨김'} · '
+        '${category.locked ? '수정 불가' : '사용자 분류'}',
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (category.locked)
+            Tooltip(
               message: '수정 불가',
               child: Icon(
                 Icons.lock_outline,
                 color: Theme.of(context).disabledColor,
               ),
             )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  tooltip: '분류 수정',
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-                IconButton(
-                  tooltip: '분류 삭제',
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
+          else ...[
+            IconButton(
+              tooltip: '분류 수정',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined),
             ),
+            IconButton(
+              tooltip: '분류 삭제',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1698,6 +1793,7 @@ class _CategoryTile extends StatelessWidget {
 class _GoogleDriveSyncSettings extends StatelessWidget {
   const _GoogleDriveSyncSettings({
     required this.email,
+    required this.sessionConnected,
     required this.busy,
     required this.message,
     required this.onConnect,
@@ -1710,6 +1806,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
   });
 
   final String? email;
+  final bool sessionConnected;
   final bool busy;
   final String message;
   final VoidCallback onConnect;
@@ -1722,8 +1819,8 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final connected = email != null;
-    final connecting = busy && !connected;
+    final linked = email != null;
+    final connecting = busy && !sessionConnected;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1731,15 +1828,17 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.account_circle_outlined),
           title: const Text('Google 계정'),
-          subtitle: Text(connected ? email! : 'Google 로그인 시 Daily 계정에 연결됩니다.'),
+          subtitle: Text(linked ? email! : 'Google 로그인 시 Daily 계정에 연결됩니다.'),
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.cloud_sync_outlined),
           title: const Text('Google Drive 동기화'),
           subtitle: Text(
-            connected
+            sessionConnected
                 ? '이 계정의 Google Drive AppData에 일정을 백업하고 복원합니다.'
+                : linked
+                ? 'Google 인증 세션이 없습니다. 다시 연결하면 자동 동기화가 재개됩니다.'
                 : 'Google 로그인 시 Drive AppData 권한도 함께 승인합니다.',
           ),
         ),
@@ -1747,19 +1846,25 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: busy ? null : (connected ? onSyncNow : onConnect),
+                onPressed: busy
+                    ? null
+                    : (sessionConnected ? onSyncNow : onConnect),
                 icon: busy
                     ? const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Icon(connected ? Icons.sync : Icons.cloud_outlined),
+                    : Icon(
+                        sessionConnected ? Icons.sync : Icons.cloud_outlined,
+                      ),
                 label: Text(
                   connecting
                       ? 'Google 연결 중'
-                      : connected
+                      : sessionConnected
                       ? '지금 동기화'
+                      : linked
+                      ? 'Google 다시 연결'
                       : 'Google로 계속',
                 ),
               ),
@@ -1775,13 +1880,13 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
-        if (connected)
+        if (linked)
           OutlinedButton.icon(
             onPressed: busy ? null : onDisconnect,
             icon: const Icon(Icons.link_off_outlined),
             label: const Text('Google 연동 해지'),
           ),
-        if (connected) const SizedBox(height: 8),
+        if (linked) const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: busy ? null : onDeleteDailyAccount,
           icon: const Icon(Icons.person_remove_outlined),
@@ -2056,16 +2161,83 @@ class _CategoryDialogState extends State<_CategoryDialog> {
               runSpacing: 8,
               children: [
                 for (final colorValue in _colorValues)
-                  ChoiceChip(
-                    selected: _selectedColor == colorValue,
-                    label: const SizedBox.shrink(),
-                    avatar: CircleAvatar(
-                      radius: 8,
-                      backgroundColor: Color(colorValue),
+                  SizedBox.square(
+                    dimension: 40,
+                    child: ChoiceChip(
+                      selected: _selectedColor == colorValue,
+                      label: const SizedBox.shrink(),
+                      labelPadding: EdgeInsets.zero,
+                      padding: EdgeInsets.zero,
+                      shape: const CircleBorder(),
+                      showCheckmark: false,
+                      clipBehavior: Clip.antiAlias,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      avatar: CircleAvatar(
+                        radius: 8,
+                        backgroundColor: Color(colorValue),
+                      ),
+                      onSelected: (_) =>
+                          setState(() => _selectedColor = colorValue),
                     ),
-                    onSelected: (_) =>
-                        setState(() => _selectedColor = colorValue),
                   ),
+                Tooltip(
+                  message: '사용자 지정 색상',
+                  child: SizedBox.square(
+                    dimension: 40,
+                    child: ChoiceChip(
+                      selected: false,
+                      label: const SizedBox.shrink(),
+                      labelPadding: EdgeInsets.zero,
+                      padding: EdgeInsets.zero,
+                      shape: const CircleBorder(),
+                      showCheckmark: false,
+                      clipBehavior: Clip.antiAlias,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      avatar: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: SweepGradient(
+                            colors: [
+                              Colors.red,
+                              Colors.orange,
+                              Colors.yellow,
+                              Colors.green,
+                              Colors.cyan,
+                              Colors.blue,
+                              Colors.purple,
+                              Colors.red,
+                            ],
+                          ),
+                        ),
+                      ),
+                      onSelected: (_) async {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        await Future<void>.delayed(
+                          const Duration(milliseconds: 200),
+                        );
+                        if (!context.mounted) {
+                          return;
+                        }
+                        final color = await showDialog<int>(
+                          context: context,
+                          builder: (context) =>
+                              _RgbColorDialog(initialColor: _selectedColor),
+                        );
+                        if (color == null || !mounted) {
+                          return;
+                        }
+                        setState(() {
+                          if (!_colorValues.contains(color)) {
+                            _colorValues.add(color);
+                          }
+                          _selectedColor = color;
+                        });
+                      },
+                    ),
+                  ),
+                ),
               ],
             ),
           ],
@@ -2099,6 +2271,235 @@ class _CategoryDialogState extends State<_CategoryDialog> {
             Navigator.of(context).pop(nextCategory);
           },
           child: Text(_editing ? '저장' : '추가'),
+        ),
+      ],
+    );
+  }
+}
+
+class _RgbColorDialog extends StatefulWidget {
+  const _RgbColorDialog({required this.initialColor});
+
+  final int initialColor;
+
+  @override
+  State<_RgbColorDialog> createState() => _RgbColorDialogState();
+}
+
+class _RgbColorDialogState extends State<_RgbColorDialog> {
+  late final List<int> _channels;
+  late final List<TextEditingController> _controllers;
+  late HSVColor _hsv;
+
+  int get _colorValue =>
+      0xff000000 | (_channels[0] << 16) | (_channels[1] << 8) | _channels[2];
+
+  @override
+  void initState() {
+    super.initState();
+    _channels = [
+      (widget.initialColor >> 16) & 0xff,
+      (widget.initialColor >> 8) & 0xff,
+      widget.initialColor & 0xff,
+    ];
+    _controllers = [
+      for (final value in _channels) TextEditingController(text: '$value'),
+    ];
+    _hsv = HSVColor.fromColor(Color(_colorValue));
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenSize = MediaQuery.sizeOf(context);
+    final pickerWidth = (screenSize.width - 128).clamp(200.0, 360.0);
+    final maxContentHeight = screenSize.height * 0.62;
+    return AlertDialog(
+      title: const Text('사용자 지정 색상'),
+      content: SizedBox(
+        width: pickerWidth,
+        height: maxContentHeight,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _colorPalette(pickerWidth),
+              const SizedBox(height: 14),
+              for (var index = 0; index < 3; index++)
+                _channelRow(index, const ['R', 'G', 'B'][index]),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_colorValue),
+          child: const Text('적용'),
+        ),
+      ],
+    );
+  }
+
+  Widget _colorPalette(double width) {
+    final size = Size(width, 180);
+    return GestureDetector(
+      key: const Key('category-color-palette'),
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (details) => _setPaletteColor(details.localPosition, size),
+      onPanStart: (details) => _setPaletteColor(details.localPosition, size),
+      onPanUpdate: (details) => _setPaletteColor(details.localPosition, size),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          width: size.width,
+          height: size.height,
+          child: Stack(
+            children: [
+              const Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.red,
+                        Colors.yellow,
+                        Colors.green,
+                        Colors.cyan,
+                        Colors.blue,
+                        Colors.purple,
+                        Colors.red,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.white, Colors.transparent, Colors.black],
+                      stops: [0, 0.5, 1],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: (_hsv.hue / 360 * size.width - 8).clamp(
+                  0,
+                  size.width - 16,
+                ),
+                top: (_paletteVerticalPosition * size.height - 8).clamp(
+                  0,
+                  size.height - 16,
+                ),
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: Color(_colorValue),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black54, blurRadius: 2),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  double get _paletteVerticalPosition {
+    if (_hsv.value >= 0.999 && _hsv.saturation < 0.999) {
+      return _hsv.saturation / 2;
+    }
+    return 0.5 + (1 - _hsv.value) / 2;
+  }
+
+  void _setPaletteColor(Offset position, Size size) {
+    final hue = (position.dx / size.width).clamp(0.0, 1.0) * 360;
+    final vertical = (position.dy / size.height).clamp(0.0, 1.0);
+    final saturation = vertical <= 0.5 ? vertical * 2 : 1.0;
+    final value = vertical <= 0.5 ? 1.0 : (1 - vertical) * 2;
+    _applyHsv(HSVColor.fromAHSV(1, hue, saturation, value));
+  }
+
+  void _applyHsv(HSVColor value) {
+    final color = value.toColor();
+    setState(() {
+      _hsv = value;
+      _channels[0] = (color.r * 255).round();
+      _channels[1] = (color.g * 255).round();
+      _channels[2] = (color.b * 255).round();
+      for (var index = 0; index < 3; index++) {
+        _controllers[index].text = '${_channels[index]}';
+      }
+    });
+  }
+
+  void _syncHsvFromChannels() {
+    _hsv = HSVColor.fromColor(Color(_colorValue));
+  }
+
+  Widget _channelRow(int index, String label) {
+    return Row(
+      children: [
+        SizedBox(width: 22, child: Text(label)),
+        Expanded(
+          child: Slider(
+            value: _channels[index].toDouble(),
+            min: 0,
+            max: 255,
+            divisions: 255,
+            label: '${_channels[index]}',
+            onChanged: (value) {
+              final channel = value.round();
+              setState(() {
+                _channels[index] = channel;
+                _controllers[index].text = '$channel';
+                _syncHsvFromChannels();
+              });
+            },
+          ),
+        ),
+        SizedBox(
+          width: 58,
+          child: TextField(
+            controller: _controllers[index],
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            maxLength: 3,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(counterText: '', isDense: true),
+            onChanged: (value) {
+              final channel = int.tryParse(value);
+              if (channel == null) {
+                return;
+              }
+              setState(() {
+                _channels[index] = channel.clamp(0, 255).toInt();
+                _syncHsvFromChannels();
+              });
+            },
+            onSubmitted: (_) {
+              _controllers[index].text = '${_channels[index]}';
+            },
+          ),
         ),
       ],
     );

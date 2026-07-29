@@ -179,6 +179,194 @@ void main() {
     },
   );
 
+  test('settings backup does not upload unchanged event files', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    await repository.save(
+      _event(
+        id: 'unchanged-event',
+        title: '변경 없는 일정',
+        startAt: DateTime(2026, 6, 10),
+        endAt: DateTime(2026, 6, 11),
+        updatedAt: DateTime(2026, 6, 1, 9),
+      ),
+    );
+    final requests = <http.Request>[];
+    final httpClient = MockClient((request) async {
+      requests.add(request);
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        final query = request.url.queryParameters['q'] ?? '';
+        if (query.contains('daily-sync-v2-settings.json')) {
+          return _driveFiles([]);
+        }
+        fail('settings backup must not list event files');
+      }
+      if (request.method == 'POST' &&
+          request.url.path == '/upload/drive/v3/files') {
+        return _jsonResponse({'id': 'settings-file'});
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.backupNow();
+
+    expect(requests.where((request) => request.method == 'POST'), hasLength(1));
+    expect(
+      requests.any((request) => request.body.contains('unchanged-event')),
+      isFalse,
+    );
+  });
+
+  test(
+    'pending category color sync uploads matching event and settings snapshots',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final category = EventCategory.custom(
+        label: '업무',
+        colorValue: 0xff7c3aed,
+      );
+      await settingsRepository.save(
+        AppSettings(categories: [EventCategory.basic, category]),
+      );
+      await repository.save(
+        _event(
+          id: 'category-color-event',
+          title: '최종 색상 일정',
+          startAt: DateTime(2026, 7, 30, 10),
+          endAt: DateTime(2026, 7, 30, 11),
+          updatedAt: DateTime(2026, 7, 29, 12),
+          syncStatus: 'pending',
+        ).copyWith(category: category, colorValue: category.colorValue),
+      );
+
+      final uploadOrder = <String>[];
+      Map<String, Object?>? uploadedEvent;
+      Map<String, Object?>? uploadedSettings;
+      final httpClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-event-category-color-event.json')) {
+            return _driveFiles([
+              {
+                'id': 'category-color-event-file',
+                'name': 'daily-sync-v2-event-category-color-event.json',
+              },
+            ]);
+          }
+          if (query.contains('daily-sync-v2-settings.json')) {
+            return _driveFiles([
+              {'id': 'settings-file', 'name': 'daily-sync-v2-settings.json'},
+            ]);
+          }
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path ==
+                '/upload/drive/v3/files/category-color-event-file') {
+          uploadOrder.add('event');
+          uploadedEvent =
+              (jsonDecode(request.body) as Map<String, Object?>)['event']
+                  as Map<String, Object?>;
+          return _jsonResponse({'id': 'category-color-event-file'});
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/upload/drive/v3/files/settings-file') {
+          uploadOrder.add('settings');
+          uploadedSettings =
+              (jsonDecode(request.body) as Map<String, Object?>)['settings']
+                  as Map<String, Object?>;
+          return _jsonResponse({'id': 'settings-file'});
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      await service.syncPendingChangesNow();
+
+      expect(uploadOrder, ['event', 'settings']);
+      expect(uploadedEvent?['colorValue'], category.colorValue);
+      final categories = uploadedSettings?['categories'] as List<Object?>;
+      final uploadedCategory = categories
+          .whereType<Map>()
+          .map((item) => Map<String, Object?>.from(item))
+          .singleWhere((item) => item['id'] == category.id);
+      expect(uploadedCategory['colorValue'], category.colorValue);
+      expect(settingsRepository.hasPendingSettingsSync, isFalse);
+      expect(
+        (await repository.findById('category-color-event'))?.syncStatus,
+        'synced',
+      );
+    },
+  );
+
+  test('restore keeps a locally pending category color', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final localCategory = EventCategory.custom(
+      label: '업무',
+      colorValue: 0xffec4899,
+    );
+    await settingsRepository.save(
+      AppSettings(categories: [EventCategory.basic, localCategory]),
+    );
+
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        final query = request.url.queryParameters['q'] ?? '';
+        if (query.contains('daily-sync-v2-settings.json')) {
+          fail('pending local settings must not request an older remote file');
+        }
+        if (query.contains('daily-sync-v2-event-')) {
+          return _driveFiles([]);
+        }
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.restoreNow();
+
+    final savedCategory = settingsRepository.load().categories.singleWhere(
+      (category) => category.id == localCategory.id,
+    );
+    expect(savedCategory.colorValue, localCategory.colorValue);
+    expect(settingsRepository.hasPendingSettingsSync, isTrue);
+    expect(service.settingsRevisionNotifier.value, 0);
+  });
+
   test('start flushes locally pending v2 event files after restore', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -329,6 +517,15 @@ void main() {
       syncStatus: 'pending',
     );
     await repository.save(localEvent);
+    await repository.save(
+      _event(
+        id: 'already-synced',
+        title: 'unchanged local event',
+        startAt: DateTime(2026, 6, 8),
+        endAt: DateTime(2026, 6, 9),
+        updatedAt: DateTime(2026, 6, 1, 8),
+      ),
+    );
 
     final requests = <http.Request>[];
     final httpClient = MockClient((request) async {
@@ -417,7 +614,143 @@ void main() {
     );
     expect(await repository.findById('remote-event'), isNotNull);
     expect((await repository.findById('local-event'))!.syncStatus, 'synced');
+    expect(
+      requests
+          .where((request) => request.method == 'POST')
+          .any((request) => request.body.contains('already-synced')),
+      isFalse,
+    );
   });
+
+  test('queued sync callers wait for their own request to finish', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final firstStarted = Completer<void>();
+    final secondStarted = Completer<void>();
+    final releaseFirst = Completer<void>();
+    final releaseSecond = Completer<void>();
+    var settingsRequestCount = 0;
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        final query = request.url.queryParameters['q'] ?? '';
+        if (query.contains('daily-sync-v2-settings.json')) {
+          settingsRequestCount += 1;
+          if (settingsRequestCount == 1) {
+            firstStarted.complete();
+            await releaseFirst.future;
+          } else if (settingsRequestCount == 2) {
+            secondStarted.complete();
+            await releaseSecond.future;
+          }
+          return _driveFiles([]);
+        }
+        if (query.contains('daily-sync-v2-event-')) {
+          return _driveFiles([]);
+        }
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    final first = service.restoreNow();
+    await firstStarted.future;
+    final second = service.restoreNow();
+    final third = service.restoreNow();
+    var secondCompleted = false;
+    var thirdCompleted = false;
+    unawaited(second.then((_) => secondCompleted = true));
+    unawaited(third.then((_) => thirdCompleted = true));
+
+    releaseFirst.complete();
+    await first;
+    await secondStarted.future;
+    expect(secondCompleted, isFalse);
+    expect(thirdCompleted, isFalse);
+
+    releaseSecond.complete();
+    await second;
+    await third;
+    expect(secondCompleted, isTrue);
+    expect(thirdCompleted, isTrue);
+    expect(settingsRequestCount, 2);
+  });
+
+  test(
+    'unchanged restored event skips database and notification work',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final unchanged = _event(
+        id: 'unchanged-remote',
+        title: '같은 일정',
+        startAt: DateTime.utc(2026, 6, 20),
+        endAt: DateTime.utc(2026, 6, 21),
+        updatedAt: DateTime.utc(2026, 5, 29),
+      );
+      await repository.save(unchanged);
+      final beforeRestore = await repository.findById(unchanged.id);
+
+      final httpClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-settings.json')) {
+            return _driveFiles([]);
+          }
+          if (query.contains('daily-sync-v2-event-')) {
+            return _driveFiles([
+              {
+                'id': 'unchanged-remote-file',
+                'name': 'daily-sync-v2-event-unchanged-remote.json',
+              },
+            ]);
+          }
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/unchanged-remote-file') {
+          return _jsonResponse(
+            _eventFileJson(
+              id: unchanged.id,
+              title: unchanged.title,
+              startAt: unchanged.startAt.toIso8601String(),
+              endAt: unchanged.endAt.toIso8601String(),
+              updatedAt: unchanged.updatedAt.toIso8601String(),
+            ),
+          );
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      await service.restoreNow();
+
+      expect(notificationService.scheduled, isEmpty);
+      expect(
+        identical(await repository.findById(unchanged.id), beforeRestore),
+        isTrue,
+      );
+    },
+  );
 
   test('startListeningOnly does not run an initial restore', () async {
     SharedPreferences.setMockInitialValues({});
@@ -683,6 +1016,89 @@ void main() {
       expect(saved?.syncStatus, 'pending');
     },
   );
+
+  test(
+    'restore snapshot does not overwrite a newer local category color',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final original = _event(
+        id: 'category-race',
+        title: '분류 색상 변경 일정',
+        startAt: DateTime(2026, 7, 29, 10),
+        endAt: DateTime(2026, 7, 29, 11),
+        updatedAt: DateTime(2026, 7, 29, 9),
+      );
+      await repository.save(original);
+
+      final latestCategory = EventCategory.custom(
+        label: '업무',
+        colorValue: 0xff10b981,
+      );
+      final latest = original.copyWith(
+        category: latestCategory,
+        colorValue: latestCategory.colorValue,
+        updatedAt: DateTime(2026, 7, 29, 9, 2),
+        syncStatus: 'pending',
+      );
+      repository.onFindById = (id) async {
+        repository.onFindById = null;
+        await repository.save(latest);
+      };
+
+      final httpClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-settings.json')) {
+            return _driveFiles([]);
+          }
+          if (query.contains('daily-sync-v2-event-')) {
+            return _driveFiles([
+              {
+                'id': 'category-race-file',
+                'name': 'daily-sync-v2-event-category-race.json',
+              },
+            ]);
+          }
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/category-race-file') {
+          return _jsonResponse(
+            _eventFileJson(
+              id: original.id,
+              title: original.title,
+              startAt: original.startAt.toIso8601String(),
+              endAt: original.endAt.toIso8601String(),
+              updatedAt: DateTime(2026, 7, 29, 9, 1).toIso8601String(),
+            ),
+          );
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+        changeSyncDelay: const Duration(hours: 1),
+      );
+      addTearDown(service.dispose);
+
+      await service.restoreNow();
+
+      final saved = await repository.findById(original.id);
+      expect(saved?.category.id, latestCategory.id);
+      expect(saved?.colorValue, latestCategory.colorValue);
+      expect(saved?.syncStatus, 'pending');
+      expect(notificationService.scheduled, isEmpty);
+    },
+  );
 }
 
 GoogleDriveSyncService _service({
@@ -834,6 +1250,7 @@ class _FakeNotificationService implements NotificationService {
 
 class _MemoryEventRepository implements EventRepository {
   final _events = <String, CalendarEvent>{};
+  Future<void> Function(String id)? onFindById;
 
   List<CalendarEvent> get events => _events.values.toList();
 
@@ -897,7 +1314,10 @@ class _MemoryEventRepository implements EventRepository {
   }
 
   @override
-  Future<CalendarEvent?> findById(String id) async => _events[id];
+  Future<CalendarEvent?> findById(String id) async {
+    await onFindById?.call(id);
+    return _events[id];
+  }
 
   @override
   Future<void> hardDelete(String eventId) async {

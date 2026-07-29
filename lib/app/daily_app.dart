@@ -634,6 +634,8 @@ class _AppHomeState extends ConsumerState<_AppHome>
       Future.microtask(() async {
         final notificationService = ref.read(notificationServiceProvider);
         await notificationService.initialize();
+        final alarmService = ref.read(alarmServiceProvider);
+        await alarmService.requestAuthorization();
 
         final settings = ref.read(appSettingsProvider);
         if (settings.morningBriefingEnabled) {
@@ -649,6 +651,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
         for (final event in events) {
           if (!event.isDeleted) {
             await notificationService.scheduleEventReminder(event);
+            await alarmService.scheduleEventAlarm(event);
           }
         }
       }).catchError((_) {}),

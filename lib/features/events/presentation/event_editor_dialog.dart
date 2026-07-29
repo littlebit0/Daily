@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../../../core/alarms/alarm_service.dart';
 import '../domain/calendar_event.dart';
 import '../domain/event_category.dart';
 import '../domain/event_draft.dart';
@@ -22,6 +24,7 @@ class EventEditorDialog extends StatefulWidget {
     this.categories = EventCategory.values,
     this.defaultReminderMinutes = 60,
     this.defaultReminderMinutesList,
+    this.alarmService = const UnsupportedAlarmService(),
   });
 
   final DateTime initialDate;
@@ -31,6 +34,7 @@ class EventEditorDialog extends StatefulWidget {
   final List<EventCategory> categories;
   final int defaultReminderMinutes;
   final List<int>? defaultReminderMinutesList;
+  final AlarmService alarmService;
 
   @override
   State<EventEditorDialog> createState() => _EventEditorDialogState();
@@ -58,6 +62,10 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   late int? _recurrenceCount;
   late bool _showDday;
   late bool _sensitive;
+  late bool _alarmEnabled;
+  late TimeOfDay _allDayAlarmTime;
+  AlarmAuthorizationState _alarmState = AlarmAuthorizationState.unsupported;
+  var _alarmStateLoading = true;
   String? _validationMessage;
   _ValidationTarget? _validationTarget;
 
@@ -121,6 +129,13 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
         : _RecurrenceEndMode.never;
     _showDday = event?.showDday ?? false;
     _sensitive = event?.sensitive ?? false;
+    _alarmEnabled = event?.alarmEnabled ?? false;
+    final allDayAlarmMinutes = event?.allDayAlarmMinutes ?? 9 * 60;
+    _allDayAlarmTime = TimeOfDay(
+      hour: allDayAlarmMinutes ~/ 60,
+      minute: allDayAlarmMinutes % 60,
+    );
+    unawaited(_loadAlarmState());
   }
 
   @override
@@ -311,6 +326,33 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                             ),
                           ),
                         ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        value:
+                            _frequency == RecurrenceFrequency.none &&
+                                _alarmCanBeEnabled
+                            ? _alarmEnabled
+                            : false,
+                        onChanged:
+                            _frequency != RecurrenceFrequency.none ||
+                                !_alarmCanBeEnabled
+                            ? null
+                            : _toggleAlarm,
+                        title: const Text('일정 알람'),
+                        subtitle: Text(_alarmSubtitle),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      if (_alarmEnabled &&
+                          _allDay &&
+                          _frequency == RecurrenceFrequency.none) ...[
+                        const SizedBox(height: 4),
+                        _LabeledPickerButton(
+                          label: '종일 일정 알람 시각',
+                          icon: Icons.alarm,
+                          value: _allDayAlarmTime.format(context),
+                          onPressed: _pickAllDayAlarmTime,
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       DropdownButtonFormField<RecurrenceFrequency>(
                         initialValue: _frequency,
@@ -326,7 +368,12 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                         onChanged: (value) {
                           if (value != null) {
                             _clearValidation();
-                            setState(() => _frequency = value);
+                            setState(() {
+                              _frequency = value;
+                              if (value != RecurrenceFrequency.none) {
+                                _alarmEnabled = false;
+                              }
+                            });
                           }
                         },
                       ),
@@ -609,10 +656,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   }
 
   Future<void> _pickStartTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _startTime,
-    );
+    final picked = await _showTimePicker(_startTime);
     if (picked != null) {
       _clearValidation();
       setState(() => _startTime = picked);
@@ -620,10 +664,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   }
 
   Future<void> _pickEndTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _endTime,
-    );
+    final picked = await _showTimePicker(_endTime);
     if (picked != null) {
       _clearValidation();
       setState(() => _endTime = picked);
@@ -716,6 +757,8 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
       ),
       showDday: _showDday,
       sensitive: _sensitive,
+      alarmEnabled: _frequency == RecurrenceFrequency.none && _alarmEnabled,
+      allDayAlarmMinutes: _allDayAlarmTime.hour * 60 + _allDayAlarmTime.minute,
     );
     Navigator.of(context).pop(draft);
   }
@@ -752,6 +795,86 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
       _validationMessage = null;
       _validationTarget = null;
     });
+  }
+
+  bool get _alarmCanBeEnabled =>
+      !_alarmStateLoading &&
+      (_alarmState == AlarmAuthorizationState.authorized ||
+          _alarmState == AlarmAuthorizationState.notDetermined);
+
+  String get _alarmSubtitle {
+    if (_frequency != RecurrenceFrequency.none) {
+      return '반복 알람은 추후 루틴 기능에서 사용할 수 있습니다.';
+    }
+    if (_alarmStateLoading) {
+      return '알람 지원 상태를 확인하고 있습니다.';
+    }
+    final isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
+    return switch (_alarmState) {
+      AlarmAuthorizationState.unsupported => '이 운영체제에서는 일정 알람을 사용할 수 없습니다.',
+      AlarmAuthorizationState.denied => '시스템 설정에서 Daily의 알람 권한을 허용해야 합니다.',
+      AlarmAuthorizationState.notDetermined =>
+        isMacOS
+            ? '켜면 macOS 알림 권한을 요청하고 시작 시각에 시스템 알림을 전달합니다.'
+            : '켜면 시스템 알람 권한을 요청하고 정시 알림을 알람으로 대체합니다.',
+      AlarmAuthorizationState.authorized =>
+        isMacOS
+            ? (_allDay
+                  ? '선택한 시각에 소리와 다시 알림이 있는 macOS 시스템 알림을 전달합니다.'
+                  : '시작 시각에 소리와 다시 알림이 있는 macOS 시스템 알림을 전달합니다.')
+            : (_allDay
+                  ? '선택한 시각에 시스템 알람이 울립니다.'
+                  : '시작 시각의 정시 알림을 시스템 알람으로 대체합니다.'),
+    };
+  }
+
+  Future<void> _loadAlarmState() async {
+    final state = await widget.alarmService.authorizationState();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _alarmState = state;
+      _alarmStateLoading = false;
+      if (state == AlarmAuthorizationState.unsupported ||
+          state == AlarmAuthorizationState.denied) {
+        _alarmEnabled = false;
+      }
+    });
+  }
+
+  Future<void> _toggleAlarm(bool enabled) async {
+    var state = _alarmState;
+    if (enabled && state == AlarmAuthorizationState.notDetermined) {
+      state = await widget.alarmService.requestAuthorization();
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _alarmState = state;
+      _alarmEnabled = enabled && state == AlarmAuthorizationState.authorized;
+    });
+  }
+
+  Future<void> _pickAllDayAlarmTime() async {
+    final picked = await _showTimePicker(_allDayAlarmTime);
+    if (picked != null) {
+      setState(() => _allDayAlarmTime = picked);
+    }
+  }
+
+  Future<TimeOfDay?> _showTimePicker(TimeOfDay initialTime) {
+    return showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      builder: (pickerContext, child) => MediaQuery(
+        data: MediaQuery.of(
+          pickerContext,
+        ).copyWith(textScaler: TextScaler.noScaling),
+        child: child!,
+      ),
+    );
   }
 
   List<EventCategory> get _usableCategories {

@@ -19,12 +19,32 @@ class AppleWidgetService {
   final EventRepository _eventRepository;
   final SettingsRepository _settingsRepository;
   final MethodChannel _channel;
+  Future<void>? _refreshInFlight;
+  bool _refreshRequested = false;
+  DateTime? _requestedNow;
 
-  Future<void> refresh({DateTime? now}) async {
+  Future<void> refresh({DateTime? now}) {
     if (!Platform.isIOS && !Platform.isMacOS) {
-      return;
+      return Future.value();
     }
 
+    _refreshRequested = true;
+    _requestedNow = now;
+    return _refreshInFlight ??= _drainRefreshRequests().whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  Future<void> _drainRefreshRequests() async {
+    while (_refreshRequested) {
+      _refreshRequested = false;
+      final now = _requestedNow;
+      _requestedNow = null;
+      await _refreshOnce(now: now);
+    }
+  }
+
+  Future<void> _refreshOnce({DateTime? now}) async {
     final current = now ?? DateTime.now();
     final settings = _settingsRepository.load();
     final monthStart = DateTime(current.year, current.month);
@@ -75,13 +95,13 @@ class AppleWidgetSnapshotBuilder {
     final visibleMonthEvents = monthEvents
         .where((event) => _isVisible(event, settings))
         .toList(growable: false);
+    final monthEventsByDay = _eventsByDay(
+      visibleMonthEvents,
+      gridStart,
+      gridStart.add(const Duration(days: 42)),
+    );
     final todayEvents =
-        visibleMonthEvents
-            .where(
-              (event) =>
-                  event.overlaps(today, today.add(const Duration(days: 1))),
-            )
-            .toList()
+        List<CalendarEvent>.from(monthEventsByDay[_dateKey(today)] ?? const [])
           ..sort((left, right) {
             if (left.allDay != right.allDay) {
               return left.allDay ? -1 : 1;
@@ -116,17 +136,7 @@ class AppleWidgetSnapshotBuilder {
       'monthDays': List.generate(42, (index) {
         final date = gridStart.add(Duration(days: index));
         final dayStart = _dateOnly(date);
-        final dayEnd = dayStart.add(const Duration(days: 1));
-        final events =
-            visibleMonthEvents
-                .where((event) => event.overlaps(dayStart, dayEnd))
-                .toList()
-              ..sort((left, right) {
-                if (left.allDay != right.allDay) {
-                  return left.allDay ? -1 : 1;
-                }
-                return left.startAt.compareTo(right.startAt);
-              });
+        final events = monthEventsByDay[_dateKey(dayStart)] ?? const [];
         return {
           'date': _dateKey(date),
           'day': date.day,
@@ -188,6 +198,40 @@ class AppleWidgetSnapshotBuilder {
       return false;
     }
     return true;
+  }
+
+  static Map<String, List<CalendarEvent>> _eventsByDay(
+    List<CalendarEvent> events,
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) {
+    final result = <String, List<CalendarEvent>>{};
+    for (final event in events) {
+      var cursor = _dateOnly(event.startAt);
+      if (cursor.isBefore(rangeStart)) {
+        cursor = rangeStart;
+      }
+      var eventEnd = _dateOnly(
+        event.endAt.subtract(const Duration(microseconds: 1)),
+      );
+      final lastRangeDay = rangeEnd.subtract(const Duration(days: 1));
+      if (eventEnd.isAfter(lastRangeDay)) {
+        eventEnd = lastRangeDay;
+      }
+      while (!cursor.isAfter(eventEnd)) {
+        result.putIfAbsent(_dateKey(cursor), () => []).add(event);
+        cursor = cursor.add(const Duration(days: 1));
+      }
+    }
+    for (final dayEvents in result.values) {
+      dayEvents.sort((left, right) {
+        if (left.allDay != right.allDay) {
+          return left.allDay ? -1 : 1;
+        }
+        return left.startAt.compareTo(right.startAt);
+      });
+    }
+    return result;
   }
 
   static Map<String, Object?> _eventJson(CalendarEvent event) {

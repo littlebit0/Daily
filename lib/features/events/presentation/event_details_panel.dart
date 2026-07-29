@@ -182,6 +182,7 @@ class EventDetailsPanel extends ConsumerWidget {
         initialDate: date,
         categories: categories,
         defaultReminderMinutesList: defaultReminderMinutesList,
+        alarmService: ref.read(alarmServiceProvider),
       ),
     );
     if (draft != null) {
@@ -204,6 +205,7 @@ class EventDetailsPanel extends ConsumerWidget {
         event: event,
         categories: categories,
         defaultReminderMinutesList: defaultReminderMinutesList,
+        alarmService: ref.read(alarmServiceProvider),
       ),
     );
     if (draft == null) {
@@ -314,6 +316,8 @@ class EventDetailsPanel extends ConsumerWidget {
       recurrence: draft.recurrence,
       showDday: draft.showDday,
       sensitive: draft.sensitive,
+      alarmEnabled: draft.alarmEnabled,
+      allDayAlarmMinutes: draft.allDayAlarmMinutes,
       holiday: draft.category.id == EventCategory.holiday.id,
       clearMemo: draft.memo == null,
       clearLocation: draft.location == null,
@@ -692,6 +696,12 @@ class _EventDetailSheet extends StatelessWidget {
                       label: '시간',
                       value: _formatTimeLabel(event),
                     ),
+                    if (event.alarmEnabled)
+                      _DetailRow(
+                        icon: Icons.alarm_outlined,
+                        label: '일정 알람',
+                        value: _formatAlarmLabel(event),
+                      ),
                     if (event.location != null && event.location!.isNotEmpty)
                       _DetailActionRow(
                         icon: Icons.location_on_outlined,
@@ -733,6 +743,7 @@ class _EventDetailSheet extends StatelessWidget {
                         event.weather == null &&
                         event.url == null &&
                         event.memo == null &&
+                        !event.alarmEnabled &&
                         !event.showDday)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 18),
@@ -803,6 +814,15 @@ class _EventDetailSheet extends StatelessWidget {
       return 'D-day';
     }
     return difference > 0 ? 'D-$difference' : 'D+${difference.abs()}';
+  }
+
+  String _formatAlarmLabel(CalendarEvent event) {
+    if (!event.allDay) {
+      return '시작 시각 · 중지 또는 10분 후 다시 알림';
+    }
+    final minutes = event.allDayAlarmMinutes;
+    final time = DateTime(2000, 1, 1, minutes ~/ 60, minutes % 60);
+    return '${DateFormat.jm('ko_KR').format(time)} · 중지 또는 10분 후 다시 알림';
   }
 
   Future<void> _openUrl(String value) async {

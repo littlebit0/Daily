@@ -119,6 +119,9 @@ class LocalNotificationService implements NotificationService {
     final base = _baseReminderTime(event, settings);
     var deliveredImmediateReminder = false;
     for (final reminderMinutes in reminderMinutesList) {
+      if (event.alarmEnabled && reminderMinutes == 0) {
+        continue;
+      }
       final reminderAt = base.subtract(Duration(minutes: reminderMinutes));
       final plan = resolveReminderDeliveryPlan(
         reminderAt: reminderAt,

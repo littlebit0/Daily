@@ -22,7 +22,13 @@ class DriftEventRepository implements EventRepository {
     DateTime rangeEnd,
   ) {
     final query = _database.select(_database.eventRecords)
-      ..where((table) => table.deletedAt.isNull())
+      ..where(
+        (table) =>
+            table.deletedAt.isNull() &
+            (table.recurrenceFrequency.equals('none').not() |
+                (table.startAt.isSmallerThanValue(rangeEnd) &
+                    table.endAt.isBiggerThanValue(rangeStart))),
+      )
       ..orderBy([(table) => OrderingTerm.asc(table.startAt)]);
 
     return query.watch().map((records) {
@@ -45,7 +51,13 @@ class DriftEventRepository implements EventRepository {
   ) async {
     final rows =
         await (_database.select(_database.eventRecords)
-              ..where((table) => table.deletedAt.isNull())
+              ..where(
+                (table) =>
+                    table.deletedAt.isNull() &
+                    (table.recurrenceFrequency.equals('none').not() |
+                        (table.startAt.isSmallerThanValue(rangeEnd) &
+                            table.endAt.isBiggerThanValue(rangeStart))),
+              )
               ..orderBy([(table) => OrderingTerm.asc(table.startAt)]))
             .get();
     final events =
@@ -151,6 +163,8 @@ class DriftEventRepository implements EventRepository {
             syncStatus: Value(normalized.syncStatus),
             showDday: Value(normalized.showDday),
             sensitive: Value(normalized.sensitive),
+            alarmEnabled: Value(normalized.alarmEnabled),
+            allDayAlarmMinutes: Value(normalized.allDayAlarmMinutes),
           ),
         );
   }

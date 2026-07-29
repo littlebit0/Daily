@@ -45,11 +45,261 @@ private final class DailyAppleWidgets {
   }
 }
 
+private final class DailyMacAlarms {
+  static let channelName = "daily/alarm_kit"
+  static let categoryIdentifier = "daily.event.alarm"
+  static let snoozeActionIdentifier = "daily.event.alarm.snooze"
+  static let stopActionIdentifier = "daily.event.alarm.stop"
+  static let requestIdentifierPrefix = "daily-event-alarm-"
+
+  private static let eventIdKey = "dailyAlarmEventId"
+  private static let snoozeMinutesKey = "dailyAlarmSnoozeMinutes"
+
+  static func register(with flutterViewController: FlutterViewController) {
+    registerCategory()
+    let channel = FlutterMethodChannel(
+      name: channelName,
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "authorizationState":
+        authorizationState(result)
+      case "requestAuthorization":
+        requestAuthorization(result)
+      case "schedule":
+        schedule(call, result)
+      case "cancel":
+        cancel(call, result)
+      case "cancelAll":
+        cancelAll(result)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  static func registerCategory() {
+    let center = UNUserNotificationCenter.current()
+    center.getNotificationCategories { categories in
+      let snooze = UNNotificationAction(
+        identifier: snoozeActionIdentifier,
+        title: "10분 후 다시 알림",
+        options: []
+      )
+      let stop = UNNotificationAction(
+        identifier: stopActionIdentifier,
+        title: "중지",
+        options: [.destructive]
+      )
+      let alarmCategory = UNNotificationCategory(
+        identifier: categoryIdentifier,
+        actions: [snooze, stop],
+        intentIdentifiers: [],
+        options: [.customDismissAction]
+      )
+      var updated = categories.filter { $0.identifier != categoryIdentifier }
+      updated.insert(alarmCategory)
+      center.setNotificationCategories(updated)
+    }
+  }
+
+  static func handle(
+    _ response: UNNotificationResponse,
+    completionHandler: @escaping () -> Void
+  ) -> Bool {
+    guard response.notification.request.content.categoryIdentifier == categoryIdentifier else {
+      return false
+    }
+
+    let center = UNUserNotificationCenter.current()
+    let identifier = response.notification.request.identifier
+    switch response.actionIdentifier {
+    case snoozeActionIdentifier:
+      let content = response.notification.request.content.mutableCopy() as! UNMutableNotificationContent
+      let rawMinutes = content.userInfo[snoozeMinutesKey] as? NSNumber
+      let snoozeMinutes = max(rawMinutes?.intValue ?? 10, 1)
+      let request = UNNotificationRequest(
+        identifier: identifier,
+        content: content,
+        trigger: UNTimeIntervalNotificationTrigger(
+          timeInterval: TimeInterval(snoozeMinutes * 60),
+          repeats: false
+        )
+      )
+      center.removePendingNotificationRequests(withIdentifiers: [identifier])
+      center.removeDeliveredNotifications(withIdentifiers: [identifier])
+      center.add(request) { error in
+        if let error = error {
+          NSLog("[DailyAlarm] Snooze failed: \(error.localizedDescription)")
+        }
+        completionHandler()
+      }
+    default:
+      center.removePendingNotificationRequests(withIdentifiers: [identifier])
+      center.removeDeliveredNotifications(withIdentifiers: [identifier])
+      completionHandler()
+    }
+    return true
+  }
+
+  private static func authorizationState(_ result: @escaping FlutterResult) {
+    UNUserNotificationCenter.current().getNotificationSettings { settings in
+      finish(result, value: stateName(settings.authorizationStatus))
+    }
+  }
+
+  private static func requestAuthorization(_ result: @escaping FlutterResult) {
+    registerCategory()
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, error in
+      if let error = error {
+        finish(result, error: error)
+        return
+      }
+      authorizationState(result)
+    }
+  }
+
+  private static func schedule(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+    guard let arguments = call.arguments as? [String: Any],
+          let eventId = arguments["eventId"] as? String,
+          !eventId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          let title = arguments["title"] as? String,
+          let fireAtMilliseconds = int64Value(arguments["fireAtMilliseconds"]) else {
+      result(FlutterError(code: "bad_arguments", message: "Invalid macOS alarm arguments", details: nil))
+      return
+    }
+
+    let fireAt = Date(timeIntervalSince1970: TimeInterval(fireAtMilliseconds) / 1000.0)
+    guard fireAt > Date() else {
+      result(nil)
+      return
+    }
+
+    let snoozeMinutes = max(intValue(arguments["snoozeMinutes"]) ?? 10, 1)
+    let memo = (arguments["memo"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = memo.flatMap { $0.isEmpty ? nil : String($0.prefix(160)) }
+      ?? "일정이 시작되었습니다."
+    content.sound = .default
+    content.categoryIdentifier = categoryIdentifier
+    content.threadIdentifier = "daily-event-alarms"
+    content.userInfo = [
+      eventIdKey: eventId,
+      snoozeMinutesKey: snoozeMinutes,
+    ]
+    if #available(macOS 12.0, *) {
+      content.interruptionLevel = .timeSensitive
+    }
+
+    let identifier = requestIdentifier(eventId)
+    let request = UNNotificationRequest(
+      identifier: identifier,
+      content: content,
+      trigger: UNTimeIntervalNotificationTrigger(
+        timeInterval: max(fireAt.timeIntervalSinceNow, 1.0),
+        repeats: false
+      )
+    )
+    let center = UNUserNotificationCenter.current()
+    center.removePendingNotificationRequests(withIdentifiers: [identifier])
+    center.removeDeliveredNotifications(withIdentifiers: [identifier])
+    center.add(request) { error in
+      finish(result, error: error)
+    }
+  }
+
+  private static func cancel(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+    guard let arguments = call.arguments as? [String: Any],
+          let eventId = arguments["eventId"] as? String,
+          !eventId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      result(FlutterError(code: "bad_arguments", message: "Invalid macOS alarm event id", details: nil))
+      return
+    }
+    let identifiers = [requestIdentifier(eventId)]
+    let center = UNUserNotificationCenter.current()
+    center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    result(nil)
+  }
+
+  private static func cancelAll(_ result: @escaping FlutterResult) {
+    let center = UNUserNotificationCenter.current()
+    center.getPendingNotificationRequests { requests in
+      let pending = requests
+        .map(\.identifier)
+        .filter { $0.hasPrefix(requestIdentifierPrefix) }
+      center.removePendingNotificationRequests(withIdentifiers: pending)
+      center.getDeliveredNotifications { notifications in
+        let delivered = notifications
+          .map { $0.request.identifier }
+          .filter { $0.hasPrefix(requestIdentifierPrefix) }
+        center.removeDeliveredNotifications(withIdentifiers: delivered)
+        finish(result)
+      }
+    }
+  }
+
+  private static func requestIdentifier(_ eventId: String) -> String {
+    return requestIdentifierPrefix + eventId
+  }
+
+  private static func stateName(_ status: UNAuthorizationStatus) -> String {
+    switch status {
+    case .notDetermined:
+      return "notDetermined"
+    case .denied:
+      return "denied"
+    case .authorized, .provisional:
+      return "authorized"
+    @unknown default:
+      return "unsupported"
+    }
+  }
+
+  private static func intValue(_ value: Any?) -> Int? {
+    if let value = value as? Int {
+      return value
+    }
+    return (value as? NSNumber)?.intValue
+  }
+
+  private static func int64Value(_ value: Any?) -> Int64? {
+    if let value = value as? Int64 {
+      return value
+    }
+    if let value = value as? Int {
+      return Int64(value)
+    }
+    return (value as? NSNumber)?.int64Value
+  }
+
+  private static func finish(
+    _ result: @escaping FlutterResult,
+    error: Error? = nil,
+    value: Any? = nil
+  ) {
+    DispatchQueue.main.async {
+      if let error = error {
+        result(FlutterError(
+          code: "macos_alarm_error",
+          message: error.localizedDescription,
+          details: "\(error)"
+        ))
+      } else {
+        result(value)
+      }
+    }
+  }
+}
+
 private final class DailyNotificationCenterDelegate: NSObject, UNUserNotificationCenterDelegate {
   static let shared = DailyNotificationCenterDelegate()
 
   static func install() {
     UNUserNotificationCenter.current().delegate = shared
+    DailyMacAlarms.registerCategory()
   }
 
   func userNotificationCenter(
@@ -69,6 +319,9 @@ private final class DailyNotificationCenterDelegate: NSObject, UNUserNotificatio
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
+    if DailyMacAlarms.handle(response, completionHandler: completionHandler) {
+      return
+    }
     completionHandler()
   }
 }
@@ -346,6 +599,7 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     DailyNativeNotifications.register(with: flutterViewController)
+    DailyMacAlarms.register(with: flutterViewController)
     DailyMapLauncher.register(with: flutterViewController)
     DailyAppleWidgets.register(with: flutterViewController)
     DailyNotificationCenterDelegate.install()

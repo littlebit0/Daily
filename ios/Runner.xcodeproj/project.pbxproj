@@ -8,8 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		23F775F04B1318C0128516CA /* DailyAlarmMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CC54DBD089C7F46E65000F0 /* DailyAlarmMetadata.swift */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		5510AAC3D00832F60A57D7C3 /* DailyAlarmMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CC54DBD089C7F46E65000F0 /* DailyAlarmMetadata.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		756FCA7B7B5DD6246C0370D7 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 968FCB5D489B416A8E6AEBAC /* Foundation.framework */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
@@ -67,6 +69,7 @@
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		29EB6F741D6857E667F322C0 /* DailyWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = DailyWidgets.entitlements; sourceTree = "<group>"; };
+		2CC54DBD089C7F46E65000F0 /* DailyAlarmMetadata.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DailyAlarmMetadata.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
@@ -124,6 +127,7 @@
 				6849C20408FC9AC20030F39E /* DailyWidgets.swift */,
 				442F8F4DFCC4066F0BCB7D1E /* Info.plist */,
 				29EB6F741D6857E667F322C0 /* DailyWidgets.entitlements */,
+				2CC54DBD089C7F46E65000F0 /* DailyAlarmMetadata.swift */,
 			);
 			name = DailyWidgets;
 			path = ../apple_widgets;
@@ -390,6 +394,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E0682F69220361A92396D6D6 /* DailyWidgets.swift in Sources */,
+				5510AAC3D00832F60A57D7C3 /* DailyAlarmMetadata.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,6 +413,7 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+				23F775F04B1318C0128516CA /* DailyAlarmMetadata.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

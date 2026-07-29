@@ -25,10 +25,13 @@ class CalendarEvent {
     this.syncStatus = 'pending',
     this.showDday = false,
     this.sensitive = false,
+    this.alarmEnabled = false,
+    int allDayAlarmMinutes = 9 * 60,
     this.readOnly = false,
     this.systemEvent = false,
     this.holiday = false,
-  }) : reminderMinutesBeforeList = normalizeReminderMinutes(
+  }) : allDayAlarmMinutes = allDayAlarmMinutes.clamp(0, 1439),
+       reminderMinutesBeforeList = normalizeReminderMinutes(
          reminderMinutesBeforeList ??
              (reminderMinutesBefore == null
                  ? const <int>[]
@@ -56,6 +59,8 @@ class CalendarEvent {
   final String syncStatus;
   final bool showDday;
   final bool sensitive;
+  final bool alarmEnabled;
+  final int allDayAlarmMinutes;
   final bool readOnly;
   final bool systemEvent;
   final bool holiday;
@@ -112,6 +117,8 @@ class CalendarEvent {
     String? syncStatus,
     bool? showDday,
     bool? sensitive,
+    bool? alarmEnabled,
+    int? allDayAlarmMinutes,
     bool? readOnly,
     bool? systemEvent,
     bool? holiday,
@@ -153,6 +160,8 @@ class CalendarEvent {
       syncStatus: syncStatus ?? this.syncStatus,
       showDday: showDday ?? this.showDday,
       sensitive: sensitive ?? this.sensitive,
+      alarmEnabled: alarmEnabled ?? this.alarmEnabled,
+      allDayAlarmMinutes: allDayAlarmMinutes ?? this.allDayAlarmMinutes,
       readOnly: readOnly ?? this.readOnly,
       systemEvent: systemEvent ?? this.systemEvent,
       holiday: holiday ?? this.holiday,

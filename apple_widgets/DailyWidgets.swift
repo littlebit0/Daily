@@ -1,5 +1,9 @@
 import SwiftUI
 import WidgetKit
+#if os(iOS)
+import ActivityKit
+import AlarmKit
+#endif
 
 #if os(macOS)
 private let appGroup = "A6Y73X2ZLS.com.littlebit0.daily.widgets"
@@ -700,11 +704,93 @@ struct DailyDdayWidget: Widget {
   }
 }
 
+#if os(iOS)
+@available(iOS 26.0, *)
+private struct DailyAlarmActivityContent: View {
+  let title: String
+  let memo: String?
+  let compact: Bool
+
+  var body: some View {
+    HStack(spacing: compact ? 5 : 10) {
+      Image(systemName: "alarm.fill")
+        .foregroundStyle(.blue)
+      if compact {
+        Text(title)
+          .font(.caption.bold())
+          .lineLimit(1)
+      } else {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(title)
+            .font(.headline)
+            .lineLimit(1)
+          if let memo, !memo.isEmpty {
+            Text(memo)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .lineLimit(2)
+          } else {
+            Text("10분 후 다시 알림")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
+      }
+    }
+  }
+}
+
+@available(iOS 26.0, *)
+struct DailyAlarmLiveActivity: Widget {
+  var body: some WidgetConfiguration {
+    ActivityConfiguration(for: AlarmAttributes<DailyAlarmMetadata>.self) { context in
+      DailyAlarmActivityContent(
+        title: context.attributes.metadata?.title ?? "일정 알람",
+        memo: context.attributes.metadata?.memo,
+        compact: false
+      )
+      .padding()
+      .activityBackgroundTint(Color(red: 0.96, green: 0.98, blue: 1.0))
+      .activitySystemActionForegroundColor(.blue)
+    } dynamicIsland: { context in
+      let title = context.attributes.metadata?.title ?? "일정 알람"
+      return DynamicIsland {
+        DynamicIslandExpandedRegion(.leading) {
+          Image(systemName: "alarm.fill")
+            .foregroundStyle(.blue)
+        }
+        DynamicIslandExpandedRegion(.center) {
+          DailyAlarmActivityContent(
+            title: title,
+            memo: context.attributes.metadata?.memo,
+            compact: false
+          )
+        }
+      } compactLeading: {
+        Image(systemName: "alarm.fill")
+          .foregroundStyle(.blue)
+      } compactTrailing: {
+        Text("10분")
+          .font(.caption2.bold())
+      } minimal: {
+        Image(systemName: "alarm.fill")
+          .foregroundStyle(.blue)
+      }
+    }
+  }
+}
+#endif
+
 @main
 struct DailyWidgetBundle: WidgetBundle {
   var body: some Widget {
     DailyTodayWidget()
     DailyMonthWidget()
     DailyDdayWidget()
+    #if os(iOS)
+    if #available(iOS 26.0, *) {
+      DailyAlarmLiveActivity()
+    }
+    #endif
   }
 }

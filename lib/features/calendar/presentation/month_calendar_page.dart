@@ -1299,6 +1299,7 @@ class _CalendarMonthPage extends ConsumerWidget {
         initialAllDay: true,
         categories: categories,
         defaultReminderMinutesList: defaultReminderMinutesList,
+        alarmService: ref.read(alarmServiceProvider),
       ),
     );
     if (draft != null) {

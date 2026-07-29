@@ -9,7 +9,7 @@ def file_reference(group, name)
   group.files.find { |file| file.path == name } || group.new_file(name)
 end
 
-def embed_extension(host, extension)
+def embed_extension(host, extension, platform:)
   host.add_dependency(extension) unless host.dependencies.any? do |dependency|
     dependency.target == extension
   end
@@ -27,6 +27,8 @@ def embed_extension(host, extension)
     build_phase.respond_to?(:name) && build_phase.name == 'Thin Binary'
   end
   if thin_binary_index
+    thin_binary_phase = host.build_phases[thin_binary_index]
+    thin_binary_phase.input_paths = [] if platform == :ios
     host.build_phases.delete(phase)
     host.build_phases.insert(thin_binary_index, phase)
   end
@@ -47,6 +49,9 @@ def configure_project(
   widget_group = project.main_group.groups.find { |group| group.name == 'DailyWidgets' }
   widget_group ||= project.main_group.new_group('DailyWidgets', '../apple_widgets')
   swift_file = file_reference(widget_group, 'DailyWidgets.swift')
+  alarm_metadata_file = platform == :ios \
+    ? file_reference(widget_group, 'DailyAlarmMetadata.swift') \
+    : nil
   file_reference(widget_group, 'Info.plist')
   file_reference(widget_group, File.basename(entitlements))
 
@@ -71,6 +76,14 @@ def configure_project(
   end
   unless widget.source_build_phase.files_references.include?(swift_file)
     widget.source_build_phase.add_file_reference(swift_file)
+  end
+  if alarm_metadata_file
+    unless widget.source_build_phase.files_references.include?(alarm_metadata_file)
+      widget.source_build_phase.add_file_reference(alarm_metadata_file)
+    end
+    unless host.source_build_phase.files_references.include?(alarm_metadata_file)
+      host.source_build_phase.add_file_reference(alarm_metadata_file)
+    end
   end
 
   widget.build_configurations.each do |configuration|
@@ -106,7 +119,7 @@ def configure_project(
     end
   end
 
-  embed_extension(host, widget)
+  embed_extension(host, widget, platform: platform)
   project.save
 end
 

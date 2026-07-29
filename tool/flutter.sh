@@ -67,4 +67,49 @@ if [[ ! -e "$build_path" ]]; then
 fi
 
 cd "$project_root"
-"$flutter_bin" "$@"
+
+flutter_args=("$@")
+
+is_macos_command=false
+if [[ " ${flutter_args[*]} " == *" build macos "* ]]; then
+  is_macos_command=true
+elif [[ " ${flutter_args[*]} " == *" run "* ]]; then
+  for ((index = 0; index < ${#flutter_args[@]}; index++)); do
+    if [[ "${flutter_args[$index]}" == "-d" ||
+          "${flutter_args[$index]}" == "--device-id" ]]; then
+      if ((index + 1 < ${#flutter_args[@]})) &&
+         [[ "${flutter_args[$((index + 1))]}" == "macos" ]]; then
+        is_macos_command=true
+        break
+      fi
+    fi
+  done
+fi
+
+has_desktop_client_secret=false
+for argument in "${flutter_args[@]}"; do
+  if [[ "$argument" == --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET=* ]]; then
+    has_desktop_client_secret=true
+    break
+  fi
+done
+
+if [[ "$is_macos_command" == true &&
+      "$has_desktop_client_secret" == false ]]; then
+  desktop_client_secret="${GOOGLE_DESKTOP_CLIENT_SECRET:-}"
+  oauth_config="${GOOGLE_DESKTOP_OAUTH_CONFIG:-$HOME/Library/Application Support/Daily/google_desktop_oauth.json}"
+
+  if [[ -z "$desktop_client_secret" && -f "$oauth_config" ]]; then
+    desktop_client_secret="$(/usr/bin/plutil -extract installed.client_secret raw -o - "$oauth_config" 2>/dev/null || true)"
+    if [[ -z "$desktop_client_secret" ]]; then
+      desktop_client_secret="$(/usr/bin/plutil -extract client_secret raw -o - "$oauth_config" 2>/dev/null || true)"
+    fi
+  fi
+
+  if [[ -n "$desktop_client_secret" ]]; then
+    flutter_args+=("--dart-define=GOOGLE_DESKTOP_CLIENT_SECRET=$desktop_client_secret")
+    echo "Using the local macOS Desktop OAuth credential for this build."
+  fi
+fi
+
+"$flutter_bin" "${flutter_args[@]}"

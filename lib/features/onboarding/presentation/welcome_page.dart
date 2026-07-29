@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/apple_sign_in_service.dart';
+import '../../../core/alarms/alarm_service.dart';
 import '../../../core/auth/google_account.dart';
 import '../../../core/di/app_providers.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
@@ -21,6 +24,16 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   var _googleDriveAttempt = 0;
 
   bool get _busy => _busyAction != null;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(
+      Future.microtask(
+        () => ref.read(alarmServiceProvider).requestAuthorization(),
+      ).catchError((_) => AlarmAuthorizationState.unsupported),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
