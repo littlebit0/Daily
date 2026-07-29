@@ -138,7 +138,16 @@ void main() {
         }
         if (request.method == 'GET' &&
             request.url.path == '/drive/v3/files/remote-queued-event') {
-          fail('backup-only event sync must not download the remote event');
+          return _jsonResponse(
+            _eventFileJson(
+              id: changed.id,
+              title: '이전 일정',
+              startAt: changed.startAt.toIso8601String(),
+              endAt: changed.endAt.toIso8601String(),
+              updatedAt: '2025-05-30T17:00:00.000Z',
+              sourceDeviceId: 'remote-device',
+            ),
+          );
         }
         if (request.method == 'PATCH' &&
             request.url.path == '/upload/drive/v3/files/remote-queued-event') {
@@ -282,6 +291,19 @@ void main() {
                   as Map<String, Object?>;
           return _jsonResponse({'id': 'category-color-event-file'});
         }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/category-color-event-file') {
+          return _jsonResponse(
+            _eventFileJson(
+              id: 'category-color-event',
+              title: '이전 색상 일정',
+              startAt: '2026-07-30T10:00:00.000',
+              endAt: '2026-07-30T11:00:00.000',
+              updatedAt: '2025-07-29T11:00:00.000Z',
+              sourceDeviceId: 'remote-device',
+            ),
+          );
+        }
         if (request.method == 'PATCH' &&
             request.url.path == '/upload/drive/v3/files/settings-file') {
           uploadOrder.add('settings');
@@ -410,6 +432,19 @@ void main() {
         );
         return _jsonResponse({'id': 'restart-pending-file'});
       }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/restart-pending-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: pending.id,
+            title: '이전 일정',
+            startAt: pending.startAt.toIso8601String(),
+            endAt: pending.endAt.toIso8601String(),
+            updatedAt: '2025-06-01T07:00:00.000Z',
+            sourceDeviceId: 'remote-device',
+          ),
+        );
+      }
       return http.Response('unexpected ${request.method} ${request.url}', 500);
     });
 
@@ -476,6 +511,19 @@ void main() {
           jsonDecode(request.body) as Map<String, Object?>,
         );
         return _jsonResponse({'id': 'queued-before-exit-file'});
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/queued-before-exit-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: changed.id,
+            title: '이전 일정',
+            startAt: changed.startAt.toIso8601String(),
+            endAt: changed.endAt.toIso8601String(),
+            updatedAt: '2025-06-01T08:00:00.000Z',
+            sourceDeviceId: 'remote-device',
+          ),
+        );
       }
       return http.Response('unexpected ${request.method} ${request.url}', 500);
     });
@@ -564,7 +612,7 @@ void main() {
             title: 'local first',
             startAt: '2026-06-10T00:00:00.000',
             endAt: '2026-06-11T00:00:00.000',
-            updatedAt: '2026-06-01T09:00:00.000Z',
+            updatedAt: '2025-06-01T09:00:00.000Z',
           ),
         );
       }
@@ -801,9 +849,19 @@ void main() {
       );
       addTearDown(service.dispose);
 
-      await service.syncNow();
+      await expectLater(
+        service.syncNow(),
+        throwsA(
+          isA<GoogleDriveAuthException>().having(
+            (error) => error.message,
+            'message',
+            'Google Drive 연결이 필요합니다.',
+          ),
+        ),
+      );
 
-      expect(service.statusNotifier.value.message, 'Google Drive 연결이 필요합니다.');
+      expect(service.statusNotifier.value.message, '동기화 실패');
+      expect(service.statusNotifier.value.error, 'Google Drive 연결이 필요합니다.');
       expect(requests, isEmpty);
     },
   );
@@ -988,6 +1046,19 @@ void main() {
             },
           ]);
         }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/editing-event-file') {
+          return _jsonResponse(
+            _eventFileJson(
+              id: uploaded.id,
+              title: '이전 회의',
+              startAt: uploaded.startAt.toIso8601String(),
+              endAt: uploaded.endAt.toIso8601String(),
+              updatedAt: '2025-07-17T08:59:00.000Z',
+              sourceDeviceId: 'remote-device',
+            ),
+          );
+        }
         if (request.method == 'PATCH' &&
             request.url.path == '/upload/drive/v3/files/editing-event-file') {
           await repository.save(newer);
@@ -1099,6 +1170,675 @@ void main() {
       expect(notificationService.scheduled, isEmpty);
     },
   );
+
+  test('change detection restores only another device event', () async {
+    SharedPreferences.setMockInitialValues({
+      'deviceId': 'local-device',
+      'driveChangeAccount': 'tester@example.com',
+      'driveChangePageToken': 'token-1',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final requests = <http.Request>[];
+    final httpClient = MockClient((request) async {
+      requests.add(request);
+      if (request.method == 'GET' && request.url.path == '/drive/v3/changes') {
+        expect(request.url.queryParameters['pageToken'], 'token-1');
+        expect(request.url.queryParameters['spaces'], 'appDataFolder');
+        return _jsonResponse({
+          'newStartPageToken': 'token-2',
+          'changes': [
+            {
+              'fileId': 'external-event-file',
+              'removed': false,
+              'file': {
+                'id': 'external-event-file',
+                'name': 'daily-sync-v2-event-external-event.json',
+              },
+            },
+          ],
+        });
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/external-event-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: 'external-event',
+            title: '다른 기기 일정',
+            startAt: '2026-07-30T00:00:00.000Z',
+            endAt: '2026-07-31T00:00:00.000Z',
+            sourceDeviceId: 'remote-device',
+          ),
+        );
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.checkForRemoteChangesNow();
+
+    expect((await repository.findById('external-event'))?.title, '다른 기기 일정');
+    expect(notificationService.scheduled, hasLength(1));
+    expect(
+      SettingsRepository(
+        preferences: preferences,
+      ).driveChangePageToken('tester@example.com'),
+      'token-2',
+    );
+    expect(
+      requests.any(
+        (request) => request.url.path == '/drive/v3/changes/startPageToken',
+      ),
+      isFalse,
+    );
+  });
+
+  test('change detection ignores the current device upload', () async {
+    SharedPreferences.setMockInitialValues({
+      'deviceId': 'local-device',
+      'driveChangeAccount': 'tester@example.com',
+      'driveChangePageToken': 'token-1',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final local = _event(
+      id: 'own-event',
+      title: '현재 기기 최신 일정',
+      startAt: DateTime(2026, 7, 30),
+      endAt: DateTime(2026, 7, 31),
+      updatedAt: DateTime(2026, 7, 29, 15),
+    );
+    await repository.save(local);
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/changes') {
+        return _jsonResponse({
+          'newStartPageToken': 'token-2',
+          'changes': [
+            {
+              'fileId': 'own-event-file',
+              'removed': false,
+              'file': {
+                'id': 'own-event-file',
+                'name': 'daily-sync-v2-event-own-event.json',
+              },
+            },
+          ],
+        });
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/own-event-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: 'own-event',
+            title: '원격에 기록된 동일 기기 파일',
+            startAt: '2026-07-30T00:00:00.000Z',
+            endAt: '2026-07-31T00:00:00.000Z',
+            sourceDeviceId: 'local-device',
+          ),
+        );
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.checkForRemoteChangesNow();
+
+    expect((await repository.findById('own-event'))?.title, local.title);
+    expect(notificationService.scheduled, isEmpty);
+    expect(service.statusNotifier.value.message, '최신 상태');
+  });
+
+  test(
+    'initial change detection restores once and stores a baseline',
+    () async {
+      SharedPreferences.setMockInitialValues({'deviceId': 'local-device'});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      var startTokenRequests = 0;
+      final httpClient = MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/changes/startPageToken') {
+          startTokenRequests += 1;
+          return _jsonResponse({'startPageToken': 'baseline-token'});
+        }
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-settings.json')) {
+            return _driveFiles([]);
+          }
+          if (query.contains('daily-sync-v2-event-')) {
+            return _driveFiles([]);
+          }
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      await service.checkForRemoteChangesNow();
+
+      expect(startTokenRequests, 1);
+      expect(
+        SettingsRepository(
+          preferences: preferences,
+        ).driveChangePageToken('tester@example.com'),
+        'baseline-token',
+      );
+    },
+  );
+
+  test(
+    'resume restores external settings without uploading unchanged settings',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'deviceId': 'local-device',
+        'driveChangeAccount': 'tester@example.com',
+        'driveChangePageToken': 'token-1',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final requests = <http.Request>[];
+      final httpClient = MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/changes') {
+          return _jsonResponse({
+            'newStartPageToken': 'token-2',
+            'changes': [
+              {
+                'fileId': 'settings-file',
+                'removed': false,
+                'file': {
+                  'id': 'settings-file',
+                  'name': 'daily-sync-v2-settings.json',
+                },
+              },
+            ],
+          });
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/settings-file') {
+          return _jsonResponse({
+            'schemaVersion': 2,
+            'type': 'settings',
+            'sourceDeviceId': 'remote-device',
+            'settings': {'appTextSize': AppTextSize.large.name},
+          });
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      await service.syncOnResume();
+
+      expect(
+        SettingsRepository(preferences: preferences).load().appTextSize,
+        AppTextSize.large,
+      );
+      expect(
+        requests.any(
+          (request) => request.method == 'POST' || request.method == 'PATCH',
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test('resume backs up before restoring external changes', () async {
+    SharedPreferences.setMockInitialValues({
+      'deviceId': 'local-device',
+      'driveChangeAccount': 'tester@example.com',
+      'driveChangePageToken': 'token-1',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final pending = _event(
+      id: 'local-pending',
+      title: '로컬 변경',
+      startAt: DateTime(2026, 7, 30),
+      endAt: DateTime(2026, 7, 31),
+      updatedAt: DateTime(2026, 7, 29, 17),
+      syncStatus: 'pending',
+    );
+    await repository.save(pending);
+    final requestOrder = <String>[];
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        return _driveFiles([]);
+      }
+      if (request.method == 'POST' &&
+          request.url.path == '/upload/drive/v3/files') {
+        requestOrder.add('backup');
+        return _jsonResponse({'id': 'local-pending-file'});
+      }
+      if (request.method == 'GET' && request.url.path == '/drive/v3/changes') {
+        requestOrder.add('detect');
+        return _jsonResponse({
+          'newStartPageToken': 'token-2',
+          'changes': [
+            {
+              'fileId': 'external-event-file',
+              'removed': false,
+              'file': {
+                'id': 'external-event-file',
+                'name': 'daily-sync-v2-event-external-event.json',
+              },
+            },
+          ],
+        });
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/external-event-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: 'external-event',
+            title: '다른 기기 변경',
+            startAt: '2026-07-31T00:00:00.000Z',
+            endAt: '2026-08-01T00:00:00.000Z',
+            sourceDeviceId: 'remote-device',
+          ),
+        );
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.syncOnResume();
+
+    expect(requestOrder, ['backup', 'detect']);
+    expect((await repository.findById(pending.id))?.syncStatus, 'synced');
+    expect((await repository.findById('external-event'))?.title, '다른 기기 변경');
+  });
+
+  test('newer external event survives a pending local upload', () async {
+    SharedPreferences.setMockInitialValues({'deviceId': 'local-device'});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final local = _event(
+      id: 'conflict-event',
+      title: '오래된 로컬 수정',
+      startAt: DateTime(2026, 7, 30),
+      endAt: DateTime(2026, 7, 31),
+      updatedAt: DateTime(2026, 7, 29, 17),
+      syncStatus: 'pending',
+    );
+    await repository.save(local);
+    var uploadCount = 0;
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        return _driveFiles([
+          {
+            'id': 'conflict-event-file',
+            'name': 'daily-sync-v2-event-conflict-event.json',
+          },
+        ]);
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/conflict-event-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: local.id,
+            title: '더 최신인 다른 기기 수정',
+            startAt: local.startAt.toIso8601String(),
+            endAt: local.endAt.toIso8601String(),
+            updatedAt: '2027-07-29T17:00:00.000Z',
+            sourceDeviceId: 'remote-device',
+          ),
+        );
+      }
+      if (request.method == 'PATCH') {
+        uploadCount += 1;
+        return _jsonResponse({'id': 'conflict-event-file'});
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.backupNow(eventIds: {local.id});
+
+    expect(uploadCount, 0);
+    expect((await repository.findById(local.id))?.title, '더 최신인 다른 기기 수정');
+    expect((await repository.findById(local.id))?.syncStatus, 'synced');
+  });
+
+  test('failed automatic backup keeps pending data and retries', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final pending = _event(
+      id: 'retry-event',
+      title: '재시도 일정',
+      startAt: DateTime(2026, 7, 30),
+      endAt: DateTime(2026, 7, 31),
+      updatedAt: DateTime(2026, 7, 29, 16),
+      syncStatus: 'pending',
+    );
+    await repository.save(pending);
+    var uploadAttempts = 0;
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        return _driveFiles([
+          {
+            'id': 'retry-event-file',
+            'name': 'daily-sync-v2-event-retry-event.json',
+          },
+        ]);
+      }
+      if (request.method == 'PATCH' &&
+          request.url.path == '/upload/drive/v3/files/retry-event-file') {
+        uploadAttempts += 1;
+        if (uploadAttempts == 1) {
+          return http.Response('temporary server error', 503);
+        }
+        return _jsonResponse({'id': 'retry-event-file'});
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/retry-event-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: pending.id,
+            title: '이전 일정',
+            startAt: pending.startAt.toIso8601String(),
+            endAt: pending.endAt.toIso8601String(),
+            updatedAt: '2025-07-29T15:00:00.000Z',
+            sourceDeviceId: 'remote-device',
+          ),
+        );
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+      automaticRetryDelays: const [Duration(milliseconds: 1)],
+    );
+    addTearDown(service.dispose);
+
+    await expectLater(
+      service.syncPendingChangesNow(),
+      throwsA(isA<GoogleDriveSyncException>()),
+    );
+    expect((await repository.findById(pending.id))?.syncStatus, 'pending');
+
+    for (var attempt = 0; attempt < 20 && uploadAttempts < 2; attempt += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    expect(uploadAttempts, 2);
+    expect((await repository.findById(pending.id))?.syncStatus, 'synced');
+  });
+
+  test(
+    'successful change detection does not cancel a pending backup retry',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'deviceId': 'local-device',
+        'driveChangeAccount': 'tester@example.com',
+        'driveChangePageToken': 'token-1',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final pending = _event(
+        id: 'independent-retry',
+        title: '독립 재시도',
+        startAt: DateTime(2026, 7, 30),
+        endAt: DateTime(2026, 7, 31),
+        updatedAt: DateTime(2026, 7, 29, 18),
+        syncStatus: 'pending',
+      );
+      await repository.save(pending);
+      var uploadAttempts = 0;
+      final httpClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          return _driveFiles([]);
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/upload/drive/v3/files') {
+          uploadAttempts += 1;
+          if (uploadAttempts == 1) {
+            return http.Response('temporary server error', 503);
+          }
+          return _jsonResponse({'id': 'independent-retry-file'});
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/changes') {
+          return _jsonResponse({
+            'newStartPageToken': 'token-2',
+            'changes': <Object?>[],
+          });
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+        automaticRetryDelays: const [Duration(milliseconds: 20)],
+      );
+      addTearDown(service.dispose);
+
+      await expectLater(
+        service.syncPendingChangesNow(),
+        throwsA(isA<GoogleDriveSyncException>()),
+      );
+      await service.checkForRemoteChangesNow();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(uploadAttempts, 2);
+      expect((await repository.findById(pending.id))?.syncStatus, 'synced');
+    },
+  );
+
+  test('partial batch failure retries only the remaining event', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final first = _event(
+      id: 'partial-success',
+      title: '먼저 완료',
+      startAt: DateTime(2026, 7, 30),
+      endAt: DateTime(2026, 7, 31),
+      updatedAt: DateTime(2026, 7, 29, 16),
+      syncStatus: 'pending',
+    );
+    final second = _event(
+      id: 'partial-retry',
+      title: '재시도 필요',
+      startAt: DateTime(2026, 7, 31),
+      endAt: DateTime(2026, 8, 1),
+      updatedAt: DateTime(2026, 7, 29, 16),
+      syncStatus: 'pending',
+    );
+    await repository.save(first);
+    await repository.save(second);
+    var firstUploads = 0;
+    var secondUploads = 0;
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        final query = request.url.queryParameters['q'] ?? '';
+        return _driveFiles([
+          if (query.contains('partial-success'))
+            {
+              'id': 'partial-success-file',
+              'name': 'daily-sync-v2-event-partial-success.json',
+            },
+          if (query.contains('partial-retry'))
+            {
+              'id': 'partial-retry-file',
+              'name': 'daily-sync-v2-event-partial-retry.json',
+            },
+        ]);
+      }
+      if (request.method == 'PATCH' &&
+          request.url.path == '/upload/drive/v3/files/partial-success-file') {
+        firstUploads += 1;
+        return _jsonResponse({'id': 'partial-success-file'});
+      }
+      if (request.method == 'PATCH' &&
+          request.url.path == '/upload/drive/v3/files/partial-retry-file') {
+        secondUploads += 1;
+        if (secondUploads == 1) {
+          return http.Response('temporary server error', 503);
+        }
+        return _jsonResponse({'id': 'partial-retry-file'});
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/partial-success-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: first.id,
+            title: '이전 일정',
+            startAt: first.startAt.toIso8601String(),
+            endAt: first.endAt.toIso8601String(),
+            updatedAt: '2025-07-29T15:00:00.000Z',
+            sourceDeviceId: 'remote-device',
+          ),
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/partial-retry-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: second.id,
+            title: '이전 일정',
+            startAt: second.startAt.toIso8601String(),
+            endAt: second.endAt.toIso8601String(),
+            updatedAt: '2025-07-29T15:00:00.000Z',
+            sourceDeviceId: 'remote-device',
+          ),
+        );
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+      automaticRetryDelays: const [Duration(milliseconds: 1)],
+    );
+    addTearDown(service.dispose);
+
+    await expectLater(
+      service.syncPendingChangesNow(),
+      throwsA(isA<GoogleDriveSyncException>()),
+    );
+    for (var attempt = 0; attempt < 20 && secondUploads < 2; attempt += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+
+    expect(firstUploads, 1);
+    expect(secondUploads, 2);
+    expect((await repository.findById(first.id))?.syncStatus, 'synced');
+    expect((await repository.findById(second.id))?.syncStatus, 'synced');
+  });
+
+  test('offline automatic backup retries a bounded number of times', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final pending = _event(
+      id: 'offline-event',
+      title: '오프라인 일정',
+      startAt: DateTime(2026, 7, 30),
+      endAt: DateTime(2026, 7, 31),
+      updatedAt: DateTime(2026, 7, 29, 16),
+      syncStatus: 'pending',
+    );
+    await repository.save(pending);
+    var attempts = 0;
+    final httpClient = MockClient((request) async {
+      attempts += 1;
+      throw http.ClientException('network unavailable', request.url);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+      automaticRetryDelays: const [
+        Duration(milliseconds: 1),
+        Duration(milliseconds: 1),
+      ],
+    );
+    addTearDown(service.dispose);
+
+    await expectLater(
+      service.syncPendingChangesNow(),
+      throwsA(isA<http.ClientException>()),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(attempts, 3);
+    expect((await repository.findById(pending.id))?.syncStatus, 'pending');
+    expect(service.statusNotifier.value.message, '동기화 실패');
+  });
 }
 
 GoogleDriveSyncService _service({
@@ -1109,6 +1849,7 @@ GoogleDriveSyncService _service({
   required http.Client httpClient,
   Duration backupRestoreDelay = Duration.zero,
   Duration changeSyncDelay = Duration.zero,
+  List<Duration> automaticRetryDelays = const [],
 }) {
   return GoogleDriveSyncService(
     authService: authService ?? _FakeGoogleDriveAuthService(),
@@ -1118,6 +1859,7 @@ GoogleDriveSyncService _service({
     httpClient: httpClient,
     backupRestoreDelay: backupRestoreDelay,
     changeSyncDelay: changeSyncDelay,
+    automaticRetryDelays: automaticRetryDelays,
   );
 }
 
@@ -1139,10 +1881,12 @@ Map<String, Object?> _eventFileJson({
   required String startAt,
   required String endAt,
   String updatedAt = '2026-05-29T00:00:00.000Z',
+  String? sourceDeviceId,
 }) {
   return {
     'schemaVersion': 2,
     'type': 'event',
+    'sourceDeviceId': ?sourceDeviceId,
     'event': {
       'id': id,
       'title': title,

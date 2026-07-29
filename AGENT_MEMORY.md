@@ -2438,3 +2438,46 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   completed successfully and left all 76 local records synced with category
   colors matching their definitions. The iOS build updated the existing iPhone
   17 simulator app without launching it.
+
+## 2026-07-29 Client-Only Cross-Device Change Detection
+
+- The user explicitly rejected adding a server. Cross-device detection uses
+  only the Google Drive Changes API from the client; no webhook, push server,
+  background polling loop, or server infrastructure was added.
+- Every sync envelope now includes a stable local `sourceDeviceId`. Each Google
+  account stores its own Drive change page token locally. Daily checks that
+  token at app start and foreground resume, ignores files written by the same
+  device, and restores only detected writes from another device.
+- On the first run after this migration, Daily obtains a Drive start-page token,
+  performs one baseline restore, and stores the token. Subsequent automatic
+  restores are incremental. iOS cannot receive an immediate remote wake while
+  the app is terminated; remote changes are applied on the next app start or
+  foreground resume.
+- Lifecycle behavior is now:
+  - Event create/update/delete uploads only the affected pending event files.
+  - App start checks/restores remote changes first, then uploads persistent
+    local pending changes.
+  - Foreground resume uploads pending events/settings, waits three seconds, and
+    then checks the Drive change feed for another device's writes.
+  - Background/exit remains best-effort backup-only.
+  - Manual sync remains backup, three-second wait, then full restore.
+- Resume and manual backup upload settings only when the local settings pending
+  marker is set. This prevents an unchanged, stale local settings snapshot from
+  overwriting newer settings written by another device before change detection.
+- Existing remote event files are compared immediately before upload. If an
+  external device has a newer event revision, Daily applies that revision and
+  does not overwrite it. Equal-time divergent revisions use device IDs as a
+  deterministic tie-breaker.
+- Duplicate requests continue to merge while every caller waits for its own
+  completion. Network, timeout, rate-limit, and transient server failures keep
+  event/settings pending state and use bounded retries at 2, 10, and 30 seconds.
+  Authentication failures and interactive cancellation are not reported as a
+  successful sync and never open a login window automatically.
+- Added regression coverage for external-only change restoration, same-device
+  filtering, baseline token persistence, backup-before-detect ordering, stale
+  settings overwrite prevention, concurrent event conflict resolution, queued
+  callers, offline retry bounds, and partial-batch retry behavior.
+- Verification passed with `./tool/flutter.sh analyze --no-pub`, all 119 Flutter
+  tests, a macOS debug build, and an iOS simulator debug build. Neither build was
+  installed or launched for this change. No Android or Windows platform file
+  was edited.

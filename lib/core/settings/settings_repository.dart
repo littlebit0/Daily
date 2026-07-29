@@ -52,6 +52,8 @@ class SettingsRepository {
   static const _use24HourTimeKey = 'use24HourTime';
   static const _settingsSyncPendingKey = 'settingsSyncPending';
   static const _settingsSyncRevisionKey = 'settingsSyncRevision';
+  static const _driveChangeTokenKey = 'driveChangePageToken';
+  static const _driveChangeAccountKey = 'driveChangeAccount';
   static const _deviceIdKey = 'deviceId';
   static const _appleUserIdentifierKey = 'appleUserIdentifier';
   static const _appleEmailKey = 'appleEmail';
@@ -208,6 +210,32 @@ class SettingsRepository {
     await _preferences.setBool(_settingsSyncPendingKey, false);
   }
 
+  String? driveChangePageToken(String accountEmail) {
+    final storedAccount = _preferences.getString(_driveChangeAccountKey);
+    if (storedAccount == null ||
+        storedAccount.toLowerCase() != accountEmail.trim().toLowerCase()) {
+      return null;
+    }
+    final token = _preferences.getString(_driveChangeTokenKey)?.trim();
+    return token == null || token.isEmpty ? null : token;
+  }
+
+  Future<void> saveDriveChangePageToken({
+    required String accountEmail,
+    required String pageToken,
+  }) async {
+    await _preferences.setString(
+      _driveChangeAccountKey,
+      accountEmail.trim().toLowerCase(),
+    );
+    await _preferences.setString(_driveChangeTokenKey, pageToken.trim());
+  }
+
+  Future<void> clearDriveChangePageToken() async {
+    await _preferences.remove(_driveChangeTokenKey);
+    await _preferences.remove(_driveChangeAccountKey);
+  }
+
   List<int> _loadDefaultReminderMinutes() {
     final raw = _preferences.getString(_defaultReminderListKey);
     if (raw != null) {
@@ -302,6 +330,7 @@ class SettingsRepository {
     if (dailyAccount != null) {
       await _saveDailyAccount(dailyAccount.copyWith(clearGoogleAccount: true));
     }
+    await clearDriveChangePageToken();
   }
 
   Future<void> deleteDailyAccount() async {
@@ -375,6 +404,9 @@ class SettingsRepository {
     await _preferences.remove(_appLockEnabledKey);
     await _preferences.remove(_appLockBiometricsEnabledKey);
     await _preferences.remove(_use24HourTimeKey);
+    await _preferences.remove(_settingsSyncPendingKey);
+    await _preferences.remove(_settingsSyncRevisionKey);
+    await clearDriveChangePageToken();
     await _preferences.remove(_deviceIdKey);
     await deleteDailyAccount();
     await deleteGeminiApiKey();

@@ -614,9 +614,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
   }
 
   Future<void> _syncGoogleDriveSnapshot() async {
-    await ref
-        .read(googleDriveSyncServiceProvider)
-        .syncPendingChangesNow(restoreAfterBackup: true);
+    await ref.read(googleDriveSyncServiceProvider).syncOnResume();
     _refreshSettingsState();
   }
 
