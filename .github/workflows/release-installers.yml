@@ -54,10 +54,16 @@ jobs:
           flutter-version: "3.44.0"
           cache: true
       - run: flutter pub get
+      - name: Disable signing for the unsigned DMG
+        shell: bash
+        run: |
+          ruby -pi -e '
+            gsub(%q{CODE_SIGN_IDENTITY = "Apple Development";}, %q{CODE_SIGN_IDENTITY = "-";})
+            gsub(%q{CODE_SIGN_STYLE = Automatic;}, %q{CODE_SIGN_STYLE = Manual;})
+            gsub(%r{DEVELOPMENT_TEAM = [A-Z0-9]+;}, %q{DEVELOPMENT_TEAM = "";})
+          ' macos/Runner.xcodeproj/project.pbxproj
       - name: Build macOS app
         env:
-          CODE_SIGNING_ALLOWED: "NO"
-          CODE_SIGNING_REQUIRED: "NO"
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: flutter build macos --release --no-pub --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$GOOGLE_DESKTOP_CLIENT_SECRET"
       - name: Stage DMG
