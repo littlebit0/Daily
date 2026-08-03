@@ -2,11 +2,14 @@
 
 Daily는 이미 Flutter iOS/macOS 타깃을 포함하고 있습니다. 다만 Apple 플랫폼 산출물을 만들려면 소스에 커밋할 수 없는 로컬 도구, OAuth, 서명 설정이 필요합니다.
 
+현재 App Store 제출 기준은 iOS/macOS 모두 `3.0.1 (3.0.1)`입니다.
+
 ## 현재 앱 ID
 
 - iOS 번들 ID: `com.littlebit0.daily`
-- macOS 번들 ID: `com.littlebit0.daily.macos`
-- 앱 버전: `1.1.1+2`
+- macOS 번들 ID: `com.littlebit0.daily`
+- iOS/macOS 위젯 번들 ID: `com.littlebit0.daily.widgets`
+- 앱 버전 및 빌드: `3.0.1 (3.0.1)`
 - 최소 iOS 버전: `15.0`
 
 ## 필요한 로컬 도구
@@ -43,7 +46,7 @@ Daily는 이미 Flutter iOS/macOS 타깃을 포함하고 있습니다. 다만 Ap
 Google Cloud에서 다음 OAuth client를 확인하거나 생성합니다.
 
 - iOS client: 번들 ID `com.littlebit0.daily`
-- macOS client: 번들 ID `com.littlebit0.daily.macos`
+- macOS client: 번들 ID `com.littlebit0.daily`
 - 기존 Web client는 `GOOGLE_SIGN_IN_SERVER_CLIENT_ID`로 계속 사용 가능
 
 iOS는 현재 `ios/Runner/GoogleService-Info.plist`와 `ios/Runner/Info.plist`에 아래 client가 연결되어 있습니다.

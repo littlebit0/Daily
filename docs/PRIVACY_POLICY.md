@@ -1,6 +1,8 @@
 # Daily Privacy Policy
 
-Effective date: 2026-06-25
+Effective date: 2026-08-03
+
+Current app release baseline: `3.0.1`.
 
 Daily is a personal calendar app. This policy explains what data the app uses
 and how it is handled.
@@ -22,7 +24,8 @@ data is stored in the app-specific Google Drive AppData area.
 ## Data Use
 
 Daily uses your data only to provide app functionality, including calendar
-display, reminders, backup, restore, and cross-device sync.
+display, reminders and alarms, widgets, calendar import, backup, restore, and
+cross-device sync.
 
 Daily does not sell personal data, does not show ads, and does not use your data
 for third-party tracking.

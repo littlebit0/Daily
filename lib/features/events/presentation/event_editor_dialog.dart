@@ -61,7 +61,6 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   late DateTime? _recurrenceUntil;
   late int? _recurrenceCount;
   late bool _showDday;
-  late bool _sensitive;
   late bool _alarmEnabled;
   late TimeOfDay _allDayAlarmTime;
   AlarmAuthorizationState _alarmState = AlarmAuthorizationState.unsupported;
@@ -128,7 +127,6 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
         ? _RecurrenceEndMode.count
         : _RecurrenceEndMode.never;
     _showDday = event?.showDday ?? false;
-    _sensitive = event?.sensitive ?? false;
     _alarmEnabled = event?.alarmEnabled ?? false;
     final allDayAlarmMinutes = event?.allDayAlarmMinutes ?? 9 * 60;
     _allDayAlarmTime = TimeOfDay(
@@ -466,16 +464,6 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                         subtitle: const Text('달력과 일정 목록에 D-day를 함께 표시합니다.'),
                         contentPadding: EdgeInsets.zero,
                       ),
-                      SwitchListTile(
-                        value: _sensitive,
-                        onChanged: (value) {
-                          _clearValidation();
-                          setState(() => _sensitive = value);
-                        },
-                        title: const Text('민감 일정'),
-                        subtitle: const Text('설정에 따라 제목을 비공개로 숨길 수 있습니다.'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _locationController,
@@ -756,7 +744,6 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
             : _recurrenceCount,
       ),
       showDday: _showDday,
-      sensitive: _sensitive,
       alarmEnabled: _frequency == RecurrenceFrequency.none && _alarmEnabled,
       allDayAlarmMinutes: _allDayAlarmTime.hour * 60 + _allDayAlarmTime.minute,
     );

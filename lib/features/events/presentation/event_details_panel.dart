@@ -12,7 +12,6 @@ import '../domain/event_category.dart';
 import '../domain/event_draft.dart';
 import '../domain/recurrence_rule.dart';
 import 'event_editor_dialog.dart';
-import 'sensitive_event_access.dart';
 
 enum _RecurringChangeScope { onlyThis, future, all }
 
@@ -31,7 +30,6 @@ class EventDetailsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
-    final hideSensitive = !ref.watch(sensitiveEventsUnlockedProvider);
     final dateLabel = _formatDateLabel(date);
     final liveEventsAsync = ref.watch(eventsInRangeProvider(_dayRange(date)));
     final dayEvents = liveEventsAsync.maybeWhen(
@@ -40,7 +38,7 @@ class EventDetailsPanel extends ConsumerWidget {
     );
 
     return Material(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -86,7 +84,6 @@ class EventDetailsPanel extends ConsumerWidget {
                         final event = dayEvents[index];
                         return _EventTile(
                           event: event,
-                          hideSensitive: hideSensitive,
                           onOpen: () => _openEventDetails(
                             context,
                             ref,
@@ -126,16 +123,6 @@ class EventDetailsPanel extends ConsumerWidget {
     List<EventCategory> categories,
     List<int> defaultReminderMinutesList,
   ) async {
-    if (event.sensitive && !ref.read(sensitiveEventsUnlockedProvider)) {
-      final authenticated = await authenticateSensitiveEventAccess(
-        context: context,
-        ref: ref,
-      );
-      if (!context.mounted || !authenticated) {
-        return;
-      }
-      ref.read(sensitiveEventsUnlockedProvider.notifier).state = true;
-    }
     if (!context.mounted) {
       return;
     }
@@ -315,7 +302,6 @@ class EventDetailsPanel extends ConsumerWidget {
       reminderMinutesBeforeList: draft.reminderMinutesBeforeList,
       recurrence: draft.recurrence,
       showDday: draft.showDday,
-      sensitive: draft.sensitive,
       alarmEnabled: draft.alarmEnabled,
       allDayAlarmMinutes: draft.allDayAlarmMinutes,
       holiday: draft.category.id == EventCategory.holiday.id,
@@ -399,24 +385,21 @@ class EventDetailsPanel extends ConsumerWidget {
 class _EventTile extends StatelessWidget {
   const _EventTile({
     required this.event,
-    required this.hideSensitive,
     required this.onOpen,
     required this.onEdit,
     required this.onDelete,
   });
 
   final CalendarEvent event;
-  final bool hideSensitive;
   final VoidCallback onOpen;
   final VoidCallback? onEdit;
   final Future<void> Function()? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final hidden = hideSensitive && event.sensitive;
     final timeLabel = _formatTimeLabel(event);
-    final color = hidden ? const Color(0xff64748b) : Color(event.colorValue);
-    final title = hidden ? '비공개 일정' : event.title;
+    final color = Color(event.colorValue);
+    final title = event.title;
     return Material(
       color: color.withValues(alpha: event.holiday ? 0.07 : 0.08),
       shape: RoundedRectangleBorder(
@@ -454,10 +437,6 @@ class _EventTile extends StatelessWidget {
                               Expanded(
                                 child: Row(
                                   children: [
-                                    if (hidden) ...[
-                                      const Icon(Icons.lock_outline, size: 16),
-                                      const SizedBox(width: 6),
-                                    ],
                                     Expanded(
                                       child: Text(
                                         title,
@@ -474,14 +453,12 @@ class _EventTile extends StatelessWidget {
                                 const Icon(Icons.lock_outline, size: 16),
                             ],
                           ),
-                          if (!hidden) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              timeLabel,
-                              style: Theme.of(context).textTheme.labelMedium,
-                            ),
-                          ],
-                          if (!hidden && event.showDday)
+                          const SizedBox(height: 4),
+                          Text(
+                            timeLabel,
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          if (event.showDday)
                             Text(
                               _formatDday(event),
                               style: Theme.of(context).textTheme.labelMedium
@@ -490,15 +467,13 @@ class _EventTile extends StatelessWidget {
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
-                          if (!hidden &&
-                              event.location != null &&
+                          if (event.location != null &&
                               event.location!.isNotEmpty)
                             Text(
                               event.location!,
                               style: Theme.of(context).textTheme.labelMedium,
                             ),
-                          if (!hidden &&
-                              event.location != null &&
+                          if (event.location != null &&
                               event.location!.isNotEmpty)
                             TextButton.icon(
                               onPressed: () =>
@@ -511,16 +486,13 @@ class _EventTile extends StatelessWidget {
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                             ),
-                          if (!hidden &&
-                              event.weather != null &&
+                          if (event.weather != null &&
                               event.weather!.isNotEmpty)
                             Text(
                               '날씨: ${event.weather!}',
                               style: Theme.of(context).textTheme.labelMedium,
                             ),
-                          if (!hidden &&
-                              event.url != null &&
-                              event.url!.isNotEmpty)
+                          if (event.url != null && event.url!.isNotEmpty)
                             TextButton.icon(
                               onPressed: () => _openUrl(event.url!),
                               icon: const Icon(Icons.link, size: 16),
@@ -543,7 +515,7 @@ class _EventTile extends StatelessWidget {
               ),
             ),
           ),
-          if (!hidden && !event.readOnly)
+          if (!event.readOnly)
             Padding(
               padding: const EdgeInsets.fromLTRB(0, 12, 8, 0),
               child: Row(
@@ -680,11 +652,6 @@ class _EventDetailSheet extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (event.sensitive)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 2),
-                      child: Icon(Icons.lock_open_outlined, size: 20),
-                    ),
                 ],
               ),
               const SizedBox(height: 18),
@@ -860,7 +827,11 @@ class _DetailRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: const Color(0xff64748b)),
+          Icon(
+            icon,
+            size: 20,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -902,7 +873,11 @@ class _DetailActionRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: const Color(0xff64748b)),
+          Icon(
+            icon,
+            size: 20,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

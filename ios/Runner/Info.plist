@@ -34,7 +34,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>3.0.0</string>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>GIDClientID</key>
 	<string>234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -45,6 +45,8 @@
 	<string>Apple 캘린더의 일정을 Daily로 옮기기 위해 캘린더를 읽습니다.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Apple 캘린더의 일정을 Daily로 옮기기 위해 캘린더를 읽습니다.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Daily 앱 잠금을 안전하게 해제하기 위해 Face ID를 사용합니다.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>LSApplicationQueriesSchemes</key>

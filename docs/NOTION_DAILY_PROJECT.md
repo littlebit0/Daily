@@ -1,5 +1,8 @@
 # Daily 프로젝트 문서
 
+> 이 문서는 초기 통합 기획 이력이다. 현재 3.0.1 제품 동작과 배포 상태는
+> `README.md`, `PROJECT_ANALYSIS.md`, `docs/PROGRESS_STATUS.md`를 기준으로 한다.
+
 이 문서는 Notion에 그대로 옮기기 위한 통합 문서다.
 
 ## 1. 프로젝트 목적

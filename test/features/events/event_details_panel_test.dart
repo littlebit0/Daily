@@ -5,7 +5,6 @@ import 'package:daily/features/events/domain/event_category.dart';
 import 'package:daily/features/events/domain/event_repository.dart';
 import 'package:daily/features/events/presentation/event_details_panel.dart';
 import 'package:daily/features/events/presentation/event_editor_dialog.dart';
-import 'package:daily/features/events/presentation/sensitive_event_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,26 +13,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('locked sensitive event does not render private details', (
-    tester,
-  ) async {
-    final event = _sensitiveEvent();
-    await _pumpPanel(tester, event: event, unlocked: false);
-
-    expect(find.text('비공개 일정'), findsOneWidget);
-    expect(find.byIcon(Icons.lock_outline), findsWidgets);
-    expect(find.textContaining('10:00'), findsNothing);
-    expect(find.text('서울시청'), findsNothing);
-    expect(find.text('맑음'), findsNothing);
-    expect(find.text('https://example.com/meeting'), findsNothing);
-    expect(find.text('준비물 확인'), findsNothing);
-  });
-
-  testWidgets('unlocked event detail shows all fields and actions', (
-    tester,
-  ) async {
-    final event = _sensitiveEvent();
-    await _pumpPanel(tester, event: event, unlocked: true);
+  testWidgets('event detail shows all fields and actions', (tester) async {
+    final event = _event();
+    await _pumpPanel(tester, event: event);
 
     await tester.tap(find.text('비밀 회의').first);
     await tester.pumpAndSettle();
@@ -55,8 +37,8 @@ void main() {
   testWidgets('event card and action boxes respond across their full bounds', (
     tester,
   ) async {
-    final event = _sensitiveEvent();
-    await _pumpPanel(tester, event: event, unlocked: true);
+    final event = _event();
+    await _pumpPanel(tester, event: event);
 
     final openArea = find.byKey(ValueKey('event-open-${event.id}'));
     for (final point in _insetCorners(tester.getRect(openArea))) {
@@ -97,7 +79,6 @@ List<Offset> _insetCorners(Rect rect) => [
 Future<void> _pumpPanel(
   WidgetTester tester, {
   required CalendarEvent event,
-  required bool unlocked,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
@@ -110,7 +91,6 @@ Future<void> _pumpPanel(
           SettingsRepository(preferences: preferences),
         ),
         eventRepositoryProvider.overrideWithValue(repository),
-        sensitiveEventsUnlockedProvider.overrideWith((ref) => unlocked),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -122,9 +102,9 @@ Future<void> _pumpPanel(
   await tester.pumpAndSettle();
 }
 
-CalendarEvent _sensitiveEvent() {
+CalendarEvent _event() {
   return CalendarEvent(
-    id: 'sensitive-event',
+    id: 'meeting-event',
     title: '비밀 회의',
     memo: '준비물 확인',
     location: '서울시청',
@@ -137,7 +117,6 @@ CalendarEvent _sensitiveEvent() {
     colorValue: EventCategory.basic.colorValue,
     createdAt: DateTime(2026, 7, 16),
     updatedAt: DateTime(2026, 7, 16),
-    sensitive: true,
   );
 }
 

@@ -1,22 +1,82 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
+
+abstract interface class DeviceAuthenticationClient {
+  Future<bool> get canCheckBiometrics;
+
+  Future<List<BiometricType>> getAvailableBiometrics();
+
+  Future<bool> isDeviceSupported();
+
+  Future<bool> authenticate({
+    required String localizedReason,
+    required bool biometricOnly,
+    required bool persistAcrossBackgrounding,
+  });
+}
+
+class LocalAuthDeviceAuthenticationClient
+    implements DeviceAuthenticationClient {
+  LocalAuthDeviceAuthenticationClient({LocalAuthentication? authentication})
+    : _authentication = authentication ?? LocalAuthentication();
+
+  final LocalAuthentication _authentication;
+
+  @override
+  Future<bool> get canCheckBiometrics => _authentication.canCheckBiometrics;
+
+  @override
+  Future<List<BiometricType>> getAvailableBiometrics() =>
+      _authentication.getAvailableBiometrics();
+
+  @override
+  Future<bool> isDeviceSupported() => _authentication.isDeviceSupported();
+
+  @override
+  Future<bool> authenticate({
+    required String localizedReason,
+    required bool biometricOnly,
+    required bool persistAcrossBackgrounding,
+  }) {
+    return _authentication.authenticate(
+      localizedReason: localizedReason,
+      biometricOnly: biometricOnly,
+      persistAcrossBackgrounding: persistAcrossBackgrounding,
+    );
+  }
+}
 
 /// Keeps the platform authentication API behind Daily's app-lock policy.
 class BiometricAuthService {
-  BiometricAuthService({LocalAuthentication? localAuthentication})
-    : _localAuthentication = localAuthentication ?? LocalAuthentication();
+  BiometricAuthService({DeviceAuthenticationClient? client})
+    : _client = client ?? LocalAuthDeviceAuthenticationClient();
 
-  final LocalAuthentication _localAuthentication;
+  final DeviceAuthenticationClient _client;
+  static const _appleAuthenticationChannel = MethodChannel(
+    'daily/apple_authentication',
+  );
 
   Future<bool> isAvailable() async {
     if (kIsWeb) {
       return false;
     }
     try {
-      if (!await _localAuthentication.canCheckBiometrics) {
+      if (!await _client.canCheckBiometrics) {
         return false;
       }
-      return (await _localAuthentication.getAvailableBiometrics()).isNotEmpty;
+      return (await _client.getAvailableBiometrics()).isNotEmpty;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> isDeviceAuthenticationAvailable() async {
+    if (kIsWeb) {
+      return false;
+    }
+    try {
+      return await _client.isDeviceSupported();
     } on Object {
       return false;
     }
@@ -24,19 +84,61 @@ class BiometricAuthService {
 
   Future<bool> authenticate({
     String localizedReason = 'Daily 잠금을 해제하려면 생체 인증이 필요합니다.',
+    bool allowDeviceCredentials = false,
   }) async {
-    if (!await isAvailable()) {
+    final biometricOnly =
+        !allowDeviceCredentials &&
+        defaultTargetPlatform != TargetPlatform.windows;
+    final available = biometricOnly
+        ? await isAvailable()
+        : await isDeviceAuthenticationAvailable();
+    if (!available) {
       return false;
     }
     try {
-      return await _localAuthentication.authenticate(
+      return await _client.authenticate(
         localizedReason: localizedReason,
-        biometricOnly: defaultTargetPlatform != TargetPlatform.windows,
+        biometricOnly: biometricOnly,
         persistAcrossBackgrounding: true,
       );
     } on LocalAuthException {
       return false;
     } on Object {
+      return false;
+    }
+  }
+
+  Future<bool> authenticateWithBiometricsOrCompanion({
+    String localizedReason = 'Daily 잠금을 해제하려면 인증이 필요합니다.',
+  }) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.macOS) {
+      return authenticate(localizedReason: localizedReason);
+    }
+    try {
+      return await _appleAuthenticationChannel.invokeMethod<bool>(
+            'authenticateBiometricsOrCompanion',
+            {'localizedReason': localizedReason},
+          ) ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  Future<bool> isBiometricsOrCompanionAvailable() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.macOS) {
+      return isAvailable();
+    }
+    try {
+      return await _appleAuthenticationChannel.invokeMethod<bool>(
+            'isBiometricsOrCompanionAvailable',
+          ) ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
       return false;
     }
   }

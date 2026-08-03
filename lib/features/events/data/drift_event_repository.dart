@@ -162,7 +162,6 @@ class DriftEventRepository implements EventRepository {
             deviceId: Value(normalized.deviceId),
             syncStatus: Value(normalized.syncStatus),
             showDday: Value(normalized.showDday),
-            sensitive: Value(normalized.sensitive),
             alarmEnabled: Value(normalized.alarmEnabled),
             allDayAlarmMinutes: Value(normalized.allDayAlarmMinutes),
           ),

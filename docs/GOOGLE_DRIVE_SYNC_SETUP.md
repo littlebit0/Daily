@@ -1,5 +1,9 @@
 # Google Drive Sync Setup
 
+Current release baseline: `3.0.1`. iOS and macOS use the shared app bundle ID
+`com.littlebit0.daily`; their widget extensions use
+`com.littlebit0.daily.widgets`.
+
 This setup must be done in stages. Do not skip the Google Cloud/OAuth stage;
 the app can build without it, but Google Drive connection will not complete
 correctly until OAuth clients and scopes are configured.
@@ -90,7 +94,7 @@ OAuth clients currently checked in or referenced by the app:
   `234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com`
 - iOS reversed client ID:
   `com.googleusercontent.apps.234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa`
-- macOS bundle ID: `com.littlebit0.daily.macos`
+- macOS bundle ID: `com.littlebit0.daily`
 - macOS OAuth client:
   `424765276744-rjfs830agtj0i0mrrlc1pci4sbh1ifpq.apps.googleusercontent.com`
 

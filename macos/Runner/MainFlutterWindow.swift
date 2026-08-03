@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import LocalAuthentication
 import UserNotifications
 import WidgetKit
 
@@ -589,6 +590,206 @@ private final class DailyMapLauncher {
   }
 }
 
+private final class DailyMacAuthentication {
+  static let channelName = "daily/apple_authentication"
+
+  static func register(with flutterViewController: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: channelName,
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { call, result in
+      if call.method == "isBiometricsOrCompanionAvailable" {
+        let context = LAContext()
+        var error: NSError?
+        result(context.canEvaluatePolicy(companionPolicy, error: &error))
+        return
+      }
+      guard call.method == "authenticateBiometricsOrCompanion" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let arguments = call.arguments as? [String: Any]
+      let reason = arguments?["localizedReason"] as? String
+        ?? "Daily 잠금을 해제하려면 인증이 필요합니다."
+      authenticate(reason: reason, result: result)
+    }
+  }
+
+  private static func authenticate(
+    reason: String,
+    result: @escaping FlutterResult
+  ) {
+    let context = LAContext()
+    let policy = companionPolicy
+    var error: NSError?
+    guard context.canEvaluatePolicy(policy, error: &error) else {
+      result(false)
+      return
+    }
+    context.evaluatePolicy(policy, localizedReason: reason) { success, _ in
+      DispatchQueue.main.async {
+        result(success)
+      }
+    }
+  }
+
+  private static var companionPolicy: LAPolicy {
+    if #available(macOS 15.0, *) {
+      return .deviceOwnerAuthenticationWithBiometricsOrCompanion
+    } else {
+      return .deviceOwnerAuthenticationWithBiometricsOrWatch
+    }
+  }
+}
+
+private final class DailyAppLockPrivacy {
+  static let channelName = "daily/app_lock_privacy"
+  private static var retainedInstance: DailyAppLockPrivacy?
+
+  private weak var window: NSWindow?
+  private var enabled = false
+  private var method = "noPin"
+  private var authenticationSuppressed = false
+  private var overlay: NSView?
+  private var resignObserver: NSObjectProtocol?
+  private var activeObserver: NSObjectProtocol?
+
+  static func register(
+    with flutterViewController: FlutterViewController,
+    window: NSWindow
+  ) {
+    let instance = DailyAppLockPrivacy(window: window)
+    retainedInstance = instance
+    let channel = FlutterMethodChannel(
+      name: channelName,
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { [weak instance] call, result in
+      if call.method == "setAuthenticationSuppressed",
+         let arguments = call.arguments as? [String: Any],
+         let suppressed = arguments["suppressed"] as? Bool {
+        DispatchQueue.main.async {
+          instance?.authenticationSuppressed = suppressed
+          if suppressed {
+            instance?.hideOverlay()
+          }
+          result(nil)
+        }
+        return
+      }
+      guard call.method == "setEnabled",
+            let arguments = call.arguments as? [String: Any],
+            let enabled = arguments["enabled"] as? Bool else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      DispatchQueue.main.async {
+        instance?.enabled = enabled
+        if let method = arguments["method"] as? String {
+          instance?.method = method
+        }
+        if enabled && !NSApp.isActive && instance?.authenticationSuppressed != true {
+          instance?.showOverlay()
+        } else if !enabled {
+          instance?.hideOverlay()
+        } else {
+          instance?.updateOverlayText()
+        }
+        result(nil)
+      }
+    }
+  }
+
+  private init(window: NSWindow) {
+    self.window = window
+    resignObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didResignActiveNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      if self?.enabled == true && self?.authenticationSuppressed != true {
+        self?.showOverlay()
+      }
+    }
+    activeObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didBecomeActiveNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      self?.hideOverlay()
+    }
+  }
+
+  deinit {
+    if let resignObserver {
+      NotificationCenter.default.removeObserver(resignObserver)
+    }
+    if let activeObserver {
+      NotificationCenter.default.removeObserver(activeObserver)
+    }
+  }
+
+  private func showOverlay() {
+    guard overlay == nil, let contentView = window?.contentView else { return }
+    let view = NSView(frame: contentView.bounds)
+    view.translatesAutoresizingMaskIntoConstraints = false
+    view.wantsLayer = true
+    view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+
+    let imageView = NSImageView()
+    imageView.translatesAutoresizingMaskIntoConstraints = false
+    if #available(macOS 11.0, *) {
+      imageView.image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "잠금")
+      imageView.contentTintColor = .secondaryLabelColor
+    }
+
+    let label = NSTextField(labelWithString: overlayText)
+    label.identifier = NSUserInterfaceItemIdentifier("daily-lock-overlay-label")
+    label.translatesAutoresizingMaskIntoConstraints = false
+    label.alignment = .center
+    label.font = .systemFont(ofSize: 20, weight: .semibold)
+    label.textColor = .labelColor
+
+    view.addSubview(imageView)
+    view.addSubview(label)
+    contentView.addSubview(view, positioned: .above, relativeTo: nil)
+    NSLayoutConstraint.activate([
+      view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+      view.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+      view.topAnchor.constraint(equalTo: contentView.topAnchor),
+      view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+      imageView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+      imageView.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -26),
+      imageView.widthAnchor.constraint(equalToConstant: 32),
+      imageView.heightAnchor.constraint(equalToConstant: 32),
+      label.topAnchor.constraint(equalTo: imageView.bottomAnchor, constant: 14),
+      label.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
+      label.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+      label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+    ])
+    overlay = view
+  }
+
+  private func hideOverlay() {
+    overlay?.removeFromSuperview()
+    overlay = nil
+  }
+
+  private func updateOverlayText() {
+    guard let label = overlay?.subviews.compactMap({ $0 as? NSTextField }).first else {
+      return
+    }
+    label.stringValue = overlayText
+  }
+
+  private var overlayText: String {
+    method == "noPin"
+      ? "잠금 상태에서는 화면을 볼 수 없습니다."
+      : "잠금 상태입니다."
+  }
+}
+
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -602,6 +803,8 @@ class MainFlutterWindow: NSWindow {
     DailyMacAlarms.register(with: flutterViewController)
     DailyMapLauncher.register(with: flutterViewController)
     DailyAppleWidgets.register(with: flutterViewController)
+    DailyMacAuthentication.register(with: flutterViewController)
+    DailyAppLockPrivacy.register(with: flutterViewController, window: self)
     DailyNotificationCenterDelegate.install()
 
     super.awakeFromNib()

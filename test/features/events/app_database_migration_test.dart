@@ -1,33 +1,63 @@
+import 'dart:io';
+
 import 'package:daily/features/events/data/app_database.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('schema 5 migration repairs a partially added alarm schema', () async {
-    final executor = NativeDatabase.memory(
-      setup: (database) {
-        database.execute('''
-          CREATE TABLE event_records (
-            id TEXT NOT NULL PRIMARY KEY,
-            alarm_enabled INTEGER NOT NULL DEFAULT 0
-              CHECK (alarm_enabled IN (0, 1))
-          )
-        ''');
-        database.userVersion = 4;
-      },
-    );
-    final database = AppDatabase.forTesting(executor);
-    addTearDown(database.close);
+  test(
+    'schema 6 removes the private-event field without deleting events',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'daily-migration-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/daily.sqlite');
 
-    final columns = await database
-        .customSelect('PRAGMA table_info(event_records)')
-        .get();
-    final names = columns.map((row) => row.read<String>('name')).toSet();
-    final version = await database
-        .customSelect('PRAGMA user_version')
-        .getSingle();
+      final oldDatabase = AppDatabase.forTesting(NativeDatabase(file));
+      await oldDatabase.customStatement(
+        '''
+      INSERT INTO event_records (
+        id, title, start_at, end_at, color_value, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''',
+        [
+          'kept-event',
+          '보존할 일정',
+      DateTime(2026, 7, 30).millisecondsSinceEpoch ~/ 1000,
+      DateTime(2026, 7, 30, 1).millisecondsSinceEpoch ~/ 1000,
+          0xff2563eb,
+      DateTime(2026, 7, 29).millisecondsSinceEpoch ~/ 1000,
+      DateTime(2026, 7, 29).millisecondsSinceEpoch ~/ 1000,
+        ],
+      );
+      await oldDatabase.customStatement(
+        'ALTER TABLE event_records ADD COLUMN sensitive INTEGER NOT NULL DEFAULT 0',
+      );
+      await oldDatabase.customStatement(
+        'UPDATE event_records SET sensitive = 1 WHERE id = ?',
+        ['kept-event'],
+      );
+      await oldDatabase.customStatement('PRAGMA user_version = 5');
+      await oldDatabase.close();
 
-    expect(names, containsAll(['alarm_enabled', 'all_day_alarm_minutes']));
-    expect(version.read<int>('user_version'), 5);
-  });
+      final database = AppDatabase.forTesting(NativeDatabase(file));
+      addTearDown(database.close);
+      final columns = await database
+          .customSelect('PRAGMA table_info(event_records)')
+          .get();
+      final names = columns.map((row) => row.read<String>('name')).toSet();
+      final event = await database
+          .customSelect('SELECT id, title FROM event_records')
+          .getSingle();
+      final version = await database
+          .customSelect('PRAGMA user_version')
+          .getSingle();
+
+      expect(names, isNot(contains('sensitive')));
+      expect(event.read<String>('id'), 'kept-event');
+      expect(event.read<String>('title'), '보존할 일정');
+      expect(version.read<int>('user_version'), 6);
+    },
+  );
 }

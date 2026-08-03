@@ -1,7 +1,7 @@
 # Agent Memory
 
 This file is a handoff note for agents working on Daily. It records the current
-2.x state, completed 2.x work, release status, and safe next steps. Do not add
+release state, completed work, release status, and safe next steps. Do not add
 OAuth client secrets, GitHub tokens, signing certificates, provisioning
 profiles, keystore passwords, or private keys to this file.
 
@@ -16,15 +16,14 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Windows/Android handoff path used by the previous agent:
   `C:\Users\com\Documents\New project\.codex-tools\portfolio_repos\Daily`
 - Branch: `main`
-- Current visible app version in repo: `2.0.4`
+- Current visible app version in repo: `3.0.1 (3.0.1)`
 - Current `pubspec.yaml` version has no `+` suffix.
-- Android `2.0.4` artifacts were built with build number `8` via build command
-  only.
-- Windows `2.0.4` builds must omit `--build-number` so Windows file/product
-  versions stay exactly `2.0.4`.
-- Latest known release tag: `v2.0.4`.
-- Latest local pull on this Mac fast-forwarded to commit
-  `be8c639 Release Daily 2.0.4`.
+- iOS/macOS App Store binaries use app version and build `3.0.1`.
+- Android maps the shared release to integer version code `301`.
+- Windows uses the required four-part package version `3.0.1.0`.
+- Latest published release tag before this release work: `v2.7.1`.
+- The next release tag is `v3.0.1`; confirm its workflow and assets after the
+  release commit and tag are pushed.
 
 ## Project Rules Snapshot
 
@@ -2481,3 +2480,569 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   tests, a macOS debug build, and an iOS simulator debug build. Neither build was
   installed or launched for this change. No Android or Windows platform file
   was edited.
+
+## 2026-07-29 GitHub Issue #32 Apple Platform Work
+
+- Fixed the iOS private-event crash by declaring the Face ID usage purpose.
+- Unified app and private-event locking around three exclusive methods:
+  confirmation without a PIN, a Daily PIN, or Apple system authentication.
+  macOS no longer opens Touch ID over the PIN keypad, and iOS/macOS system
+  authentication permits the device passcode/password fallback.
+- Private-event hiding now applies to both screens and notifications. New
+  private events cannot be enabled until app locking is configured.
+- PIN setup reveals one dot per entered digit instead of six empty dots. Unlock
+  still remembers and verifies the saved PIN length immediately.
+- Removed repeated category helper subtitles. Added an Apple-only setting to
+  show or hide adjacent-month dates; hiding also clips adjacent-month event
+  spans. The setting is persisted and included in Drive settings sync.
+- Replaced only the iOS bottom bar with a floating circular control: a calendar
+  view menu and a draggable quick/calendar/AI switch. Its selected control grows
+  only until another screen interaction. macOS keeps its header toolbar.
+- Verified both provider directions: Apple sign-in silently restores only an
+  already linked valid Google session, while Google sign-in preserves the
+  linked Apple identity. No server or interactive automatic login was added.
+- The Daily version row now says `더블 클릭하여 Github 확인하기` and opens the
+  repository only on double click.
+- Replaced the UI text-size dropdown with a three-position slider and added
+  `더 크게`. Adjusted month event layout so the today marker does not overlap
+  the first event while preserving iPhone density and four macOS event rows.
+- Verification passed with static analysis, all 132 Flutter tests, an iOS
+  simulator debug build, and a macOS debug build. The builds were not installed
+  or launched. No Android or Windows platform implementation file was edited.
+
+## 2026-07-29 Sync Data-Loss Recovery And Directional Actions
+
+- A sync incident left the current macOS/simulator database at 52 active and 25
+  deleted records. A read-only USB backup of the App Store iPhone build was
+  preserved at
+  `/Users/kimhwi/Documents/Daily-Recovery-20260729-172915/physical-iphone-appstore-daily.sqlite`.
+  It passed SQLite integrity checking and contains 55 active and 21 deleted
+  records. Three events are active on the iPhone backup but tombstoned in the
+  damaged synced database. Do not discard this recovery directory.
+- Root cause in the client was a direction violation in
+  `_backupQueuedEvents`: when a newer remote revision was found during a backup,
+  the backup path replaced local data with that remote revision. A remote
+  tombstone could therefore delete an active local event during an operation
+  presented as backup.
+- Backup no longer mutates local data. A newer remote conflict leaves the local
+  event pending and reports `일부 백업 보류 · 먼저 복원 필요`; only an explicit
+  restore path can apply remote data.
+- Settings now shows `백업` and `복원` as two buttons in one row. Backup flushes
+  local pending changes only. Restore is separately confirmed and then downloads
+  Drive AppData while retaining newer or pending local revisions.
+- Static analysis passed. All 27 Google Drive sync tests passed, including a new
+  remote-tombstone regression test. The focused backup/restore row interaction
+  test also passed. Apps were deliberately not launched while recovery data was
+  being protected.
+- The corrected `3.0.0 (3.0.0)` debug build replaced
+  `/Users/kimhwi/Applications/Daily Test.app` and updated the existing iPhone 17
+  simulator installation without launching either app. Both live databases were
+  copied to
+  `/Users/kimhwi/Documents/Daily-Recovery-20260729-172915/pre-restore-20260729-181638`
+  before recovery.
+- An initial three-record repair was superseded by the user's required full
+  restore. macOS and the iPhone 17 simulator were both replaced transactionally
+  from the complete physical iPhone App Store database and preference backup.
+  Device-specific `deviceId` and Drive change tokens were retained independently
+  to avoid creating another cross-device identity collision.
+- Both restored databases pass integrity checks and exactly match all 76 source
+  event IDs and logical event fields: 55 active records, 21 historical
+  tombstones, zero missing records, zero extra records, and zero logical field
+  differences. Full pre-restore snapshots are under
+  `/Users/kimhwi/Documents/Daily-Recovery-20260729-172915/pre-full-restore-20260729-182401`.
+- Every restored record and the restored settings were marked pending with a
+  current conflict-winning revision. macOS successfully uploaded the full set
+  of 76 records and settings to Drive and now reports all records synced. The
+  simulator contains the complete same data locally; its 76 records remain
+  pending because that simulator currently has no restorable Google auth
+  session and therefore requires user Google authentication before it can
+  upload independently.
+
+## 2026-07-30 Login, Privacy Removal, And Lock Follow-Up
+
+- macOS forced Google account changes now clear the cached desktop session and
+  send `prompt=select_account consent`, so choosing a different Google account
+  does not reuse the previous OAuth identity silently.
+- Account logout now attempts a pending local backup, stops the sync worker,
+  signs out local Apple/Google sessions, deletes local events and settings, and
+  returns to onboarding. Google Drive AppData is retained. If the final backup
+  fails, the user must explicitly approve continuing without it.
+- The private-event feature was removed completely from the event model, edit
+  and detail UI, calendar/search rendering, notifications, alarms, widgets,
+  settings, and sync payloads. Database schema 6 rebuilds the event table
+  without the old `sensitive` column while preserving every event row.
+- App lock now offers three explicit methods before activation: PIN-free
+  privacy covering, Daily `PIN 잠금`, or Apple system authentication. PIN-free
+  mode has no unlock button and automatically reveals the app on foreground
+  return. System mode authenticates before activation and automatically asks
+  for system authentication on return. Changing or disabling a method first
+  verifies the current method.
+- PIN lock alone offers an optional biometric-unlock toggle. PIN entry remains
+  the fallback. The persisted biometric flag now represents that PIN supplement
+  rather than the system-lock method itself.
+- Settings now uses `일 [토글] 월` for week start. Lock method and whole-app text
+  size use thick three-position capsule controls with their option labels inside
+  the control and support both tapping and horizontal dragging.
+- iOS keeps the calendar-only view selector on the left, now as a draggable
+  `주/월/일` three-position capsule instead of a popup menu. The central
+  quick/calendar/AI control visibly enlarges only the most recent action and
+  shrinks when another screen interaction begins. macOS retains its header
+  toolbar and does not receive the iOS bottom bar.
+- A backend-backed Daily identity link is intentionally not implemented yet.
+  Restoring Apple-to-Google or Google-to-Apple provider links on a different
+  device requires a real HTTPS service that verifies Apple identity tokens and
+  Google ID tokens and stores provider-subject mappings in one Daily account.
+  Do not simulate this with local preferences. Ubuntu deployment setup remains
+  a user-managed follow-up.
+- Verification passed with `./tool/flutter.sh analyze --no-pub`, all 130 Flutter
+  tests, a macOS debug build, and an iOS simulator debug build. Neither app was
+  installed or launched in this step. Android and Windows platform files were
+  not edited.
+
+## 2026-07-30 macOS Lock Runtime Fixes
+
+- System-lock authentication no longer restarts after a successful result when
+  macOS emits a trailing foreground lifecycle event. Authentication performed
+  while enabling, disabling, or changing a lock setting is now explicitly
+  excluded from ordinary app-background locking, preventing the extra unlock
+  prompt seen when changing from PIN-free lock to system lock.
+- macOS now installs a native window privacy overlay while Daily is inactive.
+  PIN-free mode displays `잠금 상태에서는 화면을 볼 수 없습니다.`; PIN and
+  system modes display `잠금 상태입니다.`. The overlay is removed when the app
+  becomes active and the Flutter lock gate then applies the selected unlock
+  policy.
+- PIN lock initially shows only `잠금 상태입니다.` and a
+  `비밀번호를 통해 잠금해제` button. The keypad appears after that button is
+  selected. macOS also accepts number-row/numpad digits and Backspace/Delete
+  from the hardware keyboard, while the saved PIN length is still verified
+  immediately.
+- PIN biometric unlock on macOS uses LocalAuthentication's
+  biometrics-or-companion policy, supporting Touch ID or an enabled Apple Watch
+  instead of forcing Touch ID-only authentication. iOS remains Face ID/Touch ID
+  biometric-only for the optional PIN shortcut.
+- Verification passed with static analysis, all 132 Flutter tests, macOS native
+  debug compilation, and iOS simulator debug compilation. The latest `3.0.0`
+  build replaced `/Users/kimhwi/Applications/Daily Test.app` and updated the
+  retained iPhone 17 simulator app without launching either app. Temporary and
+  build-cache macOS Daily app bundles were deleted afterward; only the App Store
+  app and the installed test app remain as macOS Daily applications.
+
+## 2026-07-30 Lock Fallback And iOS Control Follow-Up
+
+- macOS PIN biometric unlock is attempted only once per lock session. If the
+  user cancels the Touch ID/Apple Watch sheet or selects the password fallback,
+  Daily immediately returns to its PIN entry UI and does not reopen the system
+  biometric sheet on the trailing foreground lifecycle event.
+- The app-unlock PIN indicator now adds one filled circle for each entered
+  digit instead of drawing every empty PIN position in advance. macOS hardware
+  keyboard and on-screen keypad input use the same indicator.
+- Week start no longer uses a boolean-style `Switch`. Settings now presents a
+  two-position `일/월` sliding capsule using the same visual and drag behavior as
+  the lock-method capsule on both macOS and iOS.
+- The iOS bottom controls are laid out as two non-overlapping controls: the
+  calendar-only `주/월/일` slider on the left and the quick/calendar/AI slider on
+  the right. The central slider uses the same capsule thumb and drag animation;
+  its whole width expands from 132 to 164 points for the most recent bottom-bar
+  action and collapses after another calendar/search/settings interaction.
+  Icon-only scaling was removed. The left slider remains hidden outside the
+  calendar view.
+- Verification passed with static analysis, all 133 Flutter tests, macOS debug
+  compilation, and iOS simulator debug compilation. Version `3.0.0 (3.0.0)`
+  replaced `/Users/kimhwi/Applications/Daily Test.app` and updated the retained
+  iPhone 17 simulator app without launching either app.
+
+## 2026-07-30 iOS Bottom Slider Alignment Follow-Up
+
+- The quick/calendar/AI slider is centered on the full screen again instead of
+  being right-aligned. Its center remains fixed while its overall width expands
+  from 132 to 164 points.
+- The left `주/월/일` slider calculates the space beside the centered control
+  and shrinks only when necessary, preventing overlap without displacing the
+  center control.
+- Both sliders use a visible 40-point circular blue selection thumb. Horizontal
+  dragging previews the destination by moving that circle before committing the
+  selected item.
+- Tap ripple rendering now occurs inside a clipped transparent Material within
+  each slider, so the animation cannot paint behind or outside the control.
+- Tests use a 393-point iPhone viewport and verify exact center alignment,
+  compact left-slider sizing, and both circular thumb dimensions. Static
+  analysis and all 133 tests passed. The iOS simulator debug build succeeded and
+  updated the retained iPhone 17 simulator without launching it.
+- A follow-up fixed the left slider being hidden behind the center slider: the
+  bottom `Stack` now explicitly fills the available width while an inner
+  `Align` preserves the center slider's own 132/164-point width. When horizontal
+  space requires compaction, the left slider now scales its height, circular
+  thumb, and labels vertically as well as reducing its width. The iPhone 17
+  simulator was rebuilt, updated, relaunched, and visually confirmed with the
+  left `주/월/일` slider visible and existing calendar data intact.
+- The center quick/calendar/AI control now also scales the outer capsule
+  vertically: its inactive size is `132x40`, and selection or horizontal drag
+  expands the actual control to `164x48`. This is outer-control resizing, not
+  just icon or thumb scaling. Widget tests verify all four dimensions.
+- The left `주/월/일` control now has the same interaction model. Its inactive
+  outer capsule is `76x40`; tapping or beginning a horizontal drag expands it
+  toward `96x48` (further constrained proportionally only when screen space is
+  insufficient). Interacting with the center control or any other screen area
+  collapses it again. The center control remains collapsed while the left
+  control is selected, and vice versa.
+
+## 2026-07-30 Issue 34 Appearance And Onboarding
+
+- Added app theme selection with the `자동/화이트/다크` capsule. The selected
+  theme is persisted locally, included in Google Drive settings sync, and
+  applied through separate light/dark Flutter themes.
+- Added the exact `좌우 슬라이드/상하 스크롤` month-navigation setting. The
+  horizontal mode preserves the existing month paging. The vertical mode uses
+  free vertical scrolling; when adjacent dates are enabled, a boundary week is
+  owned by only one month so the dates continue without duplication. When
+  adjacent dates are disabled, each month retains its own boundary cells.
+- Non-boolean setting choices now use the shared draggable capsule UI. The
+  default calendar view and 12h/24h format were converted; actual ON/OFF
+  settings remain switches.
+- Replaced the single-page welcome UI with three screenshot-based feature
+  pages and a final account/start page. It supports swipe, previous, next,
+  page indicators, and skip without changing Apple/Google/local start logic.
+- Static analysis, 71 focused widget/sync tests, iOS simulator compilation,
+  and macOS debug compilation passed. No Android or Windows platform file was
+  edited. Because the settings model and onboarding are shared Flutter code,
+  Android and Windows still require later visual and build verification.
+
+## 2026-07-30 Dark Theme Completion
+
+- Removed fixed light surfaces from event details, inline/full search results,
+  the quick-entry bar, month/year selection, calendar range highlights,
+  overflow counters, weekday cards, and detail-row icons. These components now
+  derive surfaces, borders, text, and selection colors from `ColorScheme`.
+- The dark theme now explicitly covers app bars, cards, dialogs, bottom sheets,
+  popup menus, snackbars, date/time pickers, list tiles, and dividers instead of
+  relying on individual Material defaults.
+- Onboarding screenshots receive a dark multiply treatment in dark mode so the
+  first-run carousel does not become a large bright panel. Apple sign-in
+  black/white branding, calendar weekend colors, today's white-on-blue date,
+  and RGB picker white/black endpoints intentionally remain fixed.
+- Static analysis and 54 focused calendar/event/widget tests passed. The iPhone
+  17 simulator was rebuilt, updated, and visually checked in dark mode on the
+  weekly calendar and Settings. The macOS test app was rebuilt, replaced, and
+  visually checked on the weekly calendar and day-details pane. Both latest
+  test apps remain installed and running for user inspection.
+
+## 2026-08-02 Calendar Navigation And Settings Follow-up
+
+- The macOS horizontal year overview now responds to mouse-wheel and trackpad
+  scroll input. Mini-month grids no longer create nested scrollbars.
+- The iOS/macOS vertical year overview now uses ordinary continuous scrolling
+  instead of moving exactly one year per gesture.
+- Vertical month navigation always hides adjacent-month dates. Hidden boundary
+  cells cannot be selected by a tap, while range hit-testing still permits a
+  drag selection to extend into those previous/next-month boundary dates.
+- Vertical month boundaries now use a large, left-aligned month label. The
+  adjacent-date setting is forced off and disabled while vertical navigation
+  is selected.
+- Settings now opens account and notification options in dedicated second-level
+  pages from the main Settings screen.
+- The dark onboarding failure was caused by Flutter asset directories not being
+  recursive. `assets/onboarding/dark/` is now explicitly bundled, and all three
+  dark screenshots were confirmed inside both platform builds.
+- Verification passed with `flutter analyze`, 52 focused widget/calendar tests,
+  an iPhone 17 simulator debug build, and a macOS debug build. Visual checks
+  confirmed continuous year scrolling, the month-boundary layout, Settings
+  navigation, and the repaired dark onboarding image. The current iPhone 17
+  simulator and `/Users/kimhwi/Applications/Daily Test.app` contain these
+  changes.
+- A follow-up prevents blank calendar cells, hidden adjacent-month cells, and
+  month-boundary gaps from beginning, extending, or painting a range. Releasing
+  over one of those areas cancels the pending selection.
+- Vertical continuous month navigation now owns one shared range selection and
+  hit-tests only the actual rendered date cells of each visible month. A drag
+  can therefore start on an actual date, cross an unselectable blank gap, and
+  resume when it reaches an actual date in the next month without painting the
+  gap. The integration test verifies an August 31-September 2 range and the
+  resulting event-editor dates.
+- The two iOS bottom capsule controls no longer use mismatched Material ink
+  splashes. Both use the visible selection circle itself for identical press,
+  movement, and release animation. The iPhone 17 simulator and macOS test app
+  were rebuilt and updated after this change; analysis and all 52 focused tests
+  passed again.
+- The selection circles in both iOS bottom sliders are positioned from the
+  exact center of each three-way segment instead of stadium-edge alignment.
+  This fixes the quick-access active color appearing off-center. A widget test
+  checks the quick-access icon and selection-circle centers within half a
+  logical pixel. Analysis and all 53 focused tests pass; the macOS test app and
+  iPhone 17 simulator were rebuilt and updated with this final behavior.
+- Every visible continuous date-range segment now has rounded outer corners.
+  Adjacent selected dates in the same week remain one filled segment, while
+  week rows, hidden cells, blank month gaps, and month boundaries visually
+  separate segments and therefore round both ends independently. A regression
+  test covers both the August and September sides of an August 31-September 2
+  selection. Analysis and all 54 focused tests pass; both Apple test builds
+  were rebuilt and updated.
+- The year overview no longer maps the first preceding vertical sliver to
+  `anchorYear - 200`; the nearest previous row now contains the immediately
+  preceding year or year pair on both macOS and iOS. Regression tests cover
+  both platforms.
+- On macOS, wide year overviews show two years per row instead of stretching a
+  single year across the window. Year rows are capped at 680 logical pixels so
+  taller windows reveal more year information instead of scaling each mini
+  calendar indefinitely. Each mini calendar now bases its internal column
+  count on its allocated width rather than the full window width.
+- The dark theme's lowest surfaces are true black (`#000000`). Higher surfaces
+  use the preserved hierarchy `#050608`, `#0A0B0D`, `#11141A`, and `#1B2029`,
+  with borders lowered to `#232832`. Theme tests pin the key RGB values.
+- Static analysis and all 47 app widget tests pass. The macOS test app was
+  rebuilt and visually approved by the user, and the iPhone 17 simulator app
+  was rebuilt and updated for user verification without further UI actions.
+- Both iOS bottom slider thumbs now derive their size and segment center from
+  the track's actual per-frame inner constraints. This keeps the active circle
+  synchronized with the `40 <-> 48` height animation. Both tracks use
+  `Clip.none`, so the moving active color cannot be cut during the brief frame
+  where position and size animations overlap. Widget tests pin the collapsed
+  and expanded circle sizes and verify that neither track clips its thumb.
+- Static analysis and all 47 app widget tests pass after the slider fix. The
+  iPhone 17 simulator test app was rebuilt and updated without launching it.
+- The year overview AppBar no longer displays the currently visible year or
+  year range; individual year sections remain labeled. The macOS test app was
+  rebuilt and replaced with this change.
+- macOS year-overview resize frame drops were investigated but intentionally
+  not optimized yet. Every window-size update invalidates the route-level
+  `MediaQuery`, the year-grid `LayoutBuilder`, each allocated year
+  `LayoutBuilder`, and all visible mini-month layouts. A wide vertical viewport
+  can keep several two-year rows alive at once; each year builds 12 mini months
+  and each mini month lays out 42 date slots. The one/two-column breakpoint at
+  1000 logical pixels also replaces the full visible grid structure. These are
+  the primary rebuild/layout pressure points for a future focused optimization.
+- Static analysis and all 47 app widget tests pass after removing the year
+  overview title. No resize-performance behavior was changed in this step.
+- The macOS year overview resize path is now optimized. Each mini month paints
+  its title, weekday labels, and 42-slot date grid in one custom paint layer
+  instead of constructing a nested widget tree for every date. Year layout
+  breakpoints are derived from the overview body constraints, and obsolete
+  visible-year scroll tracking was removed after the AppBar year title was
+  removed, preventing full-page rebuilds during year scrolling. The month tap
+  target, accessibility label, today marker, one/two-column breakpoint, and
+  year-row sizing behavior remain intact. Static analysis and all 47 app widget
+  tests pass.
+- The iOS week/month/day slider no longer clips its active circle at the week
+  or day edge; the inner thumb layer now allows overflow just like its track.
+  The center quick-view/calendar/AI slider is slightly narrower (`124` compact,
+  `152` expanded) to reduce the side space around quick view while remaining
+  centered. Its thumb layer also explicitly disables clipping.
+- AI entry no longer opens a modal bottom sheet. It uses the same in-page
+  animated-size approach as search, rising from the bottom and resizing the
+  calendar content above it. Search and AI are mutually exclusive, the panel
+  has an explicit close button, and the same inline behavior is available from
+  the macOS toolbar. Static analysis and all 47 app widget tests pass; the
+  iPhone 17 simulator build was updated without launching it.
+- Fixed a macOS year-overview regression introduced by the mini-month painter
+  optimization: a flex row supplied loose vertical constraints, so the canvas
+  selected zero height and all six date weeks painted on the same line. Each
+  mini-month canvas now explicitly expands to its allocated cell. A regression
+  assertion requires a real calendar-cell height, all 47 widget tests pass, and
+  the rebuilt macOS test app was visually verified with all six weeks visible
+  across January through December.
+- The same expanded mini-month canvas fix is included in the iOS build, so all
+  six date weeks render in the iOS year overview as well. The iOS calendar
+  period button now uses only its compact content area at the left of the
+  header, capped at 120 logical pixels with a 44-pixel touch height. The space
+  between it and the existing right-side actions is an intentionally empty,
+  non-interactive reserved area. Static analysis and all 47 widget tests pass;
+  the iPhone 17 simulator build was updated without launching it.
+- Tapping the already-selected segment while either iOS bottom slider is
+  expanded no longer briefly collapses and re-expands the whole control. The
+  page-level pointer handler now excludes the bottom bar's actual render bounds
+  from its "other interaction" collapse behavior. Selecting another segment,
+  dragging, and interacting outside the bottom bar retain their existing
+  expansion/collapse behavior. Mid-animation regression assertions cover both
+  sliders; static analysis and all 47 widget tests pass.
+- The AI panel performance path was reworked after the inline animated-size
+  implementation produced a roughly 165.7 ms UI frame. The panel is now a
+  paint-only slide/fade overlay above the bottom bar, AI and bottom-selection
+  state use local value notifiers, and the calendar content has its own repaint
+  boundary. An isolated debug VM timeline measured build at 6.972 ms maximum,
+  layout at 5.872 ms maximum, and paint at 3.281 ms maximum. One 23.595 ms
+  Vsync interval coincided with an 8.588 ms debug old-generation garbage
+  collection, rather than recurring calendar layout work.
+- iOS source and the generated simulator app both contain
+  `CADisableMinimumFrameDurationOnPhone=true`. Daily is therefore configured
+  to request ProMotion refresh rates above 60 Hz on supported devices. Actual
+  frame cadence remains dynamically selected by iOS and must be measured on a
+  physical ProMotion device in profile/release mode; the simulator cannot prove
+  hardware 120 Hz operation. Static analysis and all 47 widget tests pass, and
+  the rebuilt app was installed on the existing iPhone 17 simulator without
+  launching it.
+- Apple refresh-rate behavior is intentionally dynamic on both platforms. iOS
+  retains `CADisableMinimumFrameDurationOnPhone=true`, allowing Flutter's
+  `CADisplayLink` to use the display's supported maximum while iOS can still
+  lower the active rate for Low Power Mode, thermal state, or static content.
+  Flutter macOS binds its display link to the screen containing the app window
+  and rebinds when the window changes screens, so a ProMotion Mac display can
+  run at its current high refresh rate while a 60 Hz display remains at 60 Hz.
+  No application-level fixed-fps timer or override is used. Regression tests
+  now protect both the iOS plist setting and the absence of runner-level fixed
+  frame-rate overrides. The focused configuration tests, static analysis, iOS
+  simulator build, and macOS debug build all pass.
+- Calendar content transitions now follow the fixed horizontal order
+  `quick access -> week -> month -> day` on both iOS and macOS. Moving toward a
+  later view slides the new content in from the right; moving toward an earlier
+  view slides it in from the left. The transition includes quick-access and
+  calendar content while leaving the iOS bottom controls fixed in place.
+- macOS horizontal week, month, and day pointer navigation retains its page
+  physics and uses the explicit 260 ms page animation path. Regression
+  assertions inspect the content transition's mid-frame direction; iOS
+  touch/swipe physics remain unchanged.
+- The iOS and macOS calendar headers now live outside the ordered content
+  switcher. They remain at the same coordinates while quick access, week,
+  month, and day content slides underneath; the iOS header also remains visible
+  on quick access instead of participating in the transition.
+- On iOS only, when month navigation is set to `horizontal`, opening AI inserts
+  the input panel immediately above the bottom bar. It retains the existing
+  bottom-up presentation, grows upward, and reduces the calendar's available
+  height instead of covering the calendar or occupying the search position.
+  The panel restores the calendar height when closed. Vertical month scrolling
+  and macOS retain the overlay AI presentation. Regression tests pin the fixed
+  header rectangles and the inline panel/calendar height relationship. Static
+  analysis and all 47 widget tests pass; both Apple test builds were rebuilt
+  and installed without launching them.
+- macOS vertical month navigation now smooths only physical mouse-wheel input.
+  Its custom scroll position accumulates successive wheel targets and animates
+  to them over 160 ms instead of applying each wheel notch as an immediate
+  pixel jump. Trackpad pan/zoom scrolling remains on Flutter's original path
+  and is not delayed or replaced. A regression test verifies that the wheel is
+  still between its start and target after 40 ms and reaches the exact target
+  after settling. Static analysis and all 47 widget tests pass; the rebuilt
+  macOS test app was installed without launching it.
+- Vertical month navigation now preserves the exact logical scroll position
+  while the inline search panel opens and resizes the calendar viewport. The
+  transient controller/extent correction is no longer interpreted as user
+  scrolling, preventing the visible month from jumping several months
+  backward. A regression test reproduces a partially scrolled month position,
+  opens search through its full animation, and verifies both the visible month
+  and fractional logical offset remain unchanged. Static analysis and all 48
+  widget tests pass.
+
+## 2026-08-02 App Store Connect 3.0.0 Upload
+
+- Fixed the final vertical-month search regression: opening the inline search
+  panel no longer treats viewport extent correction as user scrolling or moves
+  the calendar several months backward.
+- Verification passed before distribution:
+  - `./tool/flutter.sh analyze --no-pub`
+  - all 48 tests in `test/widget_test.dart`
+  - the complete Flutter suite, all 142 tests
+- Built, validated, and uploaded iOS `3.0.0 (3.0.0)` to App Store Connect.
+  Apple accepted the upload and reported that the package is processing.
+  - bundle ID: `com.littlebit0.daily`
+  - widget ID: `com.littlebit0.daily.widgets`
+  - local Transporter copy:
+    `dist/transporter-ios-3.0.0/Daily-iOS-AppStore-3.0.0-build-3.0.0.ipa`
+  - SHA-256:
+    `172c9088c7c559d8e0a66229a5685b74b736274f5722dfff93457374d31eeac0`
+- The first macOS upload attempt was stopped by App Store Connect validation
+  error 90347 because the widget suffix `widgets.macos` contained two periods
+  after the main app identifier. The macOS widget ID is now the valid shared
+  identifier `com.littlebit0.daily.widgets`; the widget configuration generator
+  was updated so regenerating the project cannot restore the invalid ID.
+- macOS Release signing now applies Apple Development only to the app and
+  widget archive targets. Swift Package resource bundles remain unsigned, and
+  App Store export replaces the app/widget signatures with Apple Distribution.
+- Built, validated, and uploaded the corrected macOS `3.0.0 (3.0.0)` package.
+  Apple accepted the upload and reported that the package is processing.
+  - app bundle ID: `com.littlebit0.daily`
+  - widget ID: `com.littlebit0.daily.widgets`
+  - all 16 executable-free resource bundles are unsigned
+  - `codesign --verify --deep --strict` passes
+  - local Transporter copy:
+    `dist/transporter-macos-3.0.0/Daily-macOS-AppStore-3.0.0-build-3.0.0.pkg`
+  - SHA-256:
+    `fcd9f3e239f79c213b3902621cd158293fb4fe19724cfecb78c42e5a6c47778a`
+- Remaining App Store Connect work: wait for both builds to finish processing,
+  select each `3.0.0 (3.0.0)` build on its platform version page, verify export
+  compliance and review metadata, add both to review, and submit. Browser login
+  is currently required before this final UI step can be performed.
+- Post-upload simulator testing found that the first search-position fix kept
+  the logical month but produced an unnatural animation: the month item height
+  was recomputed on every frame as the inline search panel resized the calendar
+  viewport. Vertical month items now retain their stable height while the
+  search panel opens or closes; only the visible viewport is pushed/resized.
+  This removes per-frame calendar compression and controller correction while
+  preserving the exact month and fractional scroll offset. Static analysis and
+  all 48 widget tests pass, and the updated build is installed on the iPhone 17
+  simulator without launching it.
+- Do not submit the already uploaded App Store Connect `3.0.0 (3.0.0)` builds:
+  they were generated before this post-upload animation correction. After the
+  user confirms the simulator behavior, increment the Apple build/version
+  according to the current version policy, rebuild both Apple artifacts, upload
+  those newer builds, and select only the newer builds for review.
+## 2026-08-02 검색 전환 및 상하 월 스크롤 성능 수정
+
+- 검색 버튼 전환에서 사용하던 `AnimatedSize`가 달력 전체 높이를 매 프레임
+  변경해 월 그리드를 반복 레이아웃하던 구조를 제거했다.
+- 검색 패널은 별도 레이어에서 펼쳐지고, 달력은 `RepaintBoundary`를 유지한 채
+  합성 단계의 `Transform`으로만 밀리도록 변경했다.
+- 검색 결과로 패널 높이가 달라질 때도 달력 자체를 재레이아웃하지 않고 이동
+  거리만 짧게 보간한다.
+- 상하 월 스크롤 중 달 경계를 지날 때마다 `visibleMonthProvider`를 갱신하던
+  동작을 제거했다. 스크롤 중에는 내부 페이지 번호만 추적하고 스크롤 종료 시
+  최종 월을 한 번만 전역 상태에 반영한다.
+- iOS `Info.plist`의 `CADisableMinimumFrameDurationOnPhone = true`가 유지되어
+  실제 ProMotion 기기에서는 시스템이 허용하는 동적 주사율 범위를 사용한다.
+  Simulator와 debug 빌드만으로 120Hz 실측을 확정할 수는 없다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart` 48개 통과
+  - `./tool/flutter.sh test --no-pub` 전체 142개 통과
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532` debug 빌드 성공
+  - 기존 시뮬레이터 앱에 업데이트 설치 완료, 자동 실행하지 않음
+- 기존 App Store Connect의 `3.0.0 (3.0.0)` 업로드 빌드는 이 수정 전 산출물이다.
+  사용자가 실사용 검증을 마치기 전에는 해당 빌드를 심사 제출하지 않는다.
+
+## 2026-08-02 App Store 제출 후보 3.0.1
+
+- 기존 App Store Connect의 `3.0.0 (3.0.0)`과 중복되지 않도록 최신 검색 및
+  상하 월 스크롤 성능 수정본을 Apple 제출 산출물 `3.0.1 (3.0.1)`로 생성했다.
+- 저장소의 공통 `pubspec.yaml` 버전은 변경하지 않고 Apple 제출 빌드 인자에만
+  `3.0.1`을 적용했다.
+- iOS의 고정 `CFBundleVersion`을 `$(FLUTTER_BUILD_NUMBER)`로 변경해 이후 제출
+  빌드 인자가 메인 앱에 반영되도록 했다.
+- macOS `MACOS_BUILD_NUMBER`도 `$(FLUTTER_BUILD_NUMBER)`를 사용하도록 변경했다.
+- iOS/macOS Release 위젯 타깃은 이번 제출 앱과 일치하도록 `3.0.1`을 사용한다.
+- iOS Transporter 파일:
+  - `dist/transporter-ios-3.0.1/Daily-iOS-AppStore-3.0.1-build-3.0.1.ipa`
+  - 앱 ID `com.littlebit0.daily`, 위젯 ID `com.littlebit0.daily.widgets`
+  - 앱/위젯 모두 버전 및 빌드 `3.0.1`
+  - SHA-256 `8bd2f754476101173c3873b6dd664bd0299c880535c41e7680633b16f68a858e`
+- macOS Transporter 파일:
+  - `dist/transporter-macos-3.0.1/Daily-macOS-AppStore-3.0.1-build-3.0.1.pkg`
+  - 앱 ID `com.littlebit0.daily`, 위젯 ID `com.littlebit0.daily.widgets`
+  - 앱/위젯 모두 버전 및 빌드 `3.0.1`
+  - Installer 인증서 서명과 앱 `codesign --verify --deep --strict` 통과
+  - SHA-256 `e703b7ed98a0715324bf2c06e79e6c23d3e7a666c6860c49115a9cd45f77e450`
+- macOS export에서 Xcode 자동 버전 관리가 App Store Connect 코드 서명 요청을
+  빈 결과로 반환해 첫 시도가 실패했다. `manageAppVersionAndBuildNumber=false`로
+  로컬 검증 버전을 유지한 재시도는 정상 성공했다.
+- 심사 메모는 `docs/APP_REVIEW_NOTES_3.0.1.md`에 iOS/macOS별로 작성했다.
+# 2026-08-03 App Store 3.0.1 Release Baseline
+
+- The current shared release version is `3.0.1`; Apple app version and build
+  metadata are both `3.0.1 (3.0.1)`.
+- Current Apple identifiers are:
+  - iOS/macOS app: `com.littlebit0.daily`
+  - iOS/macOS widget extension: `com.littlebit0.daily.widgets`
+- The iOS and macOS 3.0.1 binaries were uploaded through Transporter and their
+  App Store metadata was updated. At the last confirmed App Store Connect
+  state, iOS was still preparing for submission and macOS was ready for review;
+  final review submission must not be assumed complete without rechecking App
+  Store Connect.
+- Local App Store submission artifacts are:
+  - `dist/transporter-ios-3.0.1/Daily-iOS-AppStore-3.0.1-build-3.0.1.ipa`
+  - `dist/transporter-macos-3.0.1/Daily-macOS-AppStore-3.0.1-build-3.0.1.pkg`
+- Current release documentation is centered on:
+  - `docs/RELEASE_NOTES_3.0.1.md`
+  - `docs/APP_STORE_WHATS_NEW_3.0.1.md`
+  - `docs/APP_REVIEW_NOTES_3.0.1.md`
+  - `docs/STORE_SUBMISSION.md`
+- Private/sensitive-event behavior was removed from the current product model,
+  database, settings, and UI. Historical notes remain in this file as dated
+  development history and must not be treated as current behavior.
+- iOS/macOS release verification has been performed locally. Android and
+  Windows remain shared-source targets but still require platform-specific
+  build and manual verification before their 3.0.1 artifacts are published.

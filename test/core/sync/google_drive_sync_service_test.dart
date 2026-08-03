@@ -1495,7 +1495,7 @@ void main() {
     expect((await repository.findById('external-event'))?.title, '다른 기기 변경');
   });
 
-  test('newer external event survives a pending local upload', () async {
+  test('backup keeps a pending local event when remote is newer', () async {
     SharedPreferences.setMockInitialValues({'deviceId': 'local-device'});
     final preferences = await SharedPreferences.getInstance();
     final repository = _MemoryEventRepository();
@@ -1550,8 +1550,67 @@ void main() {
     await service.backupNow(eventIds: {local.id});
 
     expect(uploadCount, 0);
-    expect((await repository.findById(local.id))?.title, '더 최신인 다른 기기 수정');
-    expect((await repository.findById(local.id))?.syncStatus, 'synced');
+    expect((await repository.findById(local.id))?.title, '오래된 로컬 수정');
+    expect((await repository.findById(local.id))?.syncStatus, 'pending');
+    expect(service.statusNotifier.value.message, '일부 백업 보류 · 먼저 복원 필요');
+  });
+
+  test('backup never applies a newer remote tombstone to local data', () async {
+    SharedPreferences.setMockInitialValues({'deviceId': 'local-device'});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _MemoryEventRepository();
+    final notificationService = _FakeNotificationService();
+    final local = _event(
+      id: 'protected-event',
+      title: '보존할 일정',
+      startAt: DateTime(2026, 7, 30),
+      endAt: DateTime(2026, 7, 31),
+      updatedAt: DateTime(2026, 7, 29, 17),
+      syncStatus: 'pending',
+    );
+    await repository.save(local);
+
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+        return _driveFiles([
+          {
+            'id': 'protected-event-file',
+            'name': 'daily-sync-v2-event-protected-event.json',
+          },
+        ]);
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/drive/v3/files/protected-event-file') {
+        return _jsonResponse(
+          _eventFileJson(
+            id: local.id,
+            title: local.title,
+            startAt: local.startAt.toIso8601String(),
+            endAt: local.endAt.toIso8601String(),
+            updatedAt: local.updatedAt.toIso8601String(),
+            deletedAt: DateTime(2026, 7, 29, 18).toIso8601String(),
+            sourceDeviceId: 'remote-device',
+          ),
+        );
+      }
+      return http.Response('unexpected ${request.method} ${request.url}', 500);
+    });
+
+    final service = _service(
+      repository: repository,
+      notificationService: notificationService,
+      preferences: preferences,
+      httpClient: httpClient,
+    );
+    addTearDown(service.dispose);
+
+    await service.backupNow(eventIds: {local.id});
+
+    final saved = await repository.findById(local.id);
+    expect(saved?.deletedAt, isNull);
+    expect(saved?.syncStatus, 'pending');
+    expect(notificationService.cancelled, isEmpty);
+    expect(service.statusNotifier.value.message, '일부 백업 보류 · 먼저 복원 필요');
   });
 
   test('failed automatic backup keeps pending data and retries', () async {
@@ -1881,6 +1940,7 @@ Map<String, Object?> _eventFileJson({
   required String startAt,
   required String endAt,
   String updatedAt = '2026-05-29T00:00:00.000Z',
+  String? deletedAt,
   String? sourceDeviceId,
 }) {
   return {
@@ -1897,6 +1957,7 @@ Map<String, Object?> _eventFileJson({
       'colorValue': EventCategory.basic.colorValue,
       'createdAt': '2026-05-29T00:00:00.000Z',
       'updatedAt': updatedAt,
+      'deletedAt': ?deletedAt,
     },
   };
 }
@@ -1955,12 +2016,15 @@ class _MissingHeaderGoogleDriveAuthService extends _FakeGoogleDriveAuthService {
 
 class _FakeNotificationService implements NotificationService {
   final scheduled = <CalendarEvent>[];
+  final cancelled = <String>[];
 
   @override
   Future<void> cancelEventReminder(
     String eventId, {
     List<int> reminderMinutesBeforeList = const [],
-  }) async {}
+  }) async {
+    cancelled.add(eventId);
+  }
 
   @override
   Future<void> cancelMorningBriefing() async {}

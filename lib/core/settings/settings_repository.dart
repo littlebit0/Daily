@@ -32,6 +32,7 @@ class SettingsRepository {
   static const _briefingEnabledKey = 'morningBriefingEnabled';
   static const _weekStartsOnMondayKey = 'weekStartsOnMonday';
   static const _showLunarDatesKey = 'showLunarDates';
+  static const _showAdjacentMonthDatesKey = 'showAdjacentMonthDates';
   static const _onboardingCompletedKey = 'onboardingCompleted';
   static const _aiEnabledKey = 'aiEnabled';
   static const _aiComplexOnlyKey = 'aiOnlyForComplexInput';
@@ -45,11 +46,12 @@ class SettingsRepository {
   static const _hiddenCategoryIdsKey = 'hiddenCategoryIds';
   static const _calendarShowHolidaysKey = 'calendarShowHolidays';
   static const _calendarDdayOnlyKey = 'calendarDdayOnly';
-  static const _hideSensitiveEventsKey = 'hideSensitiveEvents';
-  static const _hideSensitiveNotificationsKey = 'hideSensitiveNotifications';
   static const _appLockEnabledKey = 'appLockEnabled';
   static const _appLockBiometricsEnabledKey = 'appLockBiometricsEnabled';
+  static const _appLockMethodKey = 'appLockMethod';
   static const _use24HourTimeKey = 'use24HourTime';
+  static const _themeModeKey = 'themeMode';
+  static const _monthNavigationModeKey = 'monthNavigationMode';
   static const _settingsSyncPendingKey = 'settingsSyncPending';
   static const _settingsSyncRevisionKey = 'settingsSyncRevision';
   static const _driveChangeTokenKey = 'driveChangePageToken';
@@ -74,6 +76,8 @@ class SettingsRepository {
       morningBriefingEnabled: _preferences.getBool(_briefingEnabledKey) ?? true,
       weekStartsOnMonday: _preferences.getBool(_weekStartsOnMondayKey) ?? false,
       showLunarDates: _preferences.getBool(_showLunarDatesKey) ?? true,
+      showAdjacentMonthDates:
+          _preferences.getBool(_showAdjacentMonthDatesKey) ?? true,
       onboardingCompleted:
           _preferences.getBool(_onboardingCompletedKey) ?? false,
       aiEnabled: _preferences.getBool(_aiEnabledKey) ?? false,
@@ -92,14 +96,19 @@ class SettingsRepository {
       calendarShowHolidays:
           _preferences.getBool(_calendarShowHolidaysKey) ?? true,
       calendarDdayOnly: _preferences.getBool(_calendarDdayOnlyKey) ?? false,
-      hideSensitiveEvents:
-          _preferences.getBool(_hideSensitiveEventsKey) ?? false,
-      hideSensitiveNotifications:
-          _preferences.getBool(_hideSensitiveNotificationsKey) ?? false,
       appLockEnabled: _preferences.getBool(_appLockEnabledKey) ?? false,
       appLockBiometricsEnabled:
           _preferences.getBool(_appLockBiometricsEnabledKey) ?? false,
+      appLockMethod: AppLockMethod.fromName(
+        _preferences.getString(_appLockMethodKey),
+        legacyBiometricsEnabled:
+            _preferences.getBool(_appLockBiometricsEnabledKey) ?? false,
+      ),
       use24HourTime: _preferences.getBool(_use24HourTimeKey) ?? true,
+      themeMode: AppThemeMode.fromName(_preferences.getString(_themeModeKey)),
+      monthNavigationMode: MonthNavigationMode.fromName(
+        _preferences.getString(_monthNavigationModeKey),
+      ),
     );
   }
 
@@ -139,6 +148,10 @@ class SettingsRepository {
     );
     await _preferences.setBool(_showLunarDatesKey, settings.showLunarDates);
     await _preferences.setBool(
+      _showAdjacentMonthDatesKey,
+      settings.showAdjacentMonthDates,
+    );
+    await _preferences.setBool(
       _onboardingCompletedKey,
       settings.onboardingCompleted,
     );
@@ -159,6 +172,10 @@ class SettingsRepository {
       jsonEncode(settings.dDayReminderOffsets),
     );
     await _preferences.setString(_appTextSizeKey, settings.appTextSize.name);
+    await _preferences.setString(
+      _monthNavigationModeKey,
+      settings.monthNavigationMode.name,
+    );
     await _preferences.remove(_legacyCalendarEventTextSizeKey);
     await _preferences.remove(_legacyCalendarDensityKey);
     await _preferences.setString(
@@ -174,20 +191,20 @@ class SettingsRepository {
       settings.calendarShowHolidays,
     );
     await _preferences.setBool(_calendarDdayOnlyKey, settings.calendarDdayOnly);
-    await _preferences.setBool(
-      _hideSensitiveEventsKey,
-      settings.hideSensitiveEvents,
-    );
-    await _preferences.setBool(
-      _hideSensitiveNotificationsKey,
-      settings.hideSensitiveNotifications,
-    );
+    await _preferences.remove('hideSensitiveEvents');
+    await _preferences.remove('hideSensitiveNotifications');
+    await _preferences.remove('privateEventHidingConfigured');
     await _preferences.setBool(_appLockEnabledKey, settings.appLockEnabled);
     await _preferences.setBool(
       _appLockBiometricsEnabledKey,
       settings.appLockBiometricsEnabled,
     );
+    await _preferences.setString(
+      _appLockMethodKey,
+      settings.appLockMethod.name,
+    );
     await _preferences.setBool(_use24HourTimeKey, settings.use24HourTime);
+    await _preferences.setString(_themeModeKey, settings.themeMode.name);
     if (markSyncPending) {
       await _preferences.setInt(
         _settingsSyncRevisionKey,
@@ -386,6 +403,7 @@ class SettingsRepository {
     await _preferences.remove(_briefingEnabledKey);
     await _preferences.remove(_weekStartsOnMondayKey);
     await _preferences.remove(_showLunarDatesKey);
+    await _preferences.remove(_showAdjacentMonthDatesKey);
     await _preferences.remove(_onboardingCompletedKey);
     await _preferences.remove(_aiEnabledKey);
     await _preferences.remove(_aiComplexOnlyKey);
@@ -399,10 +417,12 @@ class SettingsRepository {
     await _preferences.remove(_hiddenCategoryIdsKey);
     await _preferences.remove(_calendarShowHolidaysKey);
     await _preferences.remove(_calendarDdayOnlyKey);
-    await _preferences.remove(_hideSensitiveEventsKey);
-    await _preferences.remove(_hideSensitiveNotificationsKey);
+    await _preferences.remove('hideSensitiveEvents');
+    await _preferences.remove('hideSensitiveNotifications');
+    await _preferences.remove('privateEventHidingConfigured');
     await _preferences.remove(_appLockEnabledKey);
     await _preferences.remove(_appLockBiometricsEnabledKey);
+    await _preferences.remove(_appLockMethodKey);
     await _preferences.remove(_use24HourTimeKey);
     await _preferences.remove(_settingsSyncPendingKey);
     await _preferences.remove(_settingsSyncRevisionKey);

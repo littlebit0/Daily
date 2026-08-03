@@ -1,182 +1,66 @@
-# Daily Apple App Store Submission Plan
+# Daily Apple App Store Submission
 
-Current app version: `2.0.5`
+최종 갱신: 2026-08-03
+제출 버전: `3.0.1 (3.0.1)`
+대상: iOS/iPadOS 및 macOS
 
-Scope for this pass: Apple App Store submission only. Google Play and
-Microsoft Store submission are intentionally deferred.
+## App Store Connect 상태
 
-## Store Metadata Draft
+- 앱 이름: `DailyCalendar`
+- iOS/macOS 앱 번들 ID: `com.littlebit0.daily`
+- iOS/macOS 위젯 번들 ID: `com.littlebit0.daily.widgets`
+- iOS App Store 공개 버전: `2.7.1`
+- iOS 3.0.1 IPA: Transporter 업로드 및 Apple 처리 완료
+- macOS 3.0.1 PKG: Transporter 업로드 및 Apple 처리 완료
+- 한국어 설명, 업그레이드 사항, 지원 URL과 심사 메모: 3.0.1 기준 저장
 
-- App name: `Daily`
-- Subtitle: `계정 없이 시작하고 필요할 때 동기화하는 개인 캘린더`
-- Primary category: Productivity
-- Secondary category: Lifestyle
-- Support URL: `https://github.com/littlebit0/Daily/issues`
-- Marketing URL: `https://github.com/littlebit0/Daily`
-- Privacy policy URL: pending public hosted URL
-- Contact email: pending
+## 제출 파일
 
-## Korean Listing Draft
+- iOS:
+  `dist/transporter-ios-3.0.1/Daily-iOS-AppStore-3.0.1-build-3.0.1.ipa`
+- macOS:
+  `dist/transporter-macos-3.0.1/Daily-macOS-AppStore-3.0.1-build-3.0.1.pkg`
 
-### Short Description
+## 최종 제출 순서
 
-일정 입력, 알림, D-day, 선택적 Google Drive 동기화를 지원하는 개인 캘린더입니다.
+1. iOS 3.0.1 페이지에서 빌드 `3.0.1 (3.0.1)` 선택
+2. macOS 3.0.1 페이지에서 빌드 `3.0.1 (3.0.1)` 선택
+3. 수출 규정 질문에서 Daily가 독자 암호화 알고리즘을 구현하지 않았음을 기준으로 응답
+4. iOS와 macOS를 각각 심사에 추가
+5. 앱 심사 제출 초안에서 두 플랫폼과 버전을 다시 확인
+6. 최종 제출
 
-### Full Description
+## 심사 핵심 설명
 
-Daily는 일정을 빠르게 기록하고 여러 기기에서 이어서 사용할 수 있는 개인 캘린더 앱입니다.
+- `로컬로 시작`을 선택하면 계정 없이 전체 기본 캘린더 기능을 심사할 수 있다.
+- Sign in with Apple은 Google 로그인을 요구하지 않는다.
+- Google 로그인은 Google Calendar 가져오기와 Drive AppData 백업·동기화를 위한 선택 기능이다.
+- Google Drive 일반 파일은 읽거나 수정하지 않는다.
+- 기존 Google 세션의 조용한 복원에 실패해도 Apple/local 모드를 차단하거나
+  자동으로 대화형 로그인 창을 열지 않는다.
+- 광고, IDFA, 광고 측정, 데이터 브로커 및 앱·웹사이트 간 추적을 사용하지 않는다.
 
-- 월간, 주간, 일간 보기
-- 일정 알림과 아침 브리핑
-- D-day 표시와 알림
-- 민감 일정 숨김
-- 선택적 Google Drive AppData 백업 및 동기화
-- 로컬 모드 사용
-- iPhone, iPad, Mac 지원
+플랫폼별 전체 메모는 `docs/APP_REVIEW_NOTES_3.0.1.md`, 사용자에게 표시할 변경
+사항은 `docs/APP_STORE_WHATS_NEW_3.0.1.md`를 사용한다.
 
-Daily의 Google 동기화는 사용자의 Google Drive AppData 영역에 앱 전용
-데이터만 저장합니다. 사용자의 일반 Drive 파일을 읽거나 변경하지 않습니다.
+## 개인정보 및 권한
 
-## English Listing Draft
+- 캘린더 권한: 사용자가 외부 캘린더 가져오기를 선택할 때만 요청
+- 알림 권한: 일정 알림, 아침 브리핑과 D-day 알림
+- AlarmKit 권한: 지원 iOS에서 사용자가 일정 알람 기능을 사용할 때 요청
+- App Privacy의 수집 데이터는 앱 기능 목적으로만 표시
+- 모든 추적 관련 응답은 `아니요`
 
-### Short Description
+## 출시 설정
 
-A personal calendar with reminders, D-day tracking, and optional Google Drive sync.
+- 무료 앱
+- 자동 출시
+- 모든 사용자에게 즉시 업데이트 출시
+- 기존 평점 유지
 
-### Full Description
+## 제출 후 확인
 
-Daily is a personal calendar for quickly saving schedules and keeping them
-available across Apple devices.
-
-- Month, week, and day calendar views
-- Event reminders and morning briefing
-- D-day tracking and notifications
-- Sensitive event hiding
-- Optional Google Drive AppData backup and sync
-- Local-only mode
-- iPhone, iPad, and Mac support
-
-Daily stores sync data only in your app-specific Google Drive AppData folder.
-It does not read or edit your regular Drive files.
-
-## Apple References
-
-- Create an App Store Connect app record:
-  https://developer.apple.com/help/app-store-connect/create-an-app-record/add-a-new-app/
-- Upload builds:
-  https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds/
-- Create an App Store provisioning profile:
-  https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile/
-- Xcode distribution overview:
-  https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases/
-
-## Identifiers
-
-- iOS bundle ID: `com.littlebit0.daily`
-- macOS bundle ID: `com.littlebit0.daily.macos`
-- Version: `2.0.5`
-- Build: `11`
-
-## Local Submission Readiness
-
-- Daily app icons have replaced the default Flutter icons for iOS and macOS.
-- The iOS launch image has been replaced with a Daily-branded launch image.
-- iOS archive creation succeeds at `build/ios/archive/Runner.xcarchive`.
-- App Store IPA export is currently blocked by Apple signing/provisioning.
-
-Current local signing state:
-
-- Local keychain has only:
-  `Apple Development: kimhee8953@naver.com (739BC896PZ)`
-- No `Apple Distribution` / `iOS Distribution` certificate is installed.
-- No local App Store provisioning profile exists for `com.littlebit0.daily`.
-- Xcode reports that team `Hwi Kim` cannot create iOS App Store provisioning
-  profiles from this account/session.
-- A direct `xcodebuild -exportArchive -allowProvisioningUpdates` retry on
-  2026-06-01 also failed with `No provider associated with App Store Connect
-  user`, `No Account for Team "739BC896PZ"`, and no `iOS Distribution`
-  certificate. This means the local Xcode account is not yet connected to a
-  usable App Store Connect provider for distribution uploads.
-
-## Required Apple Account Actions
-
-1. In App Store Connect, create the app record before uploading the first build.
-2. Make sure the account has Account Holder or Admin rights for Certificates,
-   Identifiers & Profiles.
-3. Create or let Xcode create an Apple Distribution certificate.
-4. Create App Store Connect provisioning profiles for:
-   - `com.littlebit0.daily`
-   - `com.littlebit0.daily.macos` if submitting the Mac app in the same pass
-5. Re-run the App Store archive/export from Xcode Organizer or Flutter.
-6. Upload the build with Xcode Organizer, Transporter, or `xcrun altool`.
-7. Complete screenshots, privacy nutrition labels, age rating, support URL,
-   privacy policy URL, and review notes.
-
-## Review Notes Draft
-
-Daily can be used in local-only mode without signing in or creating an account.
-Google authorization is optional and is used only when the user chooses Google
-Drive backup/sync for their own calendar data through the app-specific Google
-Drive AppData folder.
-
-Suggested reviewer note:
-
-```text
-Daily does not require users to sign in or create a Daily account. The app can
-be fully reviewed in local-only mode by choosing "로컬로 시작" on the welcome
-screen.
-
-The Google option is not used to create or authenticate a Daily primary account.
-It is an optional Google Drive authorization used only when the user chooses
-Google Drive backup/sync. Daily uses the Google Drive AppData folder only for
-app-specific calendar sync and does not read, list, or modify the user's regular
-Google Drive files.
-```
-
-## App Review 2026-06-25 Response
-
-### Guideline 5.1.2(i)
-
-App Privacy should be updated in App Store Connect so the collected data is not
-marked as "Data Used to Track You." Daily does not use advertising, ad
-measurement, data brokers, IDFA, or cross-app/site tracking.
-
-Use the following privacy label structure:
-
-- Data collection: Yes.
-- Data types: Email Address, User ID, Other User Content.
-- Purpose: App Functionality only.
-- Linked to identity: Yes for the Google account email/user ID and synced
-  calendar content when Google Drive sync is enabled.
-- Used for tracking: No.
-
-Suggested reply:
-
-```text
-We have updated the App Privacy information. Daily does not track users across
-apps or websites, does not use IDFA, does not include advertising or advertising
-measurement, and does not share collected data with data brokers. The Google
-account email/user ID and calendar content are used only for app functionality:
-optional Google Drive AppData backup and sync selected by the user.
-```
-
-### Guideline 4.8
-
-The submitted UI used "Google login" wording, which could make the optional
-Google Drive authorization appear to be a primary account login. The app has
-been updated to clarify that Daily can be fully used without an account and
-that Google is only an optional Drive backup/sync connection.
-
-Suggested reply:
-
-```text
-Daily does not use Google to set up or authenticate a Daily primary account.
-Users can use all calendar features without signing in by selecting local mode
-on the welcome screen. The Google option is an optional Google Drive
-authorization for app-specific backup and sync in the user's Google Drive
-AppData folder.
-
-We updated the app UI to make this clearer: the welcome screen now states that
-all calendar features are available without an account, and the Google action
-is labeled as Google Drive backup/sync rather than primary account login.
-```
+- 두 플랫폼의 상태가 `심사 대기 중`으로 변경됐는지 확인
+- App Review 메시지와 이메일 모니터링
+- 승인 후 iOS 업데이트 및 macOS 최초 App Store 설치 검증
+- Google 로그인, Apple 로그인, 로컬 모드, 위젯과 동기화 smoke test

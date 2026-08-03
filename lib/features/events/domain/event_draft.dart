@@ -18,7 +18,6 @@ class EventDraft {
     List<int>? reminderMinutesBeforeList,
     this.recurrence = const RecurrenceRule(),
     this.showDday = false,
-    this.sensitive = false,
     this.alarmEnabled = false,
     int allDayAlarmMinutes = 9 * 60,
   }) : allDayAlarmMinutes = allDayAlarmMinutes.clamp(0, 1439),
@@ -42,7 +41,6 @@ class EventDraft {
   final List<int> reminderMinutesBeforeList;
   final RecurrenceRule recurrence;
   final bool showDday;
-  final bool sensitive;
   final bool alarmEnabled;
   final int allDayAlarmMinutes;
 
@@ -75,7 +73,6 @@ class EventDraft {
       deviceId: deviceId,
       syncStatus: 'pending',
       showDday: showDday,
-      sensitive: sensitive,
       alarmEnabled: alarmEnabled,
       allDayAlarmMinutes: allDayAlarmMinutes,
       holiday: category.id == EventCategory.holiday.id,
@@ -97,7 +94,6 @@ class EventDraft {
     List<int>? reminderMinutesBeforeList,
     RecurrenceRule? recurrence,
     bool? showDday,
-    bool? sensitive,
     bool? alarmEnabled,
     int? allDayAlarmMinutes,
     bool clearMemo = false,
@@ -126,7 +122,6 @@ class EventDraft {
       reminderMinutesBeforeList: nextReminderMinutes,
       recurrence: recurrence ?? this.recurrence,
       showDday: showDday ?? this.showDday,
-      sensitive: sensitive ?? this.sensitive,
       alarmEnabled: alarmEnabled ?? this.alarmEnabled,
       allDayAlarmMinutes: allDayAlarmMinutes ?? this.allDayAlarmMinutes,
     );

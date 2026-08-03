@@ -59,8 +59,8 @@ class NativeAlarmService implements AlarmService {
     }
     await _channel.invokeMethod<void>('schedule', {
       'eventId': event.id,
-      'title': event.sensitive ? '비공개 일정' : event.title,
-      'memo': event.sensitive ? null : event.memo,
+      'title': event.title,
+      'memo': event.memo,
       'fireAtMilliseconds': fireAt.millisecondsSinceEpoch,
       'snoozeMinutes': 10,
     });

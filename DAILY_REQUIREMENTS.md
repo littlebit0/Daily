@@ -1,5 +1,8 @@
 # Daily 앱 설계 문서
 
+> 이 문서는 초기 요구사항 이력이다. 현재 3.0.1 제품 동작과 배포 기준은
+> `README.md`, `PROJECT_ANALYSIS.md`, `docs/PROGRESS_STATUS.md`를 따른다.
+
 ## 1. 제품 개요
 
 - 앱 이름: Daily

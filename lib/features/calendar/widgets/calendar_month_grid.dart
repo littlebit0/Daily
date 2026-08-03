@@ -16,7 +16,13 @@ class CalendarMonthGrid extends StatefulWidget {
     required this.events,
     required this.weekStartsOnMonday,
     required this.showLunarDates,
-    required this.hideSensitiveEvents,
+    this.showAdjacentMonthDates = true,
+    this.continuous = false,
+    this.showWeekdayHeader = true,
+    this.rangeHitTestKey,
+    this.externalRangeStart,
+    this.externalRangeEnd,
+    this.enableRangeGestures = true,
     required this.onDateSelected,
     this.onDateRangeSelected,
   });
@@ -26,7 +32,13 @@ class CalendarMonthGrid extends StatefulWidget {
   final List<CalendarEvent> events;
   final bool weekStartsOnMonday;
   final bool showLunarDates;
-  final bool hideSensitiveEvents;
+  final bool showAdjacentMonthDates;
+  final bool continuous;
+  final bool showWeekdayHeader;
+  final GlobalKey? rangeHitTestKey;
+  final DateTime? externalRangeStart;
+  final DateTime? externalRangeEnd;
+  final bool enableRangeGestures;
   final ValueChanged<DateTime> onDateSelected;
   final Future<void> Function(DateTime start, DateTime end)?
   onDateRangeSelected;
@@ -40,6 +52,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
   DateTime? _rangeEnd;
   bool _mouseRangeActive = false;
   bool _longPressRangeActive = false;
+  Offset? _mouseDownPosition;
   late List<DateTime> _days;
   late List<List<DateTime>> _weeks;
   late Set<DateTime> _holidayDays;
@@ -67,6 +80,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
     final width = MediaQuery.sizeOf(context).width;
     final compact = width < 720;
     final maxFlags = _standardMaxFlagsForWidth(width);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Padding(
       padding: compact
@@ -74,7 +88,7 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
           : const EdgeInsets.fromLTRB(12, 0, 12, 10),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xffffffff),
+          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(10),
           boxShadow: [
             BoxShadow(
@@ -90,26 +104,52 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
               : const EdgeInsets.fromLTRB(8, 7, 8, 8),
           child: Column(
             children: [
-              _WeekdayHeader(weekStartsOnMonday: widget.weekStartsOnMonday),
+              if (widget.showWeekdayHeader)
+                CalendarWeekdayHeader(
+                  weekStartsOnMonday: widget.weekStartsOnMonday,
+                ),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) => Listener(
+                    key: widget.rangeHitTestKey,
                     onPointerDown: (event) {
+                      if (!widget.enableRangeGestures) {
+                        return;
+                      }
                       if (!_isDesktopRangePointer(event.kind) ||
                           !_hasPrimaryButton(event.buttons)) {
                         return;
                       }
-                      _mouseRangeActive = true;
+                      _mouseRangeActive = false;
                       _longPressRangeActive = false;
-                      _startRangeSelection(
-                        event.localPosition,
-                        _days,
-                        constraints,
-                      );
+                      _mouseDownPosition = event.localPosition;
                     },
                     onPointerMove: (event) {
-                      if (!_mouseRangeActive) {
+                      if (!widget.enableRangeGestures) {
                         return;
+                      }
+                      final downPosition = _mouseDownPosition;
+                      if (downPosition == null) {
+                        return;
+                      }
+                      if (!_mouseRangeActive) {
+                        final downDay = _dayAtPosition(
+                          downPosition,
+                          _days,
+                          constraints,
+                        );
+                        final currentDay = _dayAtPosition(
+                          event.localPosition,
+                          _days,
+                          constraints,
+                        );
+                        if (downDay == null ||
+                            currentDay == null ||
+                            _sameDay(downDay, currentDay)) {
+                          return;
+                        }
+                        _mouseRangeActive = true;
+                        _startRangeSelection(downPosition, _days, constraints);
                       }
                       _updateRangeSelection(
                         event.localPosition,
@@ -118,6 +158,10 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                       );
                     },
                     onPointerUp: (event) {
+                      if (!widget.enableRangeGestures) {
+                        return;
+                      }
+                      _mouseDownPosition = null;
                       if (!_mouseRangeActive) {
                         return;
                       }
@@ -125,6 +169,10 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                       _finishRangeSelection();
                     },
                     onPointerCancel: (_) {
+                      if (!widget.enableRangeGestures) {
+                        return;
+                      }
+                      _mouseDownPosition = null;
                       if (!_mouseRangeActive && !_longPressRangeActive) {
                         return;
                       }
@@ -134,41 +182,49 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                     },
                     child: GestureDetector(
                       behavior: HitTestBehavior.translucent,
-                      onLongPressStart: (details) {
-                        if (_mouseRangeActive) {
-                          return;
-                        }
-                        _longPressRangeActive = true;
-                        _startRangeSelection(
-                          details.localPosition,
-                          _days,
-                          constraints,
-                        );
-                      },
-                      onLongPressMoveUpdate: (details) {
-                        if (!_longPressRangeActive) {
-                          return;
-                        }
-                        _updateRangeSelection(
-                          details.localPosition,
-                          _days,
-                          constraints,
-                        );
-                      },
-                      onLongPressEnd: (_) {
-                        if (!_longPressRangeActive) {
-                          return;
-                        }
-                        _longPressRangeActive = false;
-                        _finishRangeSelection();
-                      },
-                      onLongPressCancel: () {
-                        if (!_longPressRangeActive) {
-                          return;
-                        }
-                        _longPressRangeActive = false;
-                        _clearRangeSelection();
-                      },
+                      onLongPressStart: widget.enableRangeGestures
+                          ? (details) {
+                              if (_mouseRangeActive) {
+                                return;
+                              }
+                              _longPressRangeActive = true;
+                              _startRangeSelection(
+                                details.localPosition,
+                                _days,
+                                constraints,
+                              );
+                            }
+                          : null,
+                      onLongPressMoveUpdate: widget.enableRangeGestures
+                          ? (details) {
+                              if (!_longPressRangeActive) {
+                                return;
+                              }
+                              _updateRangeSelection(
+                                details.localPosition,
+                                _days,
+                                constraints,
+                              );
+                            }
+                          : null,
+                      onLongPressEnd: widget.enableRangeGestures
+                          ? (_) {
+                              if (!_longPressRangeActive) {
+                                return;
+                              }
+                              _longPressRangeActive = false;
+                              _finishRangeSelection();
+                            }
+                          : null,
+                      onLongPressCancel: widget.enableRangeGestures
+                          ? () {
+                              if (!_longPressRangeActive) {
+                                return;
+                              }
+                              _longPressRangeActive = false;
+                              _clearRangeSelection();
+                            }
+                          : null,
                       child: Column(
                         children: [
                           for (final week in _weeks)
@@ -180,16 +236,18 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                                 child: _WeekRow(
                                   month: widget.month,
                                   selectedDate: widget.selectedDate,
-                                  selectedRangeStart: _rangeStart,
-                                  selectedRangeEnd: _rangeEnd,
+                                  selectedRangeStart:
+                                      widget.externalRangeStart ?? _rangeStart,
+                                  selectedRangeEnd:
+                                      widget.externalRangeEnd ?? _rangeEnd,
                                   weekDays: week,
                                   events: widget.events,
                                   maxFlags: maxFlags,
                                   holidayDays: _holidayDays,
                                   showLunarDates: widget.showLunarDates,
+                                  showAdjacentMonthDates:
+                                      widget.showAdjacentMonthDates,
                                   showEventTimes: !compact,
-                                  hideSensitiveEvents:
-                                      widget.hideSensitiveEvents,
                                   compact: compact,
                                   onDateSelected: widget.onDateSelected,
                                 ),
@@ -304,7 +362,9 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
     final start = first.subtract(Duration(days: leadingDays));
     final daysInMonth = DateUtils.getDaysInMonth(month.year, month.month);
     final requiredWeeks = ((leadingDays + daysInMonth) / 7).ceil();
-    final weekCount = math.max(5, requiredWeeks);
+    final weekCount = widget.continuous
+        ? requiredWeeks
+        : math.max(5, requiredWeeks);
     return List.generate(
       weekCount * 7,
       (index) => start.add(Duration(days: index)),
@@ -370,8 +430,8 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
   }
 }
 
-class _WeekdayHeader extends StatelessWidget {
-  const _WeekdayHeader({required this.weekStartsOnMonday});
+class CalendarWeekdayHeader extends StatelessWidget {
+  const CalendarWeekdayHeader({super.key, required this.weekStartsOnMonday});
 
   final bool weekStartsOnMonday;
 
@@ -390,7 +450,10 @@ class _WeekdayHeader extends StatelessWidget {
                   child: Text(
                     label,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: _weekdayColor(label),
+                      color: _weekdayColor(
+                        label,
+                        Theme.of(context).colorScheme,
+                      ),
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -402,14 +465,14 @@ class _WeekdayHeader extends StatelessWidget {
     );
   }
 
-  Color _weekdayColor(String label) {
+  Color _weekdayColor(String label, ColorScheme colorScheme) {
     if (label == '일') {
       return const Color(0xffef4444);
     }
     if (label == '토') {
       return const Color(0xff2563eb);
     }
-    return const Color(0xff6b7280);
+    return colorScheme.onSurfaceVariant;
   }
 }
 
@@ -424,8 +487,8 @@ class _WeekRow extends StatelessWidget {
     required this.maxFlags,
     required this.holidayDays,
     required this.showLunarDates,
+    required this.showAdjacentMonthDates,
     required this.showEventTimes,
-    required this.hideSensitiveEvents,
     required this.compact,
     required this.onDateSelected,
   });
@@ -439,13 +502,14 @@ class _WeekRow extends StatelessWidget {
   final int maxFlags;
   final Set<DateTime> holidayDays;
   final bool showLunarDates;
+  final bool showAdjacentMonthDates;
   final bool showEventTimes;
-  final bool hideSensitiveEvents;
   final bool compact;
   final ValueChanged<DateTime> onDateSelected;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final weekStart = weekDays.first;
     final weekEnd = weekStart.add(const Duration(days: 7));
     final segments = _layoutSegments(weekStart, weekEnd);
@@ -504,16 +568,13 @@ class _WeekRow extends StatelessWidget {
                         'selected-range-${weekStart.year}-${weekStart.month}-${weekStart.day}',
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xffdbeafe),
-                        borderRadius: BorderRadius.horizontal(
-                          left: rangeSegment.roundLeading
-                              ? const Radius.circular(8)
-                              : Radius.zero,
-                          right: rangeSegment.roundTrailing
-                              ? const Radius.circular(8)
-                              : Radius.zero,
+                        color: colorScheme.primaryContainer.withValues(
+                          alpha: 0.55,
                         ),
-                        border: Border.all(color: const Color(0xff93c5fd)),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: colorScheme.primary.withValues(alpha: 0.45),
+                        ),
                       ),
                     ),
                   ),
@@ -522,15 +583,30 @@ class _WeekRow extends StatelessWidget {
                 children: [
                   for (final day in weekDays)
                     Expanded(
-                      child: _DayCellBackground(
-                        day: day,
-                        inMonth: day.month == month.month,
-                        selected: _sameDay(day, selectedDate),
-                        rangeHighlighted: _inSelectedRange(day),
-                        today: _sameDay(day, DateTime.now()),
-                        holiday: holidayDays.contains(_dayStart(day)),
-                        showLunarDate: showLunarDates,
-                        onTap: () => onDateSelected(day),
+                      child: Builder(
+                        builder: (context) {
+                          final showContent =
+                              showAdjacentMonthDates ||
+                              (day.year == month.year &&
+                                  day.month == month.month);
+                          return _DayCellBackground(
+                            day: day,
+                            inMonth:
+                                day.year == month.year &&
+                                day.month == month.month,
+                            selected:
+                                showContent && _sameDay(day, selectedDate),
+                            rangeHighlighted:
+                                showContent && _inSelectedRange(day),
+                            today: _sameDay(day, DateTime.now()),
+                            holiday: holidayDays.contains(_dayStart(day)),
+                            showLunarDate: showLunarDates,
+                            showContent: showContent,
+                            onTap: showContent
+                                ? () => onDateSelected(day)
+                                : null,
+                          );
+                        },
                       ),
                     ),
                 ],
@@ -558,7 +634,6 @@ class _WeekRow extends StatelessWidget {
                             Duration(days: segment.startCol),
                           ),
                           showTime: showEventTimes,
-                          hideSensitive: hideSensitiveEvents,
                           compact: compact,
                           dense: metrics.denseText,
                         ),
@@ -574,7 +649,8 @@ class _WeekRow extends StatelessWidget {
                             alignment: Alignment.centerLeft,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.84),
+                                color: colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.92),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Padding(
@@ -589,7 +665,7 @@ class _WeekRow extends StatelessWidget {
                                     fontSize: compact ? 9 : 10,
                                     height: 1.0,
                                     fontWeight: FontWeight.w800,
-                                    color: const Color(0xff64748b),
+                                    color: colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ),
@@ -621,17 +697,28 @@ class _WeekRow extends StatelessWidget {
       return null;
     }
 
-    final segmentStart = normalizedStart.isAfter(weekStart)
+    var segmentStart = normalizedStart.isAfter(weekStart)
         ? normalizedStart
         : weekStart;
-    final segmentEnd = normalizedEnd.isBefore(weekLast)
+    var segmentEnd = normalizedEnd.isBefore(weekLast)
         ? normalizedEnd
         : weekLast;
+    if (!showAdjacentMonthDates) {
+      final monthStart = DateTime(month.year, month.month);
+      final monthEnd = DateTime(month.year, month.month + 1, 0);
+      if (segmentStart.isBefore(monthStart)) {
+        segmentStart = monthStart;
+      }
+      if (segmentEnd.isAfter(monthEnd)) {
+        segmentEnd = monthEnd;
+      }
+      if (segmentEnd.isBefore(segmentStart)) {
+        return null;
+      }
+    }
     return _RangeHighlightSegment(
       startCol: segmentStart.difference(weekStart).inDays,
       endCol: segmentEnd.difference(weekStart).inDays,
-      roundLeading: _sameDay(segmentStart, normalizedStart),
-      roundTrailing: _sameDay(segmentEnd, normalizedEnd),
     );
   }
 
@@ -640,6 +727,9 @@ class _WeekRow extends StatelessWidget {
         events
             .where((event) => event.overlaps(weekStart, weekEnd))
             .map((event) => _EventSegment.fromEvent(event, weekStart))
+            .where((segment) => segment != null)
+            .cast<_EventSegment>()
+            .map(_clipToVisibleMonth)
             .where((segment) => segment != null)
             .cast<_EventSegment>()
             .toList()
@@ -675,6 +765,27 @@ class _WeekRow extends StatelessWidget {
       }
     }
     return laidOut;
+  }
+
+  _EventSegment? _clipToVisibleMonth(_EventSegment segment) {
+    if (showAdjacentMonthDates) {
+      return segment;
+    }
+    final visibleColumns = <int>[
+      for (var index = 0; index < weekDays.length; index++)
+        if (weekDays[index].year == month.year &&
+            weekDays[index].month == month.month)
+          index,
+    ];
+    if (visibleColumns.isEmpty) {
+      return null;
+    }
+    final startCol = math.max(segment.startCol, visibleColumns.first);
+    final endCol = math.min(segment.endCol, visibleColumns.last);
+    if (endCol < startCol) {
+      return null;
+    }
+    return segment.copyWith(startCol: startCol, endCol: endCol);
   }
 
   bool _canPlace(List<_EventSegment> lane, _EventSegment segment) {
@@ -728,6 +839,7 @@ class _DayCellBackground extends StatelessWidget {
     required this.today,
     required this.holiday,
     required this.showLunarDate,
+    required this.showContent,
     required this.onTap,
   });
 
@@ -738,20 +850,24 @@ class _DayCellBackground extends StatelessWidget {
   final bool today;
   final bool holiday;
   final bool showLunarDate;
-  final VoidCallback onTap;
+  final bool showContent;
+  final VoidCallback? onTap;
 
   static const _lunarCalendar = KoreanLunarCalendar();
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final fill = rangeHighlighted
         ? Colors.transparent
         : selected
-        ? const Color(0xffedf4ff)
+        ? colorScheme.primaryContainer.withValues(alpha: 0.45)
         : holiday && inMonth
-        ? const Color(0xfffff4f4)
+        ? colorScheme.errorContainer.withValues(alpha: 0.28)
         : Colors.transparent;
-    final lunar = showLunarDate ? _lunarCalendar.fromSolar(day) : null;
+    final lunar = showContent && showLunarDate
+        ? _lunarCalendar.fromSolar(day)
+        : null;
 
     return InkWell(
       onTap: onTap,
@@ -772,45 +888,49 @@ class _DayCellBackground extends StatelessWidget {
               : Border.all(color: Colors.transparent),
         ),
         alignment: Alignment.topLeft,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _DayNumber(
-              key: ValueKey('day-number-${day.year}-${day.month}-${day.day}'),
-              day: day,
-              inMonth: inMonth,
-              today: today,
-              holiday: holiday,
-            ),
-            if (lunar != null) ...[
-              const SizedBox(width: 3),
-              Flexible(
-                child: SizedBox(
-                  height: 21,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        lunar.shortLabel,
-                        maxLines: 1,
-                        softWrap: false,
-                        style: TextStyle(
-                          fontSize: 8.5,
-                          height: 1.0,
-                          color: inMonth
-                              ? const Color(0xff9aa3af)
-                              : const Color(0xffc7ccd4),
+        child: !showContent
+            ? const SizedBox.shrink()
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  _DayNumber(
+                    key: ValueKey(
+                      'day-number-${day.year}-${day.month}-${day.day}',
+                    ),
+                    day: day,
+                    inMonth: inMonth,
+                    today: today,
+                    holiday: holiday,
+                  ),
+                  if (lunar != null) ...[
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: SizedBox(
+                        height: 21,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              lunar.shortLabel,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: TextStyle(
+                                fontSize: 8.5,
+                                height: 1.0,
+                                color: inMonth
+                                    ? colorScheme.onSurfaceVariant
+                                    : colorScheme.outline,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  ],
+                ],
               ),
-            ],
-          ],
-        ),
       ),
     );
   }
@@ -832,15 +952,16 @@ class _DayNumber extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final color = !inMonth
-        ? const Color(0xffc2c8d0)
+        ? colorScheme.outline
         : today
         ? Colors.white
         : holiday || day.weekday == DateTime.sunday
         ? const Color(0xffef4444)
         : day.weekday == DateTime.saturday
         ? const Color(0xff2563eb)
-        : const Color(0xff1f2937);
+        : colorScheme.onSurface;
 
     final child = Text(
       '${day.day}',
@@ -879,7 +1000,6 @@ class _EventSpanFlag extends StatelessWidget {
     required this.event,
     required this.segmentStart,
     required this.showTime,
-    required this.hideSensitive,
     required this.compact,
     required this.dense,
   });
@@ -887,14 +1007,12 @@ class _EventSpanFlag extends StatelessWidget {
   final CalendarEvent event;
   final DateTime segmentStart;
   final bool showTime;
-  final bool hideSensitive;
   final bool compact;
   final bool dense;
 
   @override
   Widget build(BuildContext context) {
-    final hidden = hideSensitive && event.sensitive;
-    final color = hidden ? const Color(0xff64748b) : Color(event.colorValue);
+    final color = Color(event.colorValue);
     final formatter = DateFormat('HH:mm');
     final showStartTime =
         showTime &&
@@ -902,13 +1020,9 @@ class _EventSpanFlag extends StatelessWidget {
         event.startAt.year == segmentStart.year &&
         event.startAt.month == segmentStart.month &&
         event.startAt.day == segmentStart.day;
-    final prefix = !hidden && event.showDday && !compact
-        ? '${_formatDday(event)}  '
-        : '';
-    final suffix = !hidden && showStartTime
-        ? '  ${formatter.format(event.startAt)}'
-        : '';
-    final title = hidden ? '비공개 일정' : event.title;
+    final prefix = event.showDday && !compact ? '${_formatDday(event)}  ' : '';
+    final suffix = showStartTime ? '  ${formatter.format(event.startAt)}' : '';
+    final title = event.title;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -927,10 +1041,6 @@ class _EventSpanFlag extends StatelessWidget {
         ),
         child: Row(
           children: [
-            if (hidden) ...[
-              Icon(Icons.lock_outline, size: dense ? 9 : 11),
-              SizedBox(width: dense ? 2 : 3),
-            ],
             Expanded(
               child: Text(
                 '$prefix$title$suffix',
@@ -995,14 +1105,14 @@ class _MonthFlagMetrics {
     required int maxFlags,
     required bool reserveOverflow,
   }) {
-    var top = compact ? 22.0 : 27.0;
+    var top = 27.0;
     var bottomReserve = compact ? 3.0 : 10.0;
     final overflowHeight = compact ? 10.0 : 12.0;
     final overflowGap = compact ? 1.0 : 2.0;
     final regularHeight = compact ? 13.0 : 19.0;
     final regularGap = compact ? 1.0 : 2.0;
-    final tightHeight = compact ? 10.5 : 13.0;
-    final tightGap = compact ? 1.0 : 2.0;
+    const tightHeight = 12.0;
+    const tightGap = 1.0;
     final overflowReserve = reserveOverflow ? overflowHeight + overflowGap : 0;
     final minimumVisibleLanes = math.min(4, maxFlags);
     double usableHeight() =>
@@ -1020,7 +1130,6 @@ class _MonthFlagMetrics {
 
     if (visibleLanes < minimumVisibleLanes) {
       if (!compact) {
-        top = 18.0;
         bottomReserve = 1.0;
       }
       height = tightHeight;
@@ -1060,17 +1169,10 @@ class _MonthFlagMetrics {
 }
 
 class _RangeHighlightSegment {
-  const _RangeHighlightSegment({
-    required this.startCol,
-    required this.endCol,
-    required this.roundLeading,
-    required this.roundTrailing,
-  });
+  const _RangeHighlightSegment({required this.startCol, required this.endCol});
 
   final int startCol;
   final int endCol;
-  final bool roundLeading;
-  final bool roundTrailing;
 }
 
 class _EventSegment {
@@ -1099,11 +1201,11 @@ class _EventSegment {
     return _EventSegment(event: event, startCol: startCol, endCol: endCol);
   }
 
-  _EventSegment copyWith({int? lane}) {
+  _EventSegment copyWith({int? startCol, int? endCol, int? lane}) {
     return _EventSegment(
       event: event,
-      startCol: startCol,
-      endCol: endCol,
+      startCol: startCol ?? this.startCol,
+      endCol: endCol ?? this.endCol,
       lane: lane ?? this.lane,
     );
   }

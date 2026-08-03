@@ -137,6 +137,6 @@ configure_project(
   target_name: 'DailyMacWidgets',
   platform: :osx,
   deployment_target: '14.0',
-  bundle_identifier: 'com.littlebit0.daily.widgets.macos',
+  bundle_identifier: 'com.littlebit0.daily.widgets',
   entitlements: 'DailyMacWidgets.entitlements'
 )

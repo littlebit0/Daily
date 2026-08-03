@@ -147,7 +147,7 @@ class AppleWidgetSnapshotBuilder {
               .map(
                 (event) => {
                   'id': event.occurrenceId ?? event.id,
-                  'title': _widgetTitle(event),
+                  'title': event.title,
                   'color': event.colorValue,
                 },
               )
@@ -178,7 +178,7 @@ class AppleWidgetSnapshotBuilder {
             final remaining = target.difference(today).inDays;
             return {
               'id': event.id,
-              'title': _widgetTitle(event),
+              'title': event.title,
               'dateLabel':
                   '${target.year}.${_two(target.month)}.${_two(target.day)}',
               'daysRemaining': remaining,
@@ -237,7 +237,7 @@ class AppleWidgetSnapshotBuilder {
   static Map<String, Object?> _eventJson(CalendarEvent event) {
     return {
       'id': event.occurrenceId ?? event.id,
-      'title': _widgetTitle(event),
+      'title': event.title,
       'timeLabel': event.allDay
           ? '종일'
           : '${_two(event.startAt.hour)}:${_two(event.startAt.minute)}',
@@ -246,10 +246,6 @@ class AppleWidgetSnapshotBuilder {
       'endAt': event.endAt.millisecondsSinceEpoch,
       'allDay': event.allDay,
     };
-  }
-
-  static String _widgetTitle(CalendarEvent event) {
-    return event.sensitive ? '비공개 일정' : event.title;
   }
 
   static DateTime _dateOnly(DateTime value) {

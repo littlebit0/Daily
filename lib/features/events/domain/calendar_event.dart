@@ -24,7 +24,6 @@ class CalendarEvent {
     this.deviceId = '',
     this.syncStatus = 'pending',
     this.showDday = false,
-    this.sensitive = false,
     this.alarmEnabled = false,
     int allDayAlarmMinutes = 9 * 60,
     this.readOnly = false,
@@ -58,7 +57,6 @@ class CalendarEvent {
   final String deviceId;
   final String syncStatus;
   final bool showDday;
-  final bool sensitive;
   final bool alarmEnabled;
   final int allDayAlarmMinutes;
   final bool readOnly;
@@ -116,7 +114,6 @@ class CalendarEvent {
     String? deviceId,
     String? syncStatus,
     bool? showDday,
-    bool? sensitive,
     bool? alarmEnabled,
     int? allDayAlarmMinutes,
     bool? readOnly,
@@ -159,7 +156,6 @@ class CalendarEvent {
       deviceId: deviceId ?? this.deviceId,
       syncStatus: syncStatus ?? this.syncStatus,
       showDday: showDday ?? this.showDday,
-      sensitive: sensitive ?? this.sensitive,
       alarmEnabled: alarmEnabled ?? this.alarmEnabled,
       allDayAlarmMinutes: allDayAlarmMinutes ?? this.allDayAlarmMinutes,
       readOnly: readOnly ?? this.readOnly,

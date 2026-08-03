@@ -275,21 +275,6 @@ class $EventRecordsTable extends EventRecords
     ),
     defaultValue: const Constant(false),
   );
-  static const VerificationMeta _sensitiveMeta = const VerificationMeta(
-    'sensitive',
-  );
-  @override
-  late final GeneratedColumn<bool> sensitive = GeneratedColumn<bool>(
-    'sensitive',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("sensitive" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
   static const VerificationMeta _alarmEnabledMeta = const VerificationMeta(
     'alarmEnabled',
   );
@@ -342,7 +327,6 @@ class $EventRecordsTable extends EventRecords
     deviceId,
     syncStatus,
     showDday,
-    sensitive,
     alarmEnabled,
     allDayAlarmMinutes,
   ];
@@ -534,12 +518,6 @@ class $EventRecordsTable extends EventRecords
         showDday.isAcceptableOrUnknown(data['show_dday']!, _showDdayMeta),
       );
     }
-    if (data.containsKey('sensitive')) {
-      context.handle(
-        _sensitiveMeta,
-        sensitive.isAcceptableOrUnknown(data['sensitive']!, _sensitiveMeta),
-      );
-    }
     if (data.containsKey('alarm_enabled')) {
       context.handle(
         _alarmEnabledMeta,
@@ -663,10 +641,6 @@ class $EventRecordsTable extends EventRecords
         DriftSqlType.bool,
         data['${effectivePrefix}show_dday'],
       )!,
-      sensitive: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}sensitive'],
-      )!,
       alarmEnabled: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}alarm_enabled'],
@@ -709,7 +683,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
   final String deviceId;
   final String syncStatus;
   final bool showDday;
-  final bool sensitive;
   final bool alarmEnabled;
   final int allDayAlarmMinutes;
   const EventRecord({
@@ -737,7 +710,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     required this.deviceId,
     required this.syncStatus,
     required this.showDday,
-    required this.sensitive,
     required this.alarmEnabled,
     required this.allDayAlarmMinutes,
   });
@@ -788,7 +760,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     map['device_id'] = Variable<String>(deviceId);
     map['sync_status'] = Variable<String>(syncStatus);
     map['show_dday'] = Variable<bool>(showDday);
-    map['sensitive'] = Variable<bool>(sensitive);
     map['alarm_enabled'] = Variable<bool>(alarmEnabled);
     map['all_day_alarm_minutes'] = Variable<int>(allDayAlarmMinutes);
     return map;
@@ -832,7 +803,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       deviceId: Value(deviceId),
       syncStatus: Value(syncStatus),
       showDday: Value(showDday),
-      sensitive: Value(sensitive),
       alarmEnabled: Value(alarmEnabled),
       allDayAlarmMinutes: Value(allDayAlarmMinutes),
     );
@@ -876,7 +846,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       deviceId: serializer.fromJson<String>(json['deviceId']),
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
       showDday: serializer.fromJson<bool>(json['showDday']),
-      sensitive: serializer.fromJson<bool>(json['sensitive']),
       alarmEnabled: serializer.fromJson<bool>(json['alarmEnabled']),
       allDayAlarmMinutes: serializer.fromJson<int>(json['allDayAlarmMinutes']),
     );
@@ -913,7 +882,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
       'deviceId': serializer.toJson<String>(deviceId),
       'syncStatus': serializer.toJson<String>(syncStatus),
       'showDday': serializer.toJson<bool>(showDday),
-      'sensitive': serializer.toJson<bool>(sensitive),
       'alarmEnabled': serializer.toJson<bool>(alarmEnabled),
       'allDayAlarmMinutes': serializer.toJson<int>(allDayAlarmMinutes),
     };
@@ -944,7 +912,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     String? deviceId,
     String? syncStatus,
     bool? showDday,
-    bool? sensitive,
     bool? alarmEnabled,
     int? allDayAlarmMinutes,
   }) => EventRecord(
@@ -980,7 +947,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     deviceId: deviceId ?? this.deviceId,
     syncStatus: syncStatus ?? this.syncStatus,
     showDday: showDday ?? this.showDday,
-    sensitive: sensitive ?? this.sensitive,
     alarmEnabled: alarmEnabled ?? this.alarmEnabled,
     allDayAlarmMinutes: allDayAlarmMinutes ?? this.allDayAlarmMinutes,
   );
@@ -1028,7 +994,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           ? data.syncStatus.value
           : this.syncStatus,
       showDday: data.showDday.present ? data.showDday.value : this.showDday,
-      sensitive: data.sensitive.present ? data.sensitive.value : this.sensitive,
       alarmEnabled: data.alarmEnabled.present
           ? data.alarmEnabled.value
           : this.alarmEnabled,
@@ -1065,7 +1030,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           ..write('deviceId: $deviceId, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('showDday: $showDday, ')
-          ..write('sensitive: $sensitive, ')
           ..write('alarmEnabled: $alarmEnabled, ')
           ..write('allDayAlarmMinutes: $allDayAlarmMinutes')
           ..write(')'))
@@ -1098,7 +1062,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
     deviceId,
     syncStatus,
     showDday,
-    sensitive,
     alarmEnabled,
     allDayAlarmMinutes,
   ]);
@@ -1130,7 +1093,6 @@ class EventRecord extends DataClass implements Insertable<EventRecord> {
           other.deviceId == this.deviceId &&
           other.syncStatus == this.syncStatus &&
           other.showDday == this.showDday &&
-          other.sensitive == this.sensitive &&
           other.alarmEnabled == this.alarmEnabled &&
           other.allDayAlarmMinutes == this.allDayAlarmMinutes);
 }
@@ -1160,7 +1122,6 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
   final Value<String> deviceId;
   final Value<String> syncStatus;
   final Value<bool> showDday;
-  final Value<bool> sensitive;
   final Value<bool> alarmEnabled;
   final Value<int> allDayAlarmMinutes;
   final Value<int> rowid;
@@ -1189,7 +1150,6 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     this.deviceId = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.showDday = const Value.absent(),
-    this.sensitive = const Value.absent(),
     this.alarmEnabled = const Value.absent(),
     this.allDayAlarmMinutes = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1219,7 +1179,6 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     this.deviceId = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.showDday = const Value.absent(),
-    this.sensitive = const Value.absent(),
     this.alarmEnabled = const Value.absent(),
     this.allDayAlarmMinutes = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1255,7 +1214,6 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Expression<String>? deviceId,
     Expression<String>? syncStatus,
     Expression<bool>? showDday,
-    Expression<bool>? sensitive,
     Expression<bool>? alarmEnabled,
     Expression<int>? allDayAlarmMinutes,
     Expression<int>? rowid,
@@ -1289,7 +1247,6 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       if (deviceId != null) 'device_id': deviceId,
       if (syncStatus != null) 'sync_status': syncStatus,
       if (showDday != null) 'show_dday': showDday,
-      if (sensitive != null) 'sensitive': sensitive,
       if (alarmEnabled != null) 'alarm_enabled': alarmEnabled,
       if (allDayAlarmMinutes != null)
         'all_day_alarm_minutes': allDayAlarmMinutes,
@@ -1322,7 +1279,6 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     Value<String>? deviceId,
     Value<String>? syncStatus,
     Value<bool>? showDday,
-    Value<bool>? sensitive,
     Value<bool>? alarmEnabled,
     Value<int>? allDayAlarmMinutes,
     Value<int>? rowid,
@@ -1355,7 +1311,6 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
       deviceId: deviceId ?? this.deviceId,
       syncStatus: syncStatus ?? this.syncStatus,
       showDday: showDday ?? this.showDday,
-      sensitive: sensitive ?? this.sensitive,
       alarmEnabled: alarmEnabled ?? this.alarmEnabled,
       allDayAlarmMinutes: allDayAlarmMinutes ?? this.allDayAlarmMinutes,
       rowid: rowid ?? this.rowid,
@@ -1443,9 +1398,6 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
     if (showDday.present) {
       map['show_dday'] = Variable<bool>(showDday.value);
     }
-    if (sensitive.present) {
-      map['sensitive'] = Variable<bool>(sensitive.value);
-    }
     if (alarmEnabled.present) {
       map['alarm_enabled'] = Variable<bool>(alarmEnabled.value);
     }
@@ -1485,7 +1437,6 @@ class EventRecordsCompanion extends UpdateCompanion<EventRecord> {
           ..write('deviceId: $deviceId, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('showDday: $showDday, ')
-          ..write('sensitive: $sensitive, ')
           ..write('alarmEnabled: $alarmEnabled, ')
           ..write('allDayAlarmMinutes: $allDayAlarmMinutes, ')
           ..write('rowid: $rowid')
@@ -1531,7 +1482,6 @@ typedef $$EventRecordsTableCreateCompanionBuilder =
       Value<String> deviceId,
       Value<String> syncStatus,
       Value<bool> showDday,
-      Value<bool> sensitive,
       Value<bool> alarmEnabled,
       Value<int> allDayAlarmMinutes,
       Value<int> rowid,
@@ -1562,7 +1512,6 @@ typedef $$EventRecordsTableUpdateCompanionBuilder =
       Value<String> deviceId,
       Value<String> syncStatus,
       Value<bool> showDday,
-      Value<bool> sensitive,
       Value<bool> alarmEnabled,
       Value<int> allDayAlarmMinutes,
       Value<int> rowid,
@@ -1694,11 +1643,6 @@ class $$EventRecordsTableFilterComposer
 
   ColumnFilters<bool> get showDday => $composableBuilder(
     column: $table.showDday,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get sensitive => $composableBuilder(
-    column: $table.sensitive,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1842,11 +1786,6 @@ class $$EventRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<bool> get sensitive => $composableBuilder(
-    column: $table.sensitive,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<bool> get alarmEnabled => $composableBuilder(
     column: $table.alarmEnabled,
     builder: (column) => ColumnOrderings(column),
@@ -1957,9 +1896,6 @@ class $$EventRecordsTableAnnotationComposer
   GeneratedColumn<bool> get showDday =>
       $composableBuilder(column: $table.showDday, builder: (column) => column);
 
-  GeneratedColumn<bool> get sensitive =>
-      $composableBuilder(column: $table.sensitive, builder: (column) => column);
-
   GeneratedColumn<bool> get alarmEnabled => $composableBuilder(
     column: $table.alarmEnabled,
     builder: (column) => column,
@@ -2026,7 +1962,6 @@ class $$EventRecordsTableTableManager
                 Value<String> deviceId = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<bool> showDday = const Value.absent(),
-                Value<bool> sensitive = const Value.absent(),
                 Value<bool> alarmEnabled = const Value.absent(),
                 Value<int> allDayAlarmMinutes = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2055,7 +1990,6 @@ class $$EventRecordsTableTableManager
                 deviceId: deviceId,
                 syncStatus: syncStatus,
                 showDday: showDday,
-                sensitive: sensitive,
                 alarmEnabled: alarmEnabled,
                 allDayAlarmMinutes: allDayAlarmMinutes,
                 rowid: rowid,
@@ -2086,7 +2020,6 @@ class $$EventRecordsTableTableManager
                 Value<String> deviceId = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<bool> showDday = const Value.absent(),
-                Value<bool> sensitive = const Value.absent(),
                 Value<bool> alarmEnabled = const Value.absent(),
                 Value<int> allDayAlarmMinutes = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2115,7 +2048,6 @@ class $$EventRecordsTableTableManager
                 deviceId: deviceId,
                 syncStatus: syncStatus,
                 showDday: showDday,
-                sensitive: sensitive,
                 alarmEnabled: alarmEnabled,
                 allDayAlarmMinutes: allDayAlarmMinutes,
                 rowid: rowid,

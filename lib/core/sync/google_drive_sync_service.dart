@@ -263,6 +263,25 @@ class GoogleDriveSyncService implements SyncService {
     }
   }
 
+  Future<void> stop() async {
+    _changeSyncTimer?.cancel();
+    _automaticRetryTimer?.cancel();
+    _changeSyncTimer = null;
+    _automaticRetryTimer = null;
+    _automaticRetryKind = null;
+    _automaticRetryIndex = 0;
+    _queuedEventIds.clear();
+    _pendingSyncRequests.clear();
+    final inFlight = _syncInFlight;
+    if (inFlight != null) {
+      await inFlight.catchError((_) {});
+    }
+    await _accountSubscription?.cancel();
+    _accountSubscription = null;
+    _started = false;
+    statusNotifier.value = const GoogleDriveSyncStatus();
+  }
+
   void dispose() {
     _changeSyncTimer?.cancel();
     _automaticRetryTimer?.cancel();
@@ -389,11 +408,14 @@ class GoogleDriveSyncService implements SyncService {
 
       switch (request.kind) {
         case _SyncRequestKind.backupOnly:
-          await _backup(
+          final conflicts = await _backup(
             headers,
             eventIds: request.eventIds,
             includeSettings: request.includeSettings,
           );
+          if (conflicts > 0) {
+            completionMessage = '일부 백업 보류 · 먼저 복원 필요';
+          }
           break;
         case _SyncRequestKind.restoreOnly:
           await _restore(headers);
@@ -532,17 +554,19 @@ class GoogleDriveSyncService implements SyncService {
     return text;
   }
 
-  Future<void> _backup(
+  Future<int> _backup(
     Map<String, String> authHeaders, {
     Set<String>? eventIds,
     required bool includeSettings,
   }) async {
+    var conflicts = 0;
     if (eventIds != null && eventIds.isNotEmpty) {
-      await _backupQueuedEvents(authHeaders, eventIds);
+      conflicts = await _backupQueuedEvents(authHeaders, eventIds);
     }
     if (includeSettings) {
       await _backupSettings(authHeaders, _settingsRepository.load());
     }
+    return conflicts;
   }
 
   Future<void> _restore(Map<String, String> authHeaders) async {
@@ -782,6 +806,7 @@ class GoogleDriveSyncService implements SyncService {
         onboardingCompleted: localSettings.onboardingCompleted,
         appLockEnabled: localSettings.appLockEnabled,
         appLockBiometricsEnabled: localSettings.appLockBiometricsEnabled,
+        appLockMethod: localSettings.appLockMethod,
         appTextSize: remoteSettings.hasAppTextSize
             ? remoteSettings.settings.appTextSize
             : localSettings.appTextSize,
@@ -833,37 +858,47 @@ class GoogleDriveSyncService implements SyncService {
     }
   }
 
-  Future<void> _backupQueuedEvents(
+  Future<int> _backupQueuedEvents(
     Map<String, String> authHeaders,
     Set<String> eventIds,
   ) async {
     final remoteFileById = await _listEventFilesForIds(authHeaders, eventIds);
     final localDeviceId = await _settingsRepository.deviceId();
-    await _mapInBatches(eventIds, (eventId) async {
-      final local = await _eventRepository.findById(eventId);
-      if (local == null) {
-        return;
-      }
-
-      final remoteFile = remoteFileById[eventId];
-      if (remoteFile != null) {
-        final remote = await _downloadEventFile(authHeaders, remoteFile.id);
-        if (remote != null &&
-            remote.sourceDeviceId != localDeviceId &&
-            _remoteEventWinsUploadConflict(
-              local: local,
-              remote: remote.event,
-              localDeviceId: localDeviceId,
-              remoteDeviceId: remote.sourceDeviceId,
-            )) {
-          await _replaceWithRemoteEvent(remote.event);
-          return;
+    final List<int> conflictCounts = await _mapInBatches<String, int>(
+      eventIds,
+      (eventId) async {
+        final local = await _eventRepository.findById(eventId);
+        if (local == null) {
+          return 0;
         }
-      }
 
-      await _uploadEventFile(authHeaders, local, remoteFile);
-      await _saveSyncedEvent(local);
-    });
+        final remoteFile = remoteFileById[eventId];
+        if (remoteFile != null) {
+          final remote = await _downloadEventFile(authHeaders, remoteFile.id);
+          if (remote != null &&
+              remote.sourceDeviceId != localDeviceId &&
+              _remoteEventWinsUploadConflict(
+                local: local,
+                remote: remote.event,
+                localDeviceId: localDeviceId,
+                remoteDeviceId: remote.sourceDeviceId,
+              )) {
+            // A backup operation must never mutate local data. Keep the local
+            // revision pending so an explicit restore can resolve the conflict.
+            return 1;
+          }
+        }
+
+        await _uploadEventFile(authHeaders, local, remoteFile);
+        await _saveSyncedEvent(local);
+        return 0;
+      },
+    );
+    var conflictCount = 0;
+    for (final count in conflictCounts) {
+      conflictCount += count;
+    }
+    return conflictCount;
   }
 
   bool _remoteEventWinsUploadConflict({
@@ -882,27 +917,6 @@ class GoogleDriveSyncService implements SyncService {
       return false;
     }
     return (remoteDeviceId ?? '').compareTo(localDeviceId) > 0;
-  }
-
-  Future<void> _replaceWithRemoteEvent(CalendarEvent remote) async {
-    final existing = await _eventRepository.findById(remote.id);
-    final restored = remote.copyWith(syncStatus: 'synced');
-    if (existing != null && _sameEventSnapshot(existing, restored)) {
-      await _eventRepository.markSynced(existing.id);
-      return;
-    }
-    await _eventRepository.save(restored);
-    await _notificationService.cancelEventReminder(
-      remote.id,
-      reminderMinutesBeforeList: _combinedReminderMinutes(existing, remote),
-    );
-    if (remote.deletedAt == null) {
-      await _notificationService.scheduleEventReminder(restored);
-    }
-    await _alarmService.cancelEventAlarm(remote.id);
-    if (remote.deletedAt == null) {
-      await _alarmService.scheduleEventAlarm(restored);
-    }
   }
 
   Future<List<T>> _mapInBatches<S, T>(
@@ -1330,7 +1344,6 @@ class GoogleDriveSyncService implements SyncService {
       'deletedAt': normalized.deletedAt?.toUtc().toIso8601String(),
       'deviceId': normalized.deviceId,
       'showDday': normalized.showDday,
-      'sensitive': normalized.sensitive,
       'alarmEnabled': normalized.alarmEnabled,
       'allDayAlarmMinutes': normalized.allDayAlarmMinutes,
     };
@@ -1385,7 +1398,6 @@ class GoogleDriveSyncService implements SyncService {
       deviceId: json['deviceId'] as String? ?? '',
       syncStatus: 'synced',
       showDday: json['showDday'] as bool? ?? false,
-      sensitive: json['sensitive'] as bool? ?? false,
       alarmEnabled: json['alarmEnabled'] as bool? ?? false,
       allDayAlarmMinutes: json['allDayAlarmMinutes'] as int? ?? 9 * 60,
     ).normalizeAllDayBounds();
@@ -1471,6 +1483,7 @@ class GoogleDriveSyncService implements SyncService {
       'morningBriefingEnabled': settings.morningBriefingEnabled,
       'weekStartsOnMonday': settings.weekStartsOnMonday,
       'showLunarDates': settings.showLunarDates,
+      'showAdjacentMonthDates': settings.showAdjacentMonthDates,
       'onboardingCompleted': settings.onboardingCompleted,
       'aiEnabled': settings.aiEnabled,
       'aiOnlyForComplexInput': settings.aiOnlyForComplexInput,
@@ -1484,9 +1497,9 @@ class GoogleDriveSyncService implements SyncService {
       'hiddenCategoryIds': settings.hiddenCategoryIds,
       'calendarShowHolidays': settings.calendarShowHolidays,
       'calendarDdayOnly': settings.calendarDdayOnly,
-      'hideSensitiveEvents': settings.hideSensitiveEvents,
-      'hideSensitiveNotifications': settings.hideSensitiveNotifications,
       'use24HourTime': settings.use24HourTime,
+      'themeMode': settings.themeMode.name,
+      'monthNavigationMode': settings.monthNavigationMode.name,
     };
   }
 
@@ -1502,6 +1515,10 @@ class GoogleDriveSyncService implements SyncService {
       morningBriefingEnabled: json['morningBriefingEnabled'] as bool? ?? true,
       weekStartsOnMonday: json['weekStartsOnMonday'] as bool? ?? false,
       showLunarDates: json['showLunarDates'] as bool? ?? true,
+      showAdjacentMonthDates: json['showAdjacentMonthDates'] as bool? ?? true,
+      monthNavigationMode: MonthNavigationMode.fromName(
+        json['monthNavigationMode'] as String?,
+      ),
       onboardingCompleted: json['onboardingCompleted'] as bool? ?? false,
       aiEnabled: json['aiEnabled'] as bool? ?? false,
       aiOnlyForComplexInput: json['aiOnlyForComplexInput'] as bool? ?? true,
@@ -1523,10 +1540,8 @@ class GoogleDriveSyncService implements SyncService {
       hiddenCategoryIds: _stringListValue(json['hiddenCategoryIds']),
       calendarShowHolidays: json['calendarShowHolidays'] as bool? ?? true,
       calendarDdayOnly: json['calendarDdayOnly'] as bool? ?? false,
-      hideSensitiveEvents: json['hideSensitiveEvents'] as bool? ?? false,
-      hideSensitiveNotifications:
-          json['hideSensitiveNotifications'] as bool? ?? false,
       use24HourTime: json['use24HourTime'] as bool? ?? true,
+      themeMode: AppThemeMode.fromName(json['themeMode'] as String?),
     );
   }
 

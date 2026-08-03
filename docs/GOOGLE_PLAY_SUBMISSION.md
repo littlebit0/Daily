@@ -1,12 +1,15 @@
 # Daily Google Play 제출 준비
 
+현재 공유 소스 기준은 `3.0.1`이다. Android 실기기 및 최종 AAB 검증은 아직
+완료되지 않았으므로, 아래 항목은 제출 전 점검 문서로 사용한다.
+
 ## 앱 정보
 
 - 앱 이름: `Daily`
 - 패키지명: `com.littlebit0.dailycalendar`
 - 카테고리: 생산성
-- 버전: `2.0.5`
-- versionCode: `9`
+- 버전: `3.0.1`
+- versionCode: `301`
 - 제출 형식: Android App Bundle
 
 ## 스토어 문구 초안
@@ -24,7 +27,7 @@ Daily는 개인 일정을 빠르게 기록하고 여러 기기에서 이어서 �
 - 일정 알림과 아침 브리핑
 - 반복 일정과 D-day
 - 음력과 대한민국 공휴일 표시
-- 민감 일정 숨김과 앱 잠금
+- PIN, 생체 인증, 시스템 인증을 지원하는 앱 잠금
 - 로그인 없이 사용하는 로컬 모드
 - 선택적 Google Drive AppData 백업 및 기기 간 동기화
 
@@ -68,9 +71,9 @@ AppData 영역에 Daily 전용 데이터만 저장합니다. 일반 Google Drive
 
 ## 제출 파일 검증
 
-- AAB 파일명: `daily-android-2.0.5.aab`
+- AAB 파일명: `daily-android-3.0.1.aab`
 - applicationId: `com.littlebit0.dailycalendar`
-- versionName: `2.0.5`
-- versionCode: `9`
+- versionName: `3.0.1`
+- versionCode: `301`
 - upload keystore 서명 확인
 - SHA-256 체크섬 기록

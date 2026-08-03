@@ -113,9 +113,7 @@ class LocalNotificationService implements NotificationService {
 
     final settings = _settingsRepository.load();
     final reminderMinutesList = event.reminderMinutesBeforeList;
-    final title = settings.hideSensitiveNotifications && event.sensitive
-        ? '비공개 일정'
-        : event.title;
+    final title = event.title;
     final base = _baseReminderTime(event, settings);
     var deliveredImmediateReminder = false;
     for (final reminderMinutes in reminderMinutesList) {
@@ -276,9 +274,7 @@ class LocalNotificationService implements NotificationService {
   }
 
   String _briefingEventLabel(CalendarEvent event, AppSettings settings) {
-    final title = settings.hideSensitiveNotifications && event.sensitive
-        ? '비공개 일정'
-        : event.title;
+    final title = event.title;
     if (event.allDay) {
       return '종일 $title';
     }

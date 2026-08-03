@@ -36,7 +36,6 @@ class EventRecords extends Table {
   TextColumn get deviceId => text().withDefault(const Constant(''))();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();
   BoolColumn get showDday => boolean().withDefault(const Constant(false))();
-  BoolColumn get sensitive => boolean().withDefault(const Constant(false))();
   BoolColumn get alarmEnabled => boolean().withDefault(const Constant(false))();
   IntColumn get allDayAlarmMinutes =>
       integer().withDefault(const Constant(9 * 60))();
@@ -52,7 +51,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration {
@@ -67,7 +66,6 @@ class AppDatabase extends _$AppDatabase {
         if (from < 3) {
           await migrator.addColumn(eventRecords, eventRecords.url);
           await migrator.addColumn(eventRecords, eventRecords.weather);
-          await migrator.addColumn(eventRecords, eventRecords.sensitive);
           await migrator.addColumn(
             eventRecords,
             eventRecords.recurrenceExcludedDates,
@@ -92,6 +90,9 @@ class AppDatabase extends _$AppDatabase {
               eventRecords.allDayAlarmMinutes,
             );
           }
+        }
+        if (from < 6) {
+          await migrator.alterTable(TableMigration(eventRecords));
         }
       },
     );

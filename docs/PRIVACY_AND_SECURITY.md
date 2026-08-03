@@ -1,5 +1,7 @@
 # Privacy, Security, and Consent Notes
 
+Current release baseline: `3.0.1`.
+
 This document is the pre-release checklist for Daily's current data handling.
 It is not legal advice; it is the engineering baseline that should be reviewed
 before public distribution.
@@ -8,15 +10,15 @@ before public distribution.
 
 - Calendar events: title, dates, times, all-day flag, recurrence, category,
   memo, location, URL, optional weather note, reminders, D-day display flag,
-  sensitive-event flag, sync metadata, and soft-delete timestamps.
+  sync metadata, and soft-delete timestamps.
 - App settings: reminder defaults, week start day, lunar-date display, category
   definitions, D-day reminder offsets, onboarding completion, default calendar
-  view, calendar filters, sensitive-event display preferences, and AI feature
-  toggles.
+  view, calendar filters, calendar display preferences, and AI feature toggles.
 - App lock PIN, when enabled, is stored locally through platform secure storage
   and is not included in Google Drive sync files.
-- Google account email is only kept in memory by the sign-in session; it is not
-  stored in the local event database.
+- Linked Apple and Google account metadata is stored locally in secure app
+  preferences to restore the user's chosen sign-in state. Daily does not yet
+  operate a backend account-linking service.
 - Gemini API key, if used later, is stored through platform secure storage.
   The AI UI is currently disabled and marked as in development.
 
@@ -65,7 +67,8 @@ Users must be able to:
 ## Security Hardening Still Needed
 
 - Add optional encryption for Google Drive AppData sync files.
-- Add optional biometric unlock where each platform supports it cleanly.
+- Continue release-device testing of PIN, biometric, and system authentication
+  unlock paths on iOS and macOS.
 - Re-test with a fresh Google account after publishing the OAuth app to
   production.
 

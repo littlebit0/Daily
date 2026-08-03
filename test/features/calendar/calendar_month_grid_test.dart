@@ -39,7 +39,6 @@ void main() {
               events: [event],
               weekStartsOnMonday: true,
               showLunarDates: true,
-              hideSensitiveEvents: false,
               onDateSelected: (_) {},
             ),
           ),
@@ -68,7 +67,7 @@ void main() {
     );
     expect(
       tester.getTopLeft(flag).dy - tester.getBottomLeft(todayNumber).dy,
-      lessThan(8),
+      inInclusiveRange(1, 8),
     );
   });
 
@@ -100,7 +99,6 @@ void main() {
               events: [event],
               weekStartsOnMonday: true,
               showLunarDates: true,
-              hideSensitiveEvents: false,
               onDateSelected: (_) {},
             ),
           ),
@@ -112,6 +110,82 @@ void main() {
     expect(flag, findsOneWidget);
     expect(find.text('부산 여행'), findsOneWidget);
     expect(tester.getSize(flag).width, greaterThan(300));
+  });
+
+  testWidgets('hides adjacent-month dates and clips their event spans', (
+    tester,
+  ) async {
+    DateTime? selectedDate;
+    (DateTime, DateTime)? selectedRange;
+    final event = CalendarEvent(
+      id: 'month-boundary',
+      title: '월 경계 일정',
+      startAt: DateTime(2026, 4, 29),
+      endAt: DateTime(2026, 5, 3),
+      allDay: true,
+      category: EventCategory.basic,
+      colorValue: EventCategory.basic.colorValue,
+      createdAt: DateTime(2026, 4, 1),
+      updatedAt: DateTime(2026, 4, 1),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            height: 420,
+            child: CalendarMonthGrid(
+              month: DateTime(2026, 5),
+              selectedDate: DateTime(2026, 5, 1),
+              events: [event],
+              weekStartsOnMonday: true,
+              showLunarDates: true,
+              showAdjacentMonthDates: false,
+              onDateSelected: (date) => selectedDate = date,
+              onDateRangeSelected: (start, end) async {
+                selectedRange = (start, end);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('day-cell-2026-4-27')), findsOneWidget);
+    expect(find.byKey(const ValueKey('day-number-2026-4-27')), findsNothing);
+    expect(find.byKey(const ValueKey('day-number-2026-5-1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('day-cell-2026-4-27')));
+    await tester.pump();
+    expect(selectedDate, isNull);
+
+    final blankCell = find.byKey(const ValueKey('day-cell-2026-4-30'));
+    final blankCenter = tester.getCenter(blankCell);
+    final blankClick = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    await blankClick.down(blankCenter);
+    await blankClick.moveBy(const Offset(8, 3));
+    await blankClick.up();
+    await tester.pump();
+    expect(selectedRange, isNull);
+
+    final rangeDrag = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await rangeDrag.down(
+      tester.getCenter(find.byKey(const ValueKey('day-cell-2026-5-1'))),
+    );
+    await rangeDrag.moveTo(blankCenter);
+    await rangeDrag.up();
+    await tester.pump();
+    expect(selectedRange?.$1, DateTime(2026, 4, 30));
+    expect(selectedRange?.$2, DateTime(2026, 5, 1));
+
+    final flag = find.byKey(
+      const ValueKey('event-span-month-boundary-2026-4-27'),
+    );
+    expect(flag, findsOneWidget);
+    expect(tester.getSize(flag).width, inInclusiveRange(170, 190));
   });
 
   testWidgets('uses fixed iPhone-width event capacity in month cells', (
@@ -163,7 +237,6 @@ void main() {
               events: const [],
               weekStartsOnMonday: true,
               showLunarDates: false,
-              hideSensitiveEvents: false,
               onDateSelected: (_) {},
             ),
           ),
@@ -173,6 +246,44 @@ void main() {
 
     expect(_dayNumberKey(DateTime(2026, 5, 31)), findsOneWidget);
     expect(_dayNumberKey(DateTime(2026, 6, 1)), findsNothing);
+  });
+
+  testWidgets('rounds each visible cross-month range segment', (tester) async {
+    Future<BoxDecoration> pumpRangeMonth(DateTime month) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 700,
+              height: 420,
+              child: CalendarMonthGrid(
+                month: month,
+                selectedDate: month,
+                events: const [],
+                weekStartsOnMonday: true,
+                showLunarDates: false,
+                showAdjacentMonthDates: false,
+                continuous: true,
+                externalRangeStart: DateTime(2026, 8, 31),
+                externalRangeEnd: DateTime(2026, 9, 2),
+                enableRangeGestures: false,
+                onDateSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final highlight = find.byKey(const ValueKey('selected-range-2026-8-31'));
+      expect(highlight, findsOneWidget);
+      return tester.widget<DecoratedBox>(highlight).decoration as BoxDecoration;
+    }
+
+    final augustDecoration = await pumpRangeMonth(DateTime(2026, 8));
+    expect(augustDecoration.borderRadius, BorderRadius.circular(8));
+
+    final septemberDecoration = await pumpRangeMonth(DateTime(2026, 9));
+    expect(septemberDecoration.borderRadius, BorderRadius.circular(8));
   });
 
   testWidgets('selects a date range with a primary mouse drag', (tester) async {
@@ -206,7 +317,6 @@ void main() {
               events: [holiday],
               weekStartsOnMonday: true,
               showLunarDates: false,
-              hideSensitiveEvents: false,
               onDateSelected: (_) {},
               onDateRangeSelected: (start, end) async {
                 selectedStart = start;
@@ -242,50 +352,6 @@ void main() {
 
     expect(selectedStart, DateTime(2026, 5, 4));
     expect(selectedEnd, DateTime(2026, 5, 8));
-  });
-
-  testWidgets('locked sensitive month event hides title, time, and D-day', (
-    tester,
-  ) async {
-    final event = CalendarEvent(
-      id: 'private-event',
-      title: '비밀 약속',
-      startAt: DateTime(2026, 5, 4, 10),
-      endAt: DateTime(2026, 5, 4, 11),
-      allDay: false,
-      category: EventCategory.basic,
-      colorValue: EventCategory.basic.colorValue,
-      createdAt: DateTime(2026, 5, 1),
-      updatedAt: DateTime(2026, 5, 1),
-      showDday: true,
-      sensitive: true,
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 700,
-            height: 420,
-            child: CalendarMonthGrid(
-              month: DateTime(2026, 5),
-              selectedDate: DateTime(2026, 5, 4),
-              events: [event],
-              weekStartsOnMonday: true,
-              showLunarDates: false,
-              hideSensitiveEvents: true,
-              onDateSelected: (_) {},
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('비공개 일정'), findsOneWidget);
-    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
-    expect(find.textContaining('비밀 약속'), findsNothing);
-    expect(find.textContaining('10:00'), findsNothing);
-    expect(find.textContaining('D-'), findsNothing);
   });
 
   test('defines the requested full-app text scale choices', () {
@@ -349,7 +415,6 @@ Future<void> _expectVisibleEventFlags(
               events: events,
               weekStartsOnMonday: true,
               showLunarDates: true,
-              hideSensitiveEvents: false,
               onDateSelected: (_) {},
             ),
           ),

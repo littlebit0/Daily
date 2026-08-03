@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../events/domain/calendar_event.dart';
-import '../../events/presentation/sensitive_event_access.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
@@ -25,7 +24,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final hideSensitive = !ref.watch(sensitiveEventsUnlockedProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('검색')),
       body: Padding(
@@ -70,7 +68,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   return ListView.separated(
                     itemBuilder: (context, index) => _SearchResultTile(
                       event: events[index],
-                      hideSensitive: hideSensitive,
                       onTap: () {
                         final event = events[index];
                         ref.read(visibleMonthProvider.notifier).state =
@@ -108,19 +105,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 }
 
 class _SearchResultTile extends StatelessWidget {
-  const _SearchResultTile({
-    required this.event,
-    required this.hideSensitive,
-    required this.onTap,
-  });
+  const _SearchResultTile({required this.event, required this.onTap});
 
   final CalendarEvent event;
-  final bool hideSensitive;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final hidden = hideSensitive && event.sensitive;
     final date = DateFormat('yyyy년 M월 d일').format(event.startAt);
     final time = event.allDay
         ? '종일'
@@ -129,19 +120,14 @@ class _SearchResultTile extends StatelessWidget {
       onTap: onTap,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xffedf0f5)),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       leading: CircleAvatar(
-        backgroundColor: hidden
-            ? const Color(0xffeef0f3)
-            : Color(event.colorValue).withValues(alpha: 0.12),
-        child: Icon(
-          hidden ? Icons.lock_outline : Icons.flag,
-          color: hidden ? const Color(0xff64748b) : Color(event.colorValue),
-        ),
+        backgroundColor: Color(event.colorValue).withValues(alpha: 0.12),
+        child: Icon(Icons.flag, color: Color(event.colorValue)),
       ),
-      title: Text(hidden ? '비공개 일정' : event.title),
-      subtitle: Text(hidden ? date : '$date  $time'),
+      title: Text(event.title),
+      subtitle: Text('$date  $time'),
     );
   }
 }

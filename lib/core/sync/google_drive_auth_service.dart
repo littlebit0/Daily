@@ -361,7 +361,12 @@ class GoogleDriveAuthService {
     await initialize();
     if (_usesDesktopOAuth) {
       try {
-        return await _signInWithDesktopOAuth();
+        if (forceAccountSelection) {
+          await _clearDesktopSession();
+        }
+        return await _signInWithDesktopOAuth(
+          forceAccountSelection: forceAccountSelection,
+        );
       } on PlatformException catch (error) {
         _setDesktopAccount(null);
         throw GoogleDriveAuthException(_platformAuthMessage(error));
@@ -659,6 +664,7 @@ class GoogleDriveAuthService {
 
   Future<GoogleDriveAccount?> _signInWithDesktopOAuth({
     List<String> requestedScopes = _desktopScopes,
+    bool forceAccountSelection = false,
   }) async {
     if (_configuredOAuthClientId.isEmpty) {
       throw UnsupportedError(
@@ -668,6 +674,7 @@ class GoogleDriveAuthService {
 
     final codeResponse = await _requestDesktopAuthorizationCode(
       requestedScopes,
+      forceAccountSelection: forceAccountSelection,
     );
     final tokens = await _exchangeAuthorizationCode(codeResponse);
     final account = await _fetchDesktopAccount(tokens.accessToken);
@@ -708,8 +715,9 @@ class GoogleDriveAuthService {
   }
 
   Future<_DesktopCodeResponse> _requestDesktopAuthorizationCode(
-    List<String> requestedScopes,
-  ) async {
+    List<String> requestedScopes, {
+    bool forceAccountSelection = false,
+  }) async {
     if (Platform.isIOS) {
       return _requestIosAuthorizationCode(requestedScopes);
     }
@@ -737,7 +745,7 @@ class GoogleDriveAuthService {
       'scope': requestedScopes.join(' '),
       'access_type': 'offline',
       'include_granted_scopes': 'true',
-      'prompt': 'consent',
+      'prompt': forceAccountSelection ? 'select_account consent' : 'consent',
       'code_challenge': challenge,
       'code_challenge_method': 'S256',
       'state': state,

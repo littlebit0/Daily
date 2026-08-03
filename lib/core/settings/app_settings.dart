@@ -1,9 +1,43 @@
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_category.dart';
 
+enum AppThemeMode {
+  system('자동'),
+  light('화이트'),
+  dark('다크');
+
+  const AppThemeMode(this.label);
+
+  final String label;
+
+  static AppThemeMode fromName(String? name) {
+    return AppThemeMode.values.firstWhere(
+      (mode) => mode.name == name,
+      orElse: () => AppThemeMode.system,
+    );
+  }
+}
+
+enum MonthNavigationMode {
+  horizontal('좌우 슬라이드'),
+  vertical('상하 스크롤');
+
+  const MonthNavigationMode(this.label);
+
+  final String label;
+
+  static MonthNavigationMode fromName(String? name) {
+    return MonthNavigationMode.values.firstWhere(
+      (mode) => mode.name == name,
+      orElse: () => MonthNavigationMode.horizontal,
+    );
+  }
+}
+
 enum AppTextSize {
   basic('기본', 0.8),
-  large('크게', 1.0);
+  large('크게', 1.0),
+  extraLarge('더 크게', 1.15);
 
   const AppTextSize(this.label, this.scale);
 
@@ -35,6 +69,27 @@ enum CalendarViewMode {
   }
 }
 
+enum AppLockMethod {
+  noPin('PIN 없이 잠금'),
+  appPin('PIN 잠금'),
+  system('시스템 잠금 비밀번호');
+
+  const AppLockMethod(this.label);
+
+  final String label;
+
+  static AppLockMethod fromName(
+    String? name, {
+    bool legacyBiometricsEnabled = false,
+  }) {
+    return AppLockMethod.values.firstWhere(
+      (method) => method.name == name,
+      orElse: () =>
+          legacyBiometricsEnabled ? AppLockMethod.system : AppLockMethod.appPin,
+    );
+  }
+}
+
 class AppSettings {
   AppSettings({
     int? defaultReminderMinutes = 60,
@@ -46,6 +101,7 @@ class AppSettings {
     this.morningBriefingEnabled = true,
     this.weekStartsOnMonday = false,
     this.showLunarDates = true,
+    this.showAdjacentMonthDates = true,
     this.onboardingCompleted = false,
     this.aiEnabled = false,
     this.aiOnlyForComplexInput = true,
@@ -57,11 +113,12 @@ class AppSettings {
     this.hiddenCategoryIds = const <String>[],
     this.calendarShowHolidays = true,
     this.calendarDdayOnly = false,
-    this.hideSensitiveEvents = false,
-    this.hideSensitiveNotifications = false,
     this.appLockEnabled = false,
     this.appLockBiometricsEnabled = false,
+    this.appLockMethod = AppLockMethod.noPin,
     this.use24HourTime = true,
+    this.themeMode = AppThemeMode.system,
+    this.monthNavigationMode = MonthNavigationMode.horizontal,
   }) : defaultReminderMinutesList = normalizeReminderMinutes(
          defaultReminderMinutesList ??
              (defaultReminderMinutes == null
@@ -85,6 +142,7 @@ class AppSettings {
   final bool morningBriefingEnabled;
   final bool weekStartsOnMonday;
   final bool showLunarDates;
+  final bool showAdjacentMonthDates;
   final bool onboardingCompleted;
   final bool aiEnabled;
   final bool aiOnlyForComplexInput;
@@ -96,11 +154,12 @@ class AppSettings {
   final List<String> hiddenCategoryIds;
   final bool calendarShowHolidays;
   final bool calendarDdayOnly;
-  final bool hideSensitiveEvents;
-  final bool hideSensitiveNotifications;
   final bool appLockEnabled;
   final bool appLockBiometricsEnabled;
+  final AppLockMethod appLockMethod;
   final bool use24HourTime;
+  final AppThemeMode themeMode;
+  final MonthNavigationMode monthNavigationMode;
 
   AppSettings copyWith({
     int? defaultReminderMinutes,
@@ -112,6 +171,7 @@ class AppSettings {
     bool? morningBriefingEnabled,
     bool? weekStartsOnMonday,
     bool? showLunarDates,
+    bool? showAdjacentMonthDates,
     bool? onboardingCompleted,
     bool? aiEnabled,
     bool? aiOnlyForComplexInput,
@@ -123,11 +183,12 @@ class AppSettings {
     List<String>? hiddenCategoryIds,
     bool? calendarShowHolidays,
     bool? calendarDdayOnly,
-    bool? hideSensitiveEvents,
-    bool? hideSensitiveNotifications,
     bool? appLockEnabled,
     bool? appLockBiometricsEnabled,
+    AppLockMethod? appLockMethod,
     bool? use24HourTime,
+    AppThemeMode? themeMode,
+    MonthNavigationMode? monthNavigationMode,
   }) {
     return AppSettings(
       defaultReminderMinutesList:
@@ -144,6 +205,8 @@ class AppSettings {
           morningBriefingEnabled ?? this.morningBriefingEnabled,
       weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
       showLunarDates: showLunarDates ?? this.showLunarDates,
+      showAdjacentMonthDates:
+          showAdjacentMonthDates ?? this.showAdjacentMonthDates,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       aiEnabled: aiEnabled ?? this.aiEnabled,
       aiOnlyForComplexInput:
@@ -156,13 +219,13 @@ class AppSettings {
       hiddenCategoryIds: hiddenCategoryIds ?? this.hiddenCategoryIds,
       calendarShowHolidays: calendarShowHolidays ?? this.calendarShowHolidays,
       calendarDdayOnly: calendarDdayOnly ?? this.calendarDdayOnly,
-      hideSensitiveEvents: hideSensitiveEvents ?? this.hideSensitiveEvents,
-      hideSensitiveNotifications:
-          hideSensitiveNotifications ?? this.hideSensitiveNotifications,
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
       appLockBiometricsEnabled:
           appLockBiometricsEnabled ?? this.appLockBiometricsEnabled,
+      appLockMethod: appLockMethod ?? this.appLockMethod,
       use24HourTime: use24HourTime ?? this.use24HourTime,
+      themeMode: themeMode ?? this.themeMode,
+      monthNavigationMode: monthNavigationMode ?? this.monthNavigationMode,
     );
   }
 }

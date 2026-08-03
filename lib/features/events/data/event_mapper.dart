@@ -45,7 +45,6 @@ extension EventRecordMapper on EventRecord {
       deviceId: deviceId,
       syncStatus: syncStatus,
       showDday: showDday,
-      sensitive: sensitive,
       alarmEnabled: alarmEnabled,
       allDayAlarmMinutes: allDayAlarmMinutes,
       holiday: mappedCategory.id == EventCategory.holiday.id,

@@ -6,7 +6,14 @@ import '../../../core/di/app_providers.dart';
 import '../../events/domain/event_draft.dart';
 
 class ChatInputBar extends ConsumerStatefulWidget {
-  const ChatInputBar({super.key});
+  const ChatInputBar({
+    super.key,
+    this.onClose,
+    this.includeBottomSafeArea = true,
+  });
+
+  final VoidCallback? onClose;
+  final bool includeBottomSafeArea;
 
   @override
   ConsumerState<ChatInputBar> createState() => _ChatInputBarState();
@@ -38,14 +45,27 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final canSubmit = _controller.text.trim().isNotEmpty && !_submitting;
     return SafeArea(
       top: false,
+      bottom: widget.includeBottomSafeArea,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xffedf0f5))),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
         ),
         child: Row(
           children: [
+            if (widget.onClose != null) ...[
+              IconButton(
+                tooltip: 'AI 입력 닫기',
+                onPressed: widget.onClose,
+                icon: const Icon(Icons.close),
+              ),
+              const SizedBox(width: 4),
+            ],
             Expanded(
               child: TextField(
                 controller: _controller,

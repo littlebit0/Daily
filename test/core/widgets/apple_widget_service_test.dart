@@ -5,61 +5,54 @@ import 'package:daily/features/events/domain/event_category.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test(
-    'builds month, today, and D-day widget data without sensitive titles',
-    () {
-      final now = DateTime(2026, 7, 28, 10);
-      final events = [
-        _event(id: 'meeting', title: '회의', startAt: DateTime(2026, 7, 28, 11)),
-        _event(
-          id: 'private',
-          title: '노출되면 안 되는 일정',
-          startAt: DateTime(2026, 7, 28, 13),
-          sensitive: true,
-        ),
-        _event(
-          id: 'dday',
-          title: '출시',
-          startAt: DateTime(2026, 8, 2),
-          showDday: true,
-        ),
-      ];
+  test('builds month, today, and D-day widget data', () {
+    final now = DateTime(2026, 7, 28, 10);
+    final events = [
+      _event(id: 'meeting', title: '회의', startAt: DateTime(2026, 7, 28, 11)),
+      _event(
+        id: 'private',
+        title: '노출되면 안 되는 일정',
+        startAt: DateTime(2026, 7, 28, 13),
+      ),
+      _event(
+        id: 'dday',
+        title: '출시',
+        startAt: DateTime(2026, 8, 2),
+        showDday: true,
+      ),
+    ];
 
-      final snapshot = AppleWidgetSnapshotBuilder.build(
-        now: now,
-        settings: AppSettings(),
-        gridStart: DateTime(2026, 6, 28),
-        monthEvents: events,
-        allEvents: events,
-      );
+    final snapshot = AppleWidgetSnapshotBuilder.build(
+      now: now,
+      settings: AppSettings(),
+      gridStart: DateTime(2026, 6, 28),
+      monthEvents: events,
+      allEvents: events,
+    );
 
-      expect(snapshot['weekTitle'], '7월 26일 - 8월 1일');
+    expect(snapshot['weekTitle'], '7월 26일 - 8월 1일');
 
-      final todayEvents = (snapshot['todayEvents']! as List)
-          .cast<Map<String, Object?>>();
-      expect(todayEvents.map((event) => event['title']), ['회의', '비공개 일정']);
-      expect(snapshot.toString(), isNot(contains('노출되면 안 되는 일정')));
-      final scheduleEvents = (snapshot['scheduleEvents']! as List)
-          .cast<Map<String, Object?>>();
-      expect(scheduleEvents, hasLength(3));
-      expect(scheduleEvents.first['startAt'], isA<int>());
-      expect(scheduleEvents.first['endAt'], isA<int>());
-      expect(scheduleEvents.first['allDay'], isFalse);
+    final todayEvents = (snapshot['todayEvents']! as List)
+        .cast<Map<String, Object?>>();
+    expect(todayEvents.map((event) => event['title']), ['회의', '노출되면 안 되는 일정']);
+    final scheduleEvents = (snapshot['scheduleEvents']! as List)
+        .cast<Map<String, Object?>>();
+    expect(scheduleEvents, hasLength(3));
+    expect(scheduleEvents.first['startAt'], isA<int>());
+    expect(scheduleEvents.first['endAt'], isA<int>());
+    expect(scheduleEvents.first['allDay'], isFalse);
 
-      final ddays = (snapshot['ddays']! as List).cast<Map<String, Object?>>();
-      expect(ddays.single['title'], '출시');
-      expect(ddays.single['daysRemaining'], 5);
+    final ddays = (snapshot['ddays']! as List).cast<Map<String, Object?>>();
+    expect(ddays.single['title'], '출시');
+    expect(ddays.single['daysRemaining'], 5);
 
-      final days = (snapshot['monthDays']! as List)
-          .cast<Map<String, Object?>>();
-      final today = days.singleWhere((day) => day['date'] == '2026-07-28');
-      expect(today['isToday'], isTrue);
-      expect(today['eventCount'], 2);
-      final monthEvents = (today['events']! as List)
-          .cast<Map<String, Object?>>();
-      expect(monthEvents.map((event) => event['title']), ['회의', '비공개 일정']);
-    },
-  );
+    final days = (snapshot['monthDays']! as List).cast<Map<String, Object?>>();
+    final today = days.singleWhere((day) => day['date'] == '2026-07-28');
+    expect(today['isToday'], isTrue);
+    expect(today['eventCount'], 2);
+    final monthEvents = (today['events']! as List).cast<Map<String, Object?>>();
+    expect(monthEvents.map((event) => event['title']), ['회의', '노출되면 안 되는 일정']);
+  });
 
   test('excludes hidden categories, deleted events, and disabled holidays', () {
     const hidden = EventCategory(
@@ -128,7 +121,6 @@ CalendarEvent _event({
   String? occurrenceId,
   EventCategory category = EventCategory.basic,
   bool showDday = false,
-  bool sensitive = false,
   bool holiday = false,
   DateTime? deletedAt,
 }) {
@@ -144,7 +136,6 @@ CalendarEvent _event({
     createdAt: startAt,
     updatedAt: startAt,
     showDday: showDday,
-    sensitive: sensitive,
     holiday: holiday,
     deletedAt: deletedAt,
   );

@@ -12,7 +12,6 @@ import '../core/security/app_lock_privacy_service.dart';
 import '../core/settings/app_settings.dart';
 import '../features/calendar/presentation/month_calendar_page.dart';
 import '../features/onboarding/presentation/welcome_page.dart';
-import '../features/events/presentation/sensitive_event_access.dart';
 import 'daily_theme.dart';
 
 class DailyApp extends ConsumerWidget {
@@ -20,9 +19,13 @@ class DailyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
     final settings = ref.watch(appSettingsProvider);
-    unawaited(AppLockPrivacyService().setEnabled(settings.appLockEnabled));
+    unawaited(
+      AppLockPrivacyService().setEnabled(
+        settings.appLockEnabled,
+        method: settings.appLockMethod,
+      ),
+    );
 
     return MaterialApp(
       key: ValueKey(
@@ -31,6 +34,12 @@ class DailyApp extends ConsumerWidget {
       title: 'Daily',
       debugShowCheckedModeBanner: false,
       theme: DailyTheme.light(),
+      darkTheme: DailyTheme.dark(),
+      themeMode: switch (settings.themeMode) {
+        AppThemeMode.system => ThemeMode.system,
+        AppThemeMode.light => ThemeMode.light,
+        AppThemeMode.dark => ThemeMode.dark,
+      },
       builder: (context, child) {
         var content = child ?? const SizedBox.shrink();
         if (settings.onboardingCompleted) {
@@ -39,16 +48,22 @@ class DailyApp extends ConsumerWidget {
             child: content,
           );
         }
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(
-              appTextScaleForPlatform(
-                settings.appTextSize,
-                defaultTargetPlatform,
+        final brightness = Theme.of(context).brightness;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: brightness == Brightness.dark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark,
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(
+                appTextScaleForPlatform(
+                  settings.appTextSize,
+                  defaultTargetPlatform,
+                ),
               ),
             ),
+            child: content,
           ),
-          child: content,
         );
       },
       home: settings.onboardingCompleted
@@ -63,9 +78,14 @@ double appTextScaleForPlatform(AppTextSize size, TargetPlatform platform) {
     return switch (size) {
       AppTextSize.basic => 1.0,
       AppTextSize.large => 1.15,
+      AppTextSize.extraLarge => 1.3,
     };
   }
   return size.scale;
+}
+
+bool shouldAutomaticallyRequestBiometrics(TargetPlatform platform) {
+  return true;
 }
 
 class _AppLockGate extends ConsumerStatefulWidget {
@@ -83,12 +103,15 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
   static const _legacyPinCheckDelay = Duration(milliseconds: 700);
 
   final _biometricAuth = BiometricAuthService();
+  final _pinKeyboardFocusNode = FocusNode();
   Timer? _legacyPinTimer;
   String _pin = '';
   int? _pinLength;
   late var _unlocked = !widget.enabled;
   var _checking = false;
   var _error = '';
+  var _pinEntryVisible = false;
+  var _pinBiometricAttemptedForCurrentLock = false;
 
   @override
   void initState() {
@@ -112,7 +135,9 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
     if (!oldWidget.enabled) {
       // Enabling the lock in Settings should not immediately lock the user out.
       _unlocked = true;
-      unawaited(_loadPinLength());
+      if (ref.read(appSettingsProvider).appLockMethod == AppLockMethod.appPin) {
+        unawaited(_loadPinLength());
+      }
     }
   }
 
@@ -120,16 +145,36 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _legacyPinTimer?.cancel();
+    _pinKeyboardFocusNode.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_checking ||
+        AppLockPrivacyService.configurationAuthenticationInProgress) {
+      return;
+    }
+    final settings = ref.read(appSettingsProvider);
     if (widget.enabled &&
         (state == AppLifecycleState.paused ||
             state == AppLifecycleState.inactive ||
             state == AppLifecycleState.hidden)) {
       _lock();
+    } else if (widget.enabled && state == AppLifecycleState.resumed) {
+      if (_unlocked) {
+        return;
+      }
+      if (settings.appLockMethod == AppLockMethod.noPin) {
+        setState(() => _unlocked = true);
+      } else if (settings.appLockMethod == AppLockMethod.appPin &&
+          settings.appLockBiometricsEnabled &&
+          !_pinBiometricAttemptedForCurrentLock) {
+        unawaited(_tryPinBiometricAuthentication());
+      } else if (settings.appLockMethod == AppLockMethod.system &&
+          shouldAutomaticallyRequestBiometrics(defaultTargetPlatform)) {
+        unawaited(_trySystemAuthentication());
+      }
     }
   }
 
@@ -138,6 +183,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
     if (!widget.enabled || _unlocked) {
       return widget.child;
     }
+    final lockMethod = ref.watch(appSettingsProvider).appLockMethod;
 
     return Stack(
       fit: StackFit.expand,
@@ -145,59 +191,104 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
         Offstage(offstage: true, child: widget.child),
         Scaffold(
           key: const ValueKey('app-lock-screen'),
-          body: SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 360),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 32,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Icon(Icons.lock_outline, size: 42),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Daily 잠금 해제',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 26),
-                      _PinDots(
-                        filledCount: _pin.length,
-                        expectedCount: _pinLength,
-                      ),
-                      const SizedBox(height: 14),
-                      SizedBox(
-                        height: 24,
-                        child: Text(
-                          _error,
+          body: KeyboardListener(
+            focusNode: _pinKeyboardFocusNode,
+            autofocus: lockMethod == AppLockMethod.appPin && _pinEntryVisible,
+            onKeyEvent: _handlePinKeyEvent,
+            child: SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 32,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Icon(Icons.lock_outline, size: 42),
+                        const SizedBox(height: 18),
+                        Text(
+                          switch (lockMethod) {
+                            AppLockMethod.noPin => '잠금 상태에서는 화면을 볼 수 없습니다.',
+                            AppLockMethod.appPin when !_pinEntryVisible =>
+                              '잠금 상태입니다.',
+                            AppLockMethod.appPin => 'PIN 입력',
+                            AppLockMethod.system => '잠금 상태입니다.',
+                          },
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 26),
+                        if (lockMethod == AppLockMethod.appPin) ...[
+                          if (!_pinEntryVisible) ...[
+                            FilledButton.icon(
+                              key: const ValueKey('show-pin-entry-button'),
+                              onPressed: _checking ? null : _showPinEntry,
+                              icon: const Icon(Icons.password_outlined),
+                              label: const Text('비밀번호를 통해 잠금해제'),
+                            ),
+                            if (_error.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                _error,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ],
+                          ] else ...[
+                            _PinDots(filledCount: _pin.length),
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              height: 24,
+                              child: Text(
+                                _error,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _PinKeypad(
+                              enabled: !_checking,
+                              onDigit: _appendDigit,
+                              onBackspace: _removeDigit,
+                            ),
+                          ],
+                        ] else if (lockMethod == AppLockMethod.system) ...[
+                          Text(
+                            '기기의 Face ID, Touch ID 또는 시스템 비밀번호로 확인합니다.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _PinKeypad(
-                        enabled: !_checking,
-                        onDigit: _appendDigit,
-                        onBackspace: _removeDigit,
-                      ),
-                      if (ref
-                          .watch(appSettingsProvider)
-                          .appLockBiometricsEnabled) ...[
-                        const SizedBox(height: 16),
-                        OutlinedButton.icon(
-                          onPressed: _checking ? null : _tryBiometric,
-                          icon: const Icon(Icons.fingerprint),
-                          label: const Text('생체 인증 사용'),
-                        ),
+                          const SizedBox(height: 18),
+                          FilledButton.icon(
+                            onPressed: _checking
+                                ? null
+                                : _trySystemAuthentication,
+                            icon: const Icon(Icons.lock_open_outlined),
+                            label: const Text('시스템 잠금으로 해제'),
+                          ),
+                          if (_error.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _error,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ],
+                        ] else ...[
+                          const SizedBox.shrink(),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -210,12 +301,24 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
 
   Future<void> _prepareLockScreen() async {
     final settings = ref.read(appSettingsProvider);
-    await _loadPinLength();
+    if (settings.appLockMethod == AppLockMethod.noPin) {
+      if (mounted) {
+        setState(() => _unlocked = true);
+      }
+      return;
+    }
+    if (settings.appLockMethod == AppLockMethod.appPin) {
+      await _loadPinLength();
+      if (settings.appLockBiometricsEnabled) {
+        await _tryPinBiometricAuthentication();
+      }
+    }
     if (!mounted) {
       return;
     }
-    if (settings.appLockBiometricsEnabled) {
-      await _tryBiometric();
+    if (settings.appLockMethod == AppLockMethod.system &&
+        shouldAutomaticallyRequestBiometrics(defaultTargetPlatform)) {
+      await _trySystemAuthentication();
     }
   }
 
@@ -236,6 +339,8 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
         _pin = '';
         _error = '';
         _checking = false;
+        _pinEntryVisible = false;
+        _pinBiometricAttemptedForCurrentLock = false;
         _unlocked = false;
       });
     }
@@ -261,6 +366,33 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
       _legacyPinTimer = Timer(_legacyPinCheckDelay, () {
         unawaited(_verifyPin(keepInputOnFailure: true));
       });
+    }
+  }
+
+  void _showPinEntry() {
+    setState(() {
+      _pinEntryVisible = true;
+      _error = '';
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _pinKeyboardFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _handlePinKeyEvent(KeyEvent event) {
+    if (defaultTargetPlatform != TargetPlatform.macOS ||
+        !_pinEntryVisible ||
+        event is! KeyDownEvent) {
+      return;
+    }
+    final digit = event.character ?? event.logicalKey.keyLabel;
+    if (RegExp(r'^\d$').hasMatch(digit)) {
+      _appendDigit(digit);
+    } else if (event.logicalKey == LogicalKeyboardKey.backspace ||
+        event.logicalKey == LogicalKeyboardKey.delete) {
+      _removeDigit();
     }
   }
 
@@ -311,7 +443,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
     }
   }
 
-  Future<void> _tryBiometric() async {
+  Future<void> _trySystemAuthentication() async {
     if (_checking) {
       return;
     }
@@ -319,7 +451,10 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
       _checking = true;
       _error = '';
     });
-    final authenticated = await _biometricAuth.authenticate();
+    final authenticated = await _biometricAuth.authenticate(
+      localizedReason: 'Daily 잠금을 해제하려면 인증이 필요합니다.',
+      allowDeviceCredentials: true,
+    );
     if (!mounted) {
       return;
     }
@@ -328,39 +463,75 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
       if (authenticated) {
         _unlocked = true;
       } else {
-        _error = '생체 인증을 완료하지 못했습니다. PIN을 입력하세요.';
+        _error = '시스템 인증을 완료하지 못했습니다.';
       }
     });
+  }
+
+  Future<void> _tryPinBiometricAuthentication() async {
+    if (_checking || _unlocked || _pinBiometricAttemptedForCurrentLock) {
+      return;
+    }
+    setState(() {
+      _checking = true;
+      _error = '';
+      _pinBiometricAttemptedForCurrentLock = true;
+    });
+    final authenticated = defaultTargetPlatform == TargetPlatform.macOS
+        ? await _biometricAuth.authenticateWithBiometricsOrCompanion(
+            localizedReason: 'Touch ID 또는 Apple Watch로 Daily PIN 잠금을 해제합니다.',
+          )
+        : await _biometricAuth.authenticate(
+            localizedReason: 'Daily PIN 잠금을 생체인식으로 해제합니다.',
+          );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _checking = false;
+      if (authenticated) {
+        _unlocked = true;
+      } else {
+        _error = '생체인식을 완료하지 못했습니다. PIN을 입력해 주세요.';
+        _pinEntryVisible = true;
+      }
+    });
+    if (!authenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _pinKeyboardFocusNode.requestFocus();
+        }
+      });
+    }
   }
 }
 
 class _PinDots extends StatelessWidget {
-  const _PinDots({required this.filledCount, required this.expectedCount});
+  const _PinDots({required this.filledCount});
 
   final int filledCount;
-  final int? expectedCount;
 
   @override
   Widget build(BuildContext context) {
-    final count = expectedCount ?? (filledCount > 6 ? filledCount : 6);
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 14,
-      runSpacing: 10,
-      children: List.generate(count, (index) {
-        final filled = index < filledCount;
-        return Container(
-          width: 13,
-          height: 13,
-          decoration: BoxDecoration(
-            color: filled
-                ? Theme.of(context).colorScheme.primary
-                : Colors.transparent,
-            border: Border.all(color: Theme.of(context).colorScheme.outline),
-            shape: BoxShape.circle,
+    return SizedBox(
+      height: 13,
+      child: Wrap(
+        key: const ValueKey('pin-entry-dots'),
+        alignment: WrapAlignment.center,
+        spacing: 14,
+        children: List.generate(
+          filledCount,
+          (index) => Container(
+            key: ValueKey('pin-unlock-dot-$index'),
+            width: 13,
+            height: 13,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              shape: BoxShape.circle,
+            ),
           ),
-        );
-      }),
+        ),
+      ),
     );
   }
 }
@@ -453,11 +624,6 @@ class _AppHomeState extends ConsumerState<_AppHome>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
-      ref.read(sensitiveEventsUnlockedProvider.notifier).state = false;
-    }
     switch (state) {
       case AppLifecycleState.resumed:
         _syncRestoreRetryTimer?.cancel();

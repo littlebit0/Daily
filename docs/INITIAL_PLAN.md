@@ -1,5 +1,8 @@
 # Daily 초기 기획안
 
+> 이 문서는 초기 기획 이력이다. 현재 3.0.1 제품 동작은 `README.md`와
+> `PROJECT_ANALYSIS.md`를 기준으로 한다.
+
 ## 제품 개요
 
 Daily는 혼자 사용하는 개인용 독립 캘린더 앱이다. 기존 Apple Calendar, Google Calendar, Outlook Calendar와 연결하지 않고 자체 데이터만 관리한다.

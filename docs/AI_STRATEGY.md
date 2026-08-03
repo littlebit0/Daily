@@ -1,5 +1,8 @@
 # AI Strategy
 
+Current release baseline: `3.0.1`. AI remains an optional future-facing
+surface and is not required for core calendar operation.
+
 Daily should treat AI as an optional assistant, not as the source of truth.
 The calendar data model, sync, notifications, and rule-based parser must keep
 working without any AI provider.
@@ -9,7 +12,8 @@ working without any AI provider.
 - The app already uses a hybrid parser.
 - Simple schedule text is parsed locally by deterministic rules.
 - AI is only used for complex text when the user enables it.
-- Sensitive text can be blocked from AI calls through the existing setting.
+- Calendar text must not be sent to an AI provider without an explicit user
+  action and enabled AI setting.
 - The current implementation uses a user-provided Gemini API key.
 
 ## Recommended Direction

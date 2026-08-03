@@ -1,57 +1,52 @@
-# Release Checklist
+# Daily 3.0.1 Release Checklist
 
-## Android
+## 공통
 
-- Build artifact: `build/app/outputs/bundle/release/app-release.aab`.
-- Confirm `android/key.properties` exists on the release machine and points to
-  the upload keystore.
-- Confirm Google OAuth Android client has the package name and upload/release
-  SHA-1/SHA-256 fingerprints.
-- Confirm OAuth consent screen is published before external users are expected
-  to connect Google Drive.
-- Test on a clean Android install:
-  1. Welcome screen appears.
-  2. Local mode starts without any account.
-  3. Optional Google Drive connection restores the Drive v2 event/settings file
-     set.
-  4. Notification permission prompt appears.
-  5. Create, edit, delete, and sync an event.
-  6. Reinstall and confirm Google Drive backup restore.
-  7. Disconnect Google Drive from Settings and confirm the user can choose
-     whether to keep using local data or return to the welcome screen.
-  8. Add URL, weather, sensitive flag, D-day, and recurrence edits to a sample
-     event.
-  9. Run Drive backup deletion and confirm local data is cleared and the Drive
-     app-data backup is deleted.
+- [ ] `pubspec.yaml` 버전이 `3.0.1`인지 확인
+- [ ] 정적 분석 통과
+- [ ] 전체 Flutter 테스트 통과
+- [ ] DB migration 및 기존 일정 보존 확인
+- [ ] 로컬 모드, Google 로그인, 로그아웃과 계정 삭제 확인
+- [ ] 일정 생성·수정·삭제 후 v2 항목별 백업 확인
+- [ ] 백업이 로컬 데이터를 변경하지 않고 복원만 원격 데이터를 병합하는지 확인
+- [ ] 분류 색상과 숨김 상태가 동기화 후 일치하는지 확인
 
-## Windows
+## iOS/iPadOS
 
-- Build artifact: `build/windows/x64/runner/Release/daily.exe`.
-- The Windows app can be packaged from the release directory.
-- The distributed ZIP must include `daily.exe`, DLL files, and the `data`
-  directory from `build/windows/x64/runner/Release`.
-- Google Drive sync uses the desktop OAuth browser flow on Windows. Build with
-  the Desktop OAuth client ID and secret supplied through dart defines.
-- Closing the main window should leave the app running in the tray, and the
-  tray mini calendar should open from the tray menu.
+- [ ] 앱/위젯 버전과 빌드 `3.0.1 (3.0.1)`
+- [ ] 번들 ID `com.littlebit0.daily`, `com.littlebit0.daily.widgets`
+- [ ] App Store 배포 서명 및 provisioning 확인
+- [ ] Apple 로그인 후 Google 로그인 강제 표시 없음
+- [ ] Apple Calendar 및 Google Calendar 가져오기 확인
+- [ ] 홈 화면·잠금 화면 위젯 확인
+- [ ] 지원 기기에서 AlarmKit 일정 알람 확인
+- [ ] 좌우·상하 월 탐색과 검색 전환 확인
+- [ ] App Store Connect 빌드 선택, 수출 규정 응답, 심사 추가
 
-## Store and Consent Assets
+## macOS
 
-- Privacy policy URL
-- Support email
-- Data deletion instructions
-- Short app description
-- Screenshots for Android and Windows
-- Clear statement that AI features are currently in development and disabled
+- [ ] 앱/위젯 버전과 빌드 `3.0.1 (3.0.1)`
+- [ ] 번들 ID `com.littlebit0.daily`, `com.littlebit0.daily.widgets`
+- [ ] PKG의 Distribution 서명과 resource bundle 상태 확인
+- [ ] Google 세션 조용한 복원과 명시적 재연결 확인
+- [ ] Touch ID·Apple Watch·시스템 암호 및 PIN fallback 확인
+- [ ] 데스크톱·알림 센터 위젯 확인
+- [ ] 마우스 휠 및 트랙패드 월·연간 탐색 확인
+- [ ] App Store Connect 빌드 선택, Sandbox 정보, 수출 규정 응답, 심사 추가
 
-## Final QA Pass
+## Android/Windows
 
-- Run `flutter analyze`.
-- Run `flutter test`.
-- Build Android release.
-- Build Windows release.
-- Verify Google Drive connection and sync with at least one fresh Google
-  account.
-- Verify Korea public holidays around Seollal, Chuseok, Buddha's Birthday,
-  Children's Day, Constitution Day, Labor Day from 2027, and substitute
-  holidays.
+- [ ] CI build 성공
+- [ ] 실제 OS에서 3.0.1 공유 DB migration 확인
+- [ ] Google OAuth와 Drive v2 동기화 확인
+- [ ] Apple 전용 위젯·AlarmKit UI가 노출되지 않는지 확인
+- [ ] Android 캘린더 가져오기와 알림 확인
+- [ ] Windows 트레이와 창 수명주기 확인
+
+## GitHub Release
+
+- [ ] 3.0.1 변경 사항 커밋 및 main push
+- [ ] `v3.0.1` 태그 생성 및 push
+- [ ] Release Installers workflow 4개 플랫폼 성공
+- [ ] 릴리스 본문이 `docs/RELEASE_NOTES_3.0.1.md`인지 확인
+- [ ] IPA, DMG, APK, ZIP 파일명과 체크섬 확인
