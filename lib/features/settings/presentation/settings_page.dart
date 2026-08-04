@@ -27,6 +27,13 @@ const _fallbackAppVersion = '3.0.0';
 
 enum _SettingsDestination { notifications, account }
 
+bool supportsAdjacentMonthDateSetting(TargetPlatform platform) {
+  return platform == TargetPlatform.android ||
+      platform == TargetPlatform.iOS ||
+      platform == TargetPlatform.macOS ||
+      platform == TargetPlatform.windows;
+}
+
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key}) : _destination = null;
 
@@ -417,8 +424,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   onChanged: (value) =>
                       _save(settings.copyWith(showLunarDates: value)),
                 ),
-                if (defaultTargetPlatform == TargetPlatform.iOS ||
-                    defaultTargetPlatform == TargetPlatform.macOS) ...[
+                if (supportsAdjacentMonthDateSetting(
+                  defaultTargetPlatform,
+                )) ...[
                   const Divider(height: 1),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,

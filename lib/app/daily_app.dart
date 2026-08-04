@@ -74,7 +74,7 @@ class DailyApp extends ConsumerWidget {
 }
 
 double appTextScaleForPlatform(AppTextSize size, TargetPlatform platform) {
-  if (platform == TargetPlatform.macOS) {
+  if (_usesMacDesktopExperience(platform)) {
     return switch (size) {
       AppTextSize.basic => 1.0,
       AppTextSize.large => 1.15,
@@ -84,8 +84,15 @@ double appTextScaleForPlatform(AppTextSize size, TargetPlatform platform) {
   return size.scale;
 }
 
-bool shouldAutomaticallyRequestBiometrics(TargetPlatform platform) {
-  return true;
+bool _usesMacDesktopExperience(TargetPlatform platform) {
+  return platform == TargetPlatform.macOS || platform == TargetPlatform.windows;
+}
+
+bool shouldAutomaticallyRequestBiometrics(
+  TargetPlatform _, {
+  bool alreadyAttempted = false,
+}) {
+  return !alreadyAttempted;
 }
 
 class _AppLockGate extends ConsumerStatefulWidget {
@@ -112,6 +119,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
   var _error = '';
   var _pinEntryVisible = false;
   var _pinBiometricAttemptedForCurrentLock = false;
+  var _systemAuthenticationAttemptedForCurrentLock = false;
 
   @override
   void initState() {
@@ -135,6 +143,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
     if (!oldWidget.enabled) {
       // Enabling the lock in Settings should not immediately lock the user out.
       _unlocked = true;
+      _systemAuthenticationAttemptedForCurrentLock = false;
       if (ref.read(appSettingsProvider).appLockMethod == AppLockMethod.appPin) {
         unawaited(_loadPinLength());
       }
@@ -172,8 +181,11 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
           !_pinBiometricAttemptedForCurrentLock) {
         unawaited(_tryPinBiometricAuthentication());
       } else if (settings.appLockMethod == AppLockMethod.system &&
-          shouldAutomaticallyRequestBiometrics(defaultTargetPlatform)) {
-        unawaited(_trySystemAuthentication());
+          shouldAutomaticallyRequestBiometrics(
+            defaultTargetPlatform,
+            alreadyAttempted: _systemAuthenticationAttemptedForCurrentLock,
+          )) {
+        unawaited(_trySystemAuthentication(automatic: true));
       }
     }
   }
@@ -317,8 +329,11 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
       return;
     }
     if (settings.appLockMethod == AppLockMethod.system &&
-        shouldAutomaticallyRequestBiometrics(defaultTargetPlatform)) {
-      await _trySystemAuthentication();
+        shouldAutomaticallyRequestBiometrics(
+          defaultTargetPlatform,
+          alreadyAttempted: _systemAuthenticationAttemptedForCurrentLock,
+        )) {
+      await _trySystemAuthentication(automatic: true);
     }
   }
 
@@ -341,6 +356,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
         _checking = false;
         _pinEntryVisible = false;
         _pinBiometricAttemptedForCurrentLock = false;
+        _systemAuthenticationAttemptedForCurrentLock = false;
         _unlocked = false;
       });
     }
@@ -382,7 +398,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
   }
 
   void _handlePinKeyEvent(KeyEvent event) {
-    if (defaultTargetPlatform != TargetPlatform.macOS ||
+    if (!_usesMacDesktopExperience(defaultTargetPlatform) ||
         !_pinEntryVisible ||
         event is! KeyDownEvent) {
       return;
@@ -443,13 +459,18 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
     }
   }
 
-  Future<void> _trySystemAuthentication() async {
-    if (_checking) {
+  Future<void> _trySystemAuthentication({bool automatic = false}) async {
+    if (_checking ||
+        _unlocked ||
+        (automatic && _systemAuthenticationAttemptedForCurrentLock)) {
       return;
     }
     setState(() {
       _checking = true;
       _error = '';
+      if (automatic) {
+        _systemAuthenticationAttemptedForCurrentLock = true;
+      }
     });
     final authenticated = await _biometricAuth.authenticate(
       localizedReason: 'Daily 잠금을 해제하려면 인증이 필요합니다.',

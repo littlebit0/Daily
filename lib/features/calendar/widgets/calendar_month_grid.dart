@@ -19,7 +19,7 @@ class CalendarMonthGrid extends StatefulWidget {
     this.showAdjacentMonthDates = true,
     this.continuous = false,
     this.showWeekdayHeader = true,
-    this.rangeHitTestKey,
+    this.onRangeHitTestBoxChanged,
     this.externalRangeStart,
     this.externalRangeEnd,
     this.enableRangeGestures = true,
@@ -35,7 +35,7 @@ class CalendarMonthGrid extends StatefulWidget {
   final bool showAdjacentMonthDates;
   final bool continuous;
   final bool showWeekdayHeader;
-  final GlobalKey? rangeHitTestKey;
+  final ValueChanged<RenderBox?>? onRangeHitTestBoxChanged;
   final DateTime? externalRangeStart;
   final DateTime? externalRangeEnd;
   final bool enableRangeGestures;
@@ -56,11 +56,18 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
   late List<DateTime> _days;
   late List<List<DateTime>> _weeks;
   late Set<DateTime> _holidayDays;
+  RenderBox? _reportedRangeHitTestBox;
 
   @override
   void initState() {
     super.initState();
     _rebuildCalendarCache();
+  }
+
+  @override
+  void dispose() {
+    widget.onRangeHitTestBoxChanged?.call(null);
+    super.dispose();
   }
 
   @override
@@ -110,153 +117,181 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
                 ),
               Expanded(
                 child: LayoutBuilder(
-                  builder: (context, constraints) => Listener(
-                    key: widget.rangeHitTestKey,
-                    onPointerDown: (event) {
-                      if (!widget.enableRangeGestures) {
-                        return;
-                      }
-                      if (!_isDesktopRangePointer(event.kind) ||
-                          !_hasPrimaryButton(event.buttons)) {
-                        return;
-                      }
-                      _mouseRangeActive = false;
-                      _longPressRangeActive = false;
-                      _mouseDownPosition = event.localPosition;
-                    },
-                    onPointerMove: (event) {
-                      if (!widget.enableRangeGestures) {
-                        return;
-                      }
-                      final downPosition = _mouseDownPosition;
-                      if (downPosition == null) {
-                        return;
-                      }
-                      if (!_mouseRangeActive) {
-                        final downDay = _dayAtPosition(
-                          downPosition,
-                          _days,
-                          constraints,
-                        );
-                        final currentDay = _dayAtPosition(
+                  builder: (context, constraints) {
+                    _reportRangeHitTestBox(context);
+                    return Listener(
+                      onPointerDown: (event) {
+                        if (!widget.enableRangeGestures) {
+                          return;
+                        }
+                        if (!_isDesktopRangePointer(event.kind) ||
+                            !_hasPrimaryButton(event.buttons)) {
+                          return;
+                        }
+                        _mouseRangeActive = false;
+                        _longPressRangeActive = false;
+                        _mouseDownPosition = event.localPosition;
+                      },
+                      onPointerMove: (event) {
+                        if (!widget.enableRangeGestures) {
+                          return;
+                        }
+                        if (!_isDesktopRangePointer(event.kind)) {
+                          return;
+                        }
+                        final downPosition = _mouseDownPosition;
+                        if (downPosition == null) {
+                          return;
+                        }
+                        if (!_mouseRangeActive) {
+                          final downDay = _dayAtPosition(
+                            downPosition,
+                            _days,
+                            constraints,
+                          );
+                          final currentDay = _dayAtPosition(
+                            event.localPosition,
+                            _days,
+                            constraints,
+                          );
+                          if (downDay == null ||
+                              currentDay == null ||
+                              _sameDay(downDay, currentDay)) {
+                            return;
+                          }
+                          _mouseRangeActive = true;
+                          _startRangeSelection(
+                            downPosition,
+                            _days,
+                            constraints,
+                          );
+                        }
+                        _updateRangeSelection(
                           event.localPosition,
                           _days,
                           constraints,
                         );
-                        if (downDay == null ||
-                            currentDay == null ||
-                            _sameDay(downDay, currentDay)) {
+                      },
+                      onPointerUp: (event) {
+                        if (!widget.enableRangeGestures) {
                           return;
                         }
-                        _mouseRangeActive = true;
-                        _startRangeSelection(downPosition, _days, constraints);
-                      }
-                      _updateRangeSelection(
-                        event.localPosition,
-                        _days,
-                        constraints,
-                      );
-                    },
-                    onPointerUp: (event) {
-                      if (!widget.enableRangeGestures) {
-                        return;
-                      }
-                      _mouseDownPosition = null;
-                      if (!_mouseRangeActive) {
-                        return;
-                      }
-                      _mouseRangeActive = false;
-                      _finishRangeSelection();
-                    },
-                    onPointerCancel: (_) {
-                      if (!widget.enableRangeGestures) {
-                        return;
-                      }
-                      _mouseDownPosition = null;
-                      if (!_mouseRangeActive && !_longPressRangeActive) {
-                        return;
-                      }
-                      _mouseRangeActive = false;
-                      _longPressRangeActive = false;
-                      _clearRangeSelection();
-                    },
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onLongPressStart: widget.enableRangeGestures
-                          ? (details) {
-                              if (_mouseRangeActive) {
-                                return;
+                        if (!_isDesktopRangePointer(event.kind)) {
+                          return;
+                        }
+                        _mouseDownPosition = null;
+                        if (!_mouseRangeActive) {
+                          return;
+                        }
+                        _mouseRangeActive = false;
+                        _finishRangeSelection();
+                      },
+                      onPointerCancel: (event) {
+                        if (!widget.enableRangeGestures) {
+                          return;
+                        }
+                        if (!_isDesktopRangePointer(event.kind)) {
+                          return;
+                        }
+                        _mouseDownPosition = null;
+                        if (!_mouseRangeActive && !_longPressRangeActive) {
+                          return;
+                        }
+                        _mouseRangeActive = false;
+                        _longPressRangeActive = false;
+                        _clearRangeSelection();
+                      },
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        // Desktop range selection is handled by the Listener
+                        // above. Keeping this recognizer touch-only prevents a
+                        // mouse click from entering the long-press gesture arena
+                        // with the day cell's InkWell.
+                        supportedDevices: const {
+                          PointerDeviceKind.touch,
+                          PointerDeviceKind.stylus,
+                          PointerDeviceKind.invertedStylus,
+                        },
+                        onLongPressStart: widget.enableRangeGestures
+                            ? (details) {
+                                if (_mouseRangeActive) {
+                                  return;
+                                }
+                                _longPressRangeActive = true;
+                                _startRangeSelection(
+                                  details.localPosition,
+                                  _days,
+                                  constraints,
+                                );
                               }
-                              _longPressRangeActive = true;
-                              _startRangeSelection(
-                                details.localPosition,
-                                _days,
-                                constraints,
-                              );
-                            }
-                          : null,
-                      onLongPressMoveUpdate: widget.enableRangeGestures
-                          ? (details) {
-                              if (!_longPressRangeActive) {
-                                return;
+                            : null,
+                        onLongPressMoveUpdate: widget.enableRangeGestures
+                            ? (details) {
+                                if (!_longPressRangeActive) {
+                                  return;
+                                }
+                                _updateRangeSelection(
+                                  details.localPosition,
+                                  _days,
+                                  constraints,
+                                );
                               }
-                              _updateRangeSelection(
-                                details.localPosition,
-                                _days,
-                                constraints,
-                              );
-                            }
-                          : null,
-                      onLongPressEnd: widget.enableRangeGestures
-                          ? (_) {
-                              if (!_longPressRangeActive) {
-                                return;
+                            : null,
+                        onLongPressEnd: widget.enableRangeGestures
+                            ? (_) {
+                                if (!_longPressRangeActive) {
+                                  return;
+                                }
+                                _longPressRangeActive = false;
+                                _finishRangeSelection();
                               }
-                              _longPressRangeActive = false;
-                              _finishRangeSelection();
-                            }
-                          : null,
-                      onLongPressCancel: widget.enableRangeGestures
-                          ? () {
-                              if (!_longPressRangeActive) {
-                                return;
+                            : null,
+                        onLongPressCancel: widget.enableRangeGestures
+                            ? () {
+                                if (!_longPressRangeActive) {
+                                  return;
+                                }
+                                _longPressRangeActive = false;
+                                _clearRangeSelection();
                               }
-                              _longPressRangeActive = false;
-                              _clearRangeSelection();
-                            }
-                          : null,
-                      child: Column(
-                        children: [
-                          for (final week in _weeks)
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 2,
-                                ),
-                                child: _WeekRow(
-                                  month: widget.month,
-                                  selectedDate: widget.selectedDate,
-                                  selectedRangeStart:
-                                      widget.externalRangeStart ?? _rangeStart,
-                                  selectedRangeEnd:
-                                      widget.externalRangeEnd ?? _rangeEnd,
-                                  weekDays: week,
-                                  events: widget.events,
-                                  maxFlags: maxFlags,
-                                  holidayDays: _holidayDays,
-                                  showLunarDates: widget.showLunarDates,
-                                  showAdjacentMonthDates:
-                                      widget.showAdjacentMonthDates,
-                                  showEventTimes: !compact,
-                                  compact: compact,
-                                  onDateSelected: widget.onDateSelected,
+                            : null,
+                        child: Column(
+                          children: [
+                            for (final week in _weeks)
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
+                                  child: _WeekRow(
+                                    key: ValueKey(
+                                      'week-row-${week.first.year}-${week.first.month}-${week.first.day}',
+                                    ),
+                                    month: widget.month,
+                                    selectedDate: widget.selectedDate,
+                                    selectedRangeStart:
+                                        widget.externalRangeStart ??
+                                        _rangeStart,
+                                    selectedRangeEnd:
+                                        widget.externalRangeEnd ?? _rangeEnd,
+                                    weekDays: week,
+                                    events: widget.events,
+                                    maxFlags: maxFlags,
+                                    holidayDays: _holidayDays,
+                                    showLunarDates: widget.showLunarDates,
+                                    showAdjacentMonthDates:
+                                        widget.showAdjacentMonthDates,
+                                    showEventTimes: !compact,
+                                    compact: compact,
+                                    onDateSelected: widget.onDateSelected,
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -269,6 +304,26 @@ class _CalendarMonthGridState extends State<CalendarMonthGrid> {
   void _rebuildCalendarCache() {
     _rebuildDayCache();
     _holidayDays = _holidayDaysFor(widget.events);
+  }
+
+  void _reportRangeHitTestBox(BuildContext context) {
+    if (widget.onRangeHitTestBoxChanged == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final renderObject = context.findRenderObject();
+      final box = renderObject is RenderBox && renderObject.hasSize
+          ? renderObject
+          : null;
+      if (identical(_reportedRangeHitTestBox, box)) {
+        return;
+      }
+      _reportedRangeHitTestBox = box;
+      widget.onRangeHitTestBoxChanged?.call(box);
+    });
   }
 
   void _rebuildDayCache() {
@@ -476,8 +531,9 @@ class CalendarWeekdayHeader extends StatelessWidget {
   }
 }
 
-class _WeekRow extends StatelessWidget {
+class _WeekRow extends StatefulWidget {
   const _WeekRow({
+    super.key,
     required this.month,
     required this.selectedDate,
     required this.selectedRangeStart,
@@ -508,31 +564,95 @@ class _WeekRow extends StatelessWidget {
   final ValueChanged<DateTime> onDateSelected;
 
   @override
+  State<_WeekRow> createState() => _WeekRowState();
+}
+
+class _WeekRowState extends State<_WeekRow> {
+  late List<_EventSegment> _segments;
+
+  @override
+  void initState() {
+    super.initState();
+    _rebuildSegments();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WeekRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.month != widget.month ||
+        oldWidget.showAdjacentMonthDates != widget.showAdjacentMonthDates ||
+        !_sameEventInstances(oldWidget.events, widget.events) ||
+        !_sameDays(oldWidget.weekDays, widget.weekDays)) {
+      _rebuildSegments();
+    }
+  }
+
+  void _rebuildSegments() {
+    final weekStart = widget.weekDays.first;
+    _segments = _layoutSegments(
+      weekStart,
+      weekStart.add(const Duration(days: 7)),
+    );
+  }
+
+  bool _sameEventInstances(
+    List<CalendarEvent> first,
+    List<CalendarEvent> second,
+  ) {
+    if (identical(first, second)) {
+      return true;
+    }
+    if (first.length != second.length) {
+      return false;
+    }
+    for (var index = 0; index < first.length; index++) {
+      if (!identical(first[index], second[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _sameDays(List<DateTime> first, List<DateTime> second) {
+    if (identical(first, second)) {
+      return true;
+    }
+    if (first.length != second.length) {
+      return false;
+    }
+    for (var index = 0; index < first.length; index++) {
+      if (first[index] != second[index]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final weekStart = weekDays.first;
-    final weekEnd = weekStart.add(const Duration(days: 7));
-    final segments = _layoutSegments(weekStart, weekEnd);
+    final weekStart = widget.weekDays.first;
+    final segments = _segments;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final cellWidth = constraints.maxWidth / 7;
         var metrics = _MonthFlagMetrics.forLayout(
-          compact: compact,
+          compact: widget.compact,
           rowHeight: constraints.maxHeight,
-          maxFlags: maxFlags,
+          maxFlags: widget.maxFlags,
           reserveOverflow: false,
         );
-        final flagInset = compact ? 1.0 : 5.0;
-        final overflowInset = compact ? 2.0 : 6.0;
+        final flagInset = widget.compact ? 1.0 : 5.0;
+        final overflowInset = widget.compact ? 2.0 : 6.0;
         var visibleLanes = metrics.visibleLanes;
         var overflowCounts = _overflowCounts(segments, visibleLanes);
         final hasOverflow = overflowCounts.any((count) => count > 0);
         if (hasOverflow) {
           metrics = _MonthFlagMetrics.forLayout(
-            compact: compact,
+            compact: widget.compact,
             rowHeight: constraints.maxHeight,
-            maxFlags: maxFlags,
+            maxFlags: widget.maxFlags,
             reserveOverflow: true,
           );
           visibleLanes = metrics.visibleLanes;
@@ -581,29 +701,32 @@ class _WeekRow extends StatelessWidget {
                 ),
               Row(
                 children: [
-                  for (final day in weekDays)
+                  for (final day in widget.weekDays)
                     Expanded(
                       child: Builder(
                         builder: (context) {
                           final showContent =
-                              showAdjacentMonthDates ||
-                              (day.year == month.year &&
-                                  day.month == month.month);
+                              widget.showAdjacentMonthDates ||
+                              (day.year == widget.month.year &&
+                                  day.month == widget.month.month);
                           return _DayCellBackground(
                             day: day,
                             inMonth:
-                                day.year == month.year &&
-                                day.month == month.month,
+                                day.year == widget.month.year &&
+                                day.month == widget.month.month,
                             selected:
-                                showContent && _sameDay(day, selectedDate),
+                                showContent &&
+                                _sameDay(day, widget.selectedDate),
                             rangeHighlighted:
                                 showContent && _inSelectedRange(day),
                             today: _sameDay(day, DateTime.now()),
-                            holiday: holidayDays.contains(_dayStart(day)),
-                            showLunarDate: showLunarDates,
+                            holiday: widget.holidayDays.contains(
+                              _dayStart(day),
+                            ),
+                            showLunarDate: widget.showLunarDates,
                             showContent: showContent,
                             onTap: showContent
-                                ? () => onDateSelected(day)
+                                ? () => widget.onDateSelected(day)
                                 : null,
                           );
                         },
@@ -633,8 +756,8 @@ class _WeekRow extends StatelessWidget {
                           segmentStart: weekStart.add(
                             Duration(days: segment.startCol),
                           ),
-                          showTime: showEventTimes,
-                          compact: compact,
+                          showTime: widget.showEventTimes,
+                          compact: widget.compact,
                           dense: metrics.denseText,
                         ),
                       ),
@@ -655,14 +778,14 @@ class _WeekRow extends StatelessWidget {
                               ),
                               child: Padding(
                                 padding: EdgeInsets.symmetric(
-                                  horizontal: compact ? 2 : 4,
+                                  horizontal: widget.compact ? 2 : 4,
                                 ),
                                 child: Text(
                                   '+${overflowCounts[index]}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: compact ? 9 : 10,
+                                    fontSize: widget.compact ? 9 : 10,
                                     height: 1.0,
                                     fontWeight: FontWeight.w800,
                                     color: colorScheme.onSurfaceVariant,
@@ -683,8 +806,8 @@ class _WeekRow extends StatelessWidget {
   }
 
   _RangeHighlightSegment? _rangeHighlightSegment(DateTime weekStart) {
-    final start = selectedRangeStart;
-    final end = selectedRangeEnd;
+    final start = widget.selectedRangeStart;
+    final end = widget.selectedRangeEnd;
     if (start == null || end == null) {
       return null;
     }
@@ -703,9 +826,9 @@ class _WeekRow extends StatelessWidget {
     var segmentEnd = normalizedEnd.isBefore(weekLast)
         ? normalizedEnd
         : weekLast;
-    if (!showAdjacentMonthDates) {
-      final monthStart = DateTime(month.year, month.month);
-      final monthEnd = DateTime(month.year, month.month + 1, 0);
+    if (!widget.showAdjacentMonthDates) {
+      final monthStart = DateTime(widget.month.year, widget.month.month);
+      final monthEnd = DateTime(widget.month.year, widget.month.month + 1, 0);
       if (segmentStart.isBefore(monthStart)) {
         segmentStart = monthStart;
       }
@@ -724,7 +847,7 @@ class _WeekRow extends StatelessWidget {
 
   List<_EventSegment> _layoutSegments(DateTime weekStart, DateTime weekEnd) {
     final rawSegments =
-        events
+        widget.events
             .where((event) => event.overlaps(weekStart, weekEnd))
             .map((event) => _EventSegment.fromEvent(event, weekStart))
             .where((segment) => segment != null)
@@ -768,13 +891,13 @@ class _WeekRow extends StatelessWidget {
   }
 
   _EventSegment? _clipToVisibleMonth(_EventSegment segment) {
-    if (showAdjacentMonthDates) {
+    if (widget.showAdjacentMonthDates) {
       return segment;
     }
     final visibleColumns = <int>[
-      for (var index = 0; index < weekDays.length; index++)
-        if (weekDays[index].year == month.year &&
-            weekDays[index].month == month.month)
+      for (var index = 0; index < widget.weekDays.length; index++)
+        if (widget.weekDays[index].year == widget.month.year &&
+            widget.weekDays[index].month == widget.month.month)
           index,
     ];
     if (visibleColumns.isEmpty) {
@@ -817,8 +940,8 @@ class _WeekRow extends StatelessWidget {
   }
 
   bool _inSelectedRange(DateTime day) {
-    final start = selectedRangeStart;
-    final end = selectedRangeEnd;
+    final start = widget.selectedRangeStart;
+    final end = widget.selectedRangeEnd;
     if (start == null || end == null) {
       return false;
     }

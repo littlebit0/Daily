@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.app.AlertDialog
 import android.os.Build
+import android.os.Bundle
 import android.provider.CalendarContract
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
@@ -17,6 +18,11 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterFragmentActivity() {
     private var pendingCalendarOperation: (() -> Unit)? = null
     private var pendingCalendarResult: MethodChannel.Result? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        requestHighestSupportedRefreshRate()
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -107,6 +113,18 @@ class MainActivity : FlutterFragmentActivity() {
             arrayOf(Manifest.permission.READ_CALENDAR),
             CALENDAR_PERMISSION_REQUEST,
         )
+    }
+
+    private fun requestHighestSupportedRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        @Suppress("DEPRECATION")
+        val display = windowManager.defaultDisplay
+        val preferredMode = display.supportedModes.maxByOrNull { it.refreshRate } ?: return
+        if (preferredMode.modeId == display.mode.modeId) return
+
+        window.attributes = window.attributes.apply {
+            preferredDisplayModeId = preferredMode.modeId
+        }
     }
 
     private fun listSamsungCalendars(): List<Map<String, Any?>> {

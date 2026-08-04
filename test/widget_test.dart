@@ -39,24 +39,48 @@ Future<void> _openWelcomeStartPage(WidgetTester tester) async {
 }
 
 void main() {
-  test('macOS uses desktop text scales instead of iPhone scales', () {
-    expect(
-      appTextScaleForPlatform(AppTextSize.basic, TargetPlatform.macOS),
-      1.0,
-    );
-    expect(
-      appTextScaleForPlatform(AppTextSize.large, TargetPlatform.macOS),
-      1.15,
-    );
-    expect(
-      appTextScaleForPlatform(AppTextSize.extraLarge, TargetPlatform.macOS),
-      1.3,
-    );
-    expect(appTextScaleForPlatform(AppTextSize.basic, TargetPlatform.iOS), 0.8);
-    expect(
-      appTextScaleForPlatform(AppTextSize.extraLarge, TargetPlatform.iOS),
-      1.15,
-    );
+  test(
+    'macOS and Windows use desktop text scales instead of iPhone scales',
+    () {
+      expect(
+        appTextScaleForPlatform(AppTextSize.basic, TargetPlatform.macOS),
+        1.0,
+      );
+      expect(
+        appTextScaleForPlatform(AppTextSize.large, TargetPlatform.macOS),
+        1.15,
+      );
+      expect(
+        appTextScaleForPlatform(AppTextSize.extraLarge, TargetPlatform.macOS),
+        1.3,
+      );
+      expect(
+        appTextScaleForPlatform(AppTextSize.basic, TargetPlatform.windows),
+        1.0,
+      );
+      expect(
+        appTextScaleForPlatform(AppTextSize.large, TargetPlatform.windows),
+        1.15,
+      );
+      expect(
+        appTextScaleForPlatform(AppTextSize.extraLarge, TargetPlatform.windows),
+        1.3,
+      );
+      expect(
+        appTextScaleForPlatform(AppTextSize.basic, TargetPlatform.iOS),
+        0.8,
+      );
+      expect(
+        appTextScaleForPlatform(AppTextSize.extraLarge, TargetPlatform.iOS),
+        1.15,
+      );
+    },
+  );
+
+  test('Android and Windows expose the adjacent-month date setting', () {
+    expect(supportsAdjacentMonthDateSetting(TargetPlatform.android), isTrue);
+    expect(supportsAdjacentMonthDateSetting(TargetPlatform.windows), isTrue);
+    expect(supportsAdjacentMonthDateSetting(TargetPlatform.linux), isFalse);
   });
 
   test('theme mode remains selected after settings reload', () async {
@@ -243,6 +267,13 @@ void main() {
   test('Apple platforms automatically request system authentication', () {
     expect(shouldAutomaticallyRequestBiometrics(TargetPlatform.macOS), isTrue);
     expect(shouldAutomaticallyRequestBiometrics(TargetPlatform.iOS), isTrue);
+    expect(
+      shouldAutomaticallyRequestBiometrics(
+        TargetPlatform.android,
+        alreadyAttempted: true,
+      ),
+      isFalse,
+    );
   });
 
   test('app text size remains selected after settings reload', () async {

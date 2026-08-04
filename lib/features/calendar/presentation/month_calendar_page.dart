@@ -92,7 +92,12 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     final eventsAsync = ref.watch(eventsInRangeProvider(range));
     final wide = MediaQuery.sizeOf(context).width >= 880;
     final platform = Theme.of(context).platform;
-    final macOS = platform == TargetPlatform.macOS;
+    final desktop = _usesMacDesktopExperience(platform);
+    final showAndroidHorizontalMonthIndicator =
+        platform == TargetPlatform.android &&
+        viewMode == CalendarViewMode.month &&
+        settings.monthNavigationMode == MonthNavigationMode.horizontal &&
+        MediaQuery.sizeOf(context).width < 680;
     final inlineAi =
         platform == TargetPlatform.iOS &&
         settings.monthNavigationMode == MonthNavigationMode.horizontal;
@@ -102,7 +107,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
         behavior: HitTestBehavior.translucent,
         onPointerDown: _handlePagePointerDown,
         child: SafeArea(
-          bottom: macOS,
+          bottom: desktop,
           child: Stack(
             children: [
               Column(
@@ -123,6 +128,8 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                     onCalendarViewSelected: _selectCalendarView,
                     onLlmPressed: _toggleAiPanel,
                   ),
+                  if (showAndroidHorizontalMonthIndicator)
+                    _AndroidHorizontalMonthIndicator(month: month),
                   Expanded(
                     child: _OrderedCalendarSwitcher(
                       order: _calendarContentOrder(
@@ -276,7 +283,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                     ),
                   ),
                   if (inlineAi) _buildInlineAiPanel(),
-                  if (!macOS)
+                  if (!desktop)
                     ValueListenableBuilder<bool>(
                       valueListenable: _aiOpen,
                       builder: (context, aiOpen, _) {
@@ -309,7 +316,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                     ),
                 ],
               ),
-              _buildAiOverlay(context, macOS: macOS, inline: inlineAi),
+              _buildAiOverlay(context, desktop: desktop, inline: inlineAi),
             ],
           ),
         ),
@@ -498,13 +505,13 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
 
   Widget _buildAiOverlay(
     BuildContext context, {
-    required bool macOS,
+    required bool desktop,
     required bool inline,
   }) {
     if (inline) {
       return const SizedBox.shrink();
     }
-    final bottomInset = macOS
+    final bottomInset = desktop
         ? 0.0
         : 62.0 + math.max(MediaQuery.paddingOf(context).bottom, 6.0);
     return Positioned(
@@ -1242,7 +1249,7 @@ class _WeekPageViewState extends State<_WeekPageView> {
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
-    if (!_isMacHorizontalPageScroll(context, event) ||
+    if (!_isDesktopHorizontalPageScroll(context, event) ||
         !_controller.hasClients) {
       return;
     }
@@ -1411,7 +1418,7 @@ class _DayPageViewState extends State<_DayPageView> {
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
-    if (!_isMacHorizontalPageScroll(context, event) ||
+    if (!_isDesktopHorizontalPageScroll(context, event) ||
         !_controller.hasClients) {
       return;
     }
@@ -1522,7 +1529,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   var _verticalExtentRevision = 0;
   var _preservingVerticalExtent = false;
   DateTime? _lastPointerMonthMoveAt;
-  final Map<int, GlobalKey> _continuousGridKeys = {};
+  final Map<int, RenderBox> _continuousGridBoxes = {};
   final ValueNotifier<(DateTime?, DateTime?)> _continuousRangeNotifier =
       ValueNotifier((null, null));
   DateTime? _continuousRangeStart;
@@ -1635,10 +1642,6 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
                         ),
                         itemBuilder: (context, index) {
                           final pageMonth = _monthForPage(index);
-                          final hitTestKey = _continuousGridKeys.putIfAbsent(
-                            index,
-                            GlobalKey.new,
-                          );
                           return Column(
                             key: ValueKey(
                               'continuous-month-${pageMonth.year}-${pageMonth.month}',
@@ -1659,7 +1662,16 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
                                             searchQuery: widget.searchQuery,
                                             continuous: true,
                                             showWeekdayHeader: false,
-                                            rangeHitTestKey: hitTestKey,
+                                            onRangeHitTestBoxChanged: (box) {
+                                              if (box == null) {
+                                                _continuousGridBoxes.remove(
+                                                  index,
+                                                );
+                                              } else {
+                                                _continuousGridBoxes[index] =
+                                                    box;
+                                              }
+                                            },
                                             externalRangeStart: range.$1,
                                             externalRangeEnd: range.$2,
                                             enableRangeGestures: false,
@@ -1813,10 +1825,9 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 
   DateTime? _continuousDateAt(Offset globalPosition) {
-    for (final entry in _continuousGridKeys.entries) {
-      final gridContext = entry.value.currentContext;
-      final renderObject = gridContext?.findRenderObject();
-      if (renderObject is! RenderBox || !renderObject.hasSize) {
+    for (final entry in _continuousGridBoxes.entries) {
+      final renderObject = entry.value;
+      if (!renderObject.hasSize || !renderObject.attached) {
         continue;
       }
       final local = renderObject.globalToLocal(globalPosition);
@@ -1847,7 +1858,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
-    if (Theme.of(context).platform != TargetPlatform.macOS ||
+    if (!_usesMacDesktopExperience(Theme.of(context).platform) ||
         event is! PointerScrollEvent ||
         !_controller.hasClients) {
       return;
@@ -2042,6 +2053,28 @@ class _ResponsiveMonthPagePhysics extends PageScrollPhysics {
   );
 }
 
+class _AndroidHorizontalMonthIndicator extends StatelessWidget {
+  const _AndroidHorizontalMonthIndicator({required this.month});
+
+  final DateTime month;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      key: const ValueKey('android-horizontal-month-indicator'),
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        '${month.month}월',
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
 class _MonthBoundaryLabel extends StatelessWidget {
   const _MonthBoundaryLabel({required this.month});
 
@@ -2070,17 +2103,21 @@ class _MonthBoundaryLabel extends StatelessWidget {
   }
 }
 
-bool _isMacHorizontalPageScroll(
+bool _isDesktopHorizontalPageScroll(
   BuildContext context,
   PointerSignalEvent event,
 ) {
-  if (Theme.of(context).platform != TargetPlatform.macOS ||
+  if (!_usesMacDesktopExperience(Theme.of(context).platform) ||
       event is! PointerScrollEvent) {
     return false;
   }
   final horizontal = event.scrollDelta.dx.abs();
   final vertical = event.scrollDelta.dy.abs();
   return horizontal >= 18 && horizontal > vertical;
+}
+
+bool _usesMacDesktopExperience(TargetPlatform platform) {
+  return platform == TargetPlatform.macOS || platform == TargetPlatform.windows;
 }
 
 class _CalendarMonthPage extends ConsumerWidget {
@@ -2092,7 +2129,7 @@ class _CalendarMonthPage extends ConsumerWidget {
     required this.onDateSelected,
     this.continuous = false,
     this.showWeekdayHeader = true,
-    this.rangeHitTestKey,
+    this.onRangeHitTestBoxChanged,
     this.externalRangeStart,
     this.externalRangeEnd,
     this.enableRangeGestures = true,
@@ -2105,7 +2142,7 @@ class _CalendarMonthPage extends ConsumerWidget {
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
   final bool continuous;
   final bool showWeekdayHeader;
-  final GlobalKey? rangeHitTestKey;
+  final ValueChanged<RenderBox?>? onRangeHitTestBoxChanged;
   final DateTime? externalRangeStart;
   final DateTime? externalRangeEnd;
   final bool enableRangeGestures;
@@ -2133,7 +2170,7 @@ class _CalendarMonthPage extends ConsumerWidget {
               !continuous && settings.showAdjacentMonthDates,
           continuous: continuous,
           showWeekdayHeader: showWeekdayHeader,
-          rangeHitTestKey: rangeHitTestKey,
+          onRangeHitTestBoxChanged: onRangeHitTestBoxChanged,
           externalRangeStart: externalRangeStart,
           externalRangeEnd: externalRangeEnd,
           enableRangeGestures: enableRangeGestures,
@@ -2160,7 +2197,7 @@ class _CalendarMonthPage extends ConsumerWidget {
         showAdjacentMonthDates: !continuous && settings.showAdjacentMonthDates,
         continuous: continuous,
         showWeekdayHeader: showWeekdayHeader,
-        rangeHitTestKey: rangeHitTestKey,
+        onRangeHitTestBoxChanged: onRangeHitTestBoxChanged,
         externalRangeStart: externalRangeStart,
         externalRangeEnd: externalRangeEnd,
         enableRangeGestures: enableRangeGestures,
@@ -2249,13 +2286,19 @@ class _CalendarHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final label = monthNavigationMode == MonthNavigationMode.vertical
-        ? '${month.year}년'
-        : '${month.year}년 ${month.month}월';
     final compact = MediaQuery.sizeOf(context).width < 680;
     final platform = Theme.of(context).platform;
     final ios = platform == TargetPlatform.iOS;
-    final macOS = platform == TargetPlatform.macOS;
+    final desktop = _usesMacDesktopExperience(platform);
+    // Android's compact toolbar reserves fixed-width navigation and utility
+    // actions. Keep the period control to a single year there so its label and
+    // tap target cannot be squeezed out in horizontal month navigation.
+    final showYearOnly =
+        monthNavigationMode == MonthNavigationMode.vertical ||
+        (compact && !ios);
+    final label = showYearOnly
+        ? '${month.year}년'
+        : '${month.year}년 ${month.month}월';
     final colorScheme = Theme.of(context).colorScheme;
     final monthButton = TextButton.icon(
       key: const ValueKey('calendar-period-button'),
@@ -2317,7 +2360,7 @@ class _CalendarHeader extends ConsumerWidget {
       ),
     ];
 
-    if (macOS) {
+    if (desktop) {
       final viewSwitch = SegmentedButton<CalendarViewMode>(
         selected: quickAccessSelected ? const {} : {viewMode},
         emptySelectionAllowed: quickAccessSelected,
@@ -3220,7 +3263,7 @@ class _YearOverviewPageState extends State<_YearOverviewPage> {
   @override
   Widget build(BuildContext context) {
     final vertical = widget.navigationMode == MonthNavigationMode.vertical;
-    final desktop = Theme.of(context).platform == TargetPlatform.macOS;
+    final desktop = _usesMacDesktopExperience(Theme.of(context).platform);
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(

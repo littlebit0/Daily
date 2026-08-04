@@ -188,6 +188,31 @@ void main() {
     expect(tester.getSize(flag).width, inInclusiveRange(170, 190));
   });
 
+  testWidgets('shows adjacent-month dates when enabled', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            height: 420,
+            child: CalendarMonthGrid(
+              month: DateTime(2026, 4),
+              selectedDate: DateTime(2026, 4, 1),
+              events: const [],
+              weekStartsOnMonday: true,
+              showLunarDates: false,
+              showAdjacentMonthDates: true,
+              onDateSelected: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('day-number-2026-3-30')), findsOneWidget);
+    expect(find.byKey(const ValueKey('day-number-2026-5-3')), findsOneWidget);
+  });
+
   testWidgets('uses fixed iPhone-width event capacity in month cells', (
     tester,
   ) async {
@@ -352,6 +377,71 @@ void main() {
 
     expect(selectedStart, DateTime(2026, 5, 4));
     expect(selectedEnd, DateTime(2026, 5, 8));
+  });
+
+  testWidgets('selects a date with a stationary mouse click', (tester) async {
+    DateTime? selectedDate;
+    final targetDate = DateTime(2026, 5, 12);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            height: 420,
+            child: CalendarMonthGrid(
+              month: DateTime(2026, 5),
+              selectedDate: DateTime(2026, 5, 1),
+              events: const [],
+              weekStartsOnMonday: true,
+              showLunarDates: false,
+              onDateSelected: (date) => selectedDate = date,
+              onDateRangeSelected: (_, _) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(_dayNumberKey(targetDate)),
+      kind: PointerDeviceKind.mouse,
+      buttons: kPrimaryMouseButton,
+    );
+    await gesture.up();
+    await tester.pump();
+
+    expect(selectedDate, targetDate);
+  });
+
+  testWidgets('selects a date with a touch tap', (tester) async {
+    DateTime? selectedDate;
+    final targetDate = DateTime(2026, 5, 12);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            height: 420,
+            child: CalendarMonthGrid(
+              month: DateTime(2026, 5),
+              selectedDate: DateTime(2026, 5, 1),
+              events: const [],
+              weekStartsOnMonday: true,
+              showLunarDates: false,
+              onDateSelected: (date) => selectedDate = date,
+              onDateRangeSelected: (_, _) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(_dayNumberKey(targetDate));
+    await tester.pump();
+
+    expect(selectedDate, targetDate);
   });
 
   test('defines the requested full-app text scale choices', () {

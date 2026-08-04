@@ -33,7 +33,7 @@ android {
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         // Android requires an integer versionCode. 301 represents Daily 3.0.1.
-        versionCode = 300
+        versionCode = 301
         versionName = flutter.versionName
     }
 

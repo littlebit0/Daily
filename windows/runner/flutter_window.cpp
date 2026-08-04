@@ -19,6 +19,9 @@ constexpr UINT kTrayOpenCommand = 40001;
 constexpr UINT kTrayExitCommand = 40002;
 constexpr UINT kTrayMiniCalendarCommand = 40003;
 
+using TaskDialogIndirectFn = HRESULT(WINAPI*)(
+    const TASKDIALOGCONFIG*, int*, int*, BOOL*);
+
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -113,7 +116,26 @@ void FlutterWindow::OpenMapChooser(
   config.nDefaultButton = IDCANCEL;
 
   int selected = IDCANCEL;
-  TaskDialogIndirect(&config, &selected, nullptr, nullptr);
+  // TaskDialogIndirect is only exported by Common Controls v6. Resolve it at
+  // runtime so an installation with the legacy control library can still open
+  // the application and use the map chooser fallback.
+  HMODULE common_controls = LoadLibraryW(L"comctl32.dll");
+  const auto task_dialog = common_controls == nullptr
+      ? nullptr
+      : reinterpret_cast<TaskDialogIndirectFn>(
+            GetProcAddress(common_controls, "TaskDialogIndirect"));
+  if (task_dialog != nullptr) {
+    task_dialog(&config, &selected, nullptr, nullptr);
+  } else {
+    const int fallback = MessageBoxW(
+        GetHandle(),
+        L"Yes: Kakao Map\nNo: Naver Map\nCancel: Close",
+        L"Daily", MB_YESNOCANCEL | MB_ICONQUESTION);
+    selected = fallback == IDYES ? 1001 : fallback == IDNO ? 1002 : IDCANCEL;
+  }
+  if (common_controls != nullptr) {
+    FreeLibrary(common_controls);
+  }
   switch (selected) {
     case 1001:
       result->Success(flutter::EncodableValue("kakao"));

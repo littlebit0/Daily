@@ -22,7 +22,7 @@ GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 
 - GitHub Release IPA: `daily-ios-3.0.1-unsigned.ipa`
 - GitHub Release macOS DMG: `daily-macos-3.0.1-unsigned.dmg`
-- GitHub Release Android APK: `daily-android-3.0.1-debug.apk`
+- GitHub Release Android APK: `daily-android-3.0.1.apk`
 - GitHub Release Windows ZIP: `daily-windows-3.0.1.zip`
 
 공유 설정과 Google Drive 동기화 스키마 변경이 포함되어 네 플랫폼 산출물을 같은
@@ -279,6 +279,8 @@ Android Play Store와 Microsoft Store 배포는 보류 상태입니다. 다음 �
 
 - Android upload keystore: `android/app/upload-keystore.jks`
 - Android signing config: `android/key.properties`
+- GitHub Actions Android signing secrets: `ANDROID_KEYSTORE_BASE64`,
+  `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
 - Desktop OAuth client secret
 - Apple signing identity와 provisioning profile
 - GitHub/Google API token
