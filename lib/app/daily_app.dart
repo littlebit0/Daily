@@ -31,7 +31,9 @@ class DailyApp extends ConsumerWidget {
       key: ValueKey(
         settings.onboardingCompleted ? 'daily-home' : 'daily-onboarding',
       ),
-      title: 'Daily',
+      title: defaultTargetPlatform == TargetPlatform.windows
+          ? 'DailyCalendar'
+          : 'Daily',
       debugShowCheckedModeBanner: false,
       theme: DailyTheme.light(),
       darkTheme: DailyTheme.dark(),

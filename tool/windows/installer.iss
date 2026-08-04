@@ -5,12 +5,12 @@
 
 [Setup]
 AppId={{A27D9263-2AE6-4E06-B2C5-CFA9ADFE8B2F}
-AppName=Daily
+AppName=DailyCalendar
 AppVersion={#MyAppVersion}
 AppPublisher=littlebit0
-DefaultDirName={autopf}\Daily
-DefaultGroupName=Daily
-UninstallDisplayIcon={app}\daily.exe
+DefaultDirName={autopf}\DailyCalendar
+DefaultGroupName=DailyCalendar
+UninstallDisplayIcon={app}\DailyCalendar.exe
 OutputDir=..\..\dist
 OutputBaseFilename=daily-windows-{#MyAppVersion}-setup
 Compression=lzma2
@@ -27,9 +27,12 @@ Name: "desktopicon"; Description: "바탕 화면에 바로가기 만들기"; Fla
 [Files]
 Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+Type: files; Name: "{app}\daily.exe"
+
 [Icons]
-Name: "{autoprograms}\Daily"; Filename: "{app}\daily.exe"
-Name: "{autodesktop}\Daily"; Filename: "{app}\daily.exe"; Tasks: desktopicon
+Name: "{autoprograms}\DailyCalendar"; Filename: "{app}\DailyCalendar.exe"
+Name: "{autodesktop}\DailyCalendar"; Filename: "{app}\DailyCalendar.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\daily.exe"; Description: "Daily 실행"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\DailyCalendar.exe"; Description: "DailyCalendar 실행"; Flags: nowait postinstall skipifsilent

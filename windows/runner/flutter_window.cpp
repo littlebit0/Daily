@@ -108,7 +108,7 @@ void FlutterWindow::OpenMapChooser(
   config.cbSize = sizeof(config);
   config.hwndParent = GetHandle();
   config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
-  config.pszWindowTitle = L"Daily";
+  config.pszWindowTitle = L"DailyCalendar";
   config.pszMainInstruction = L"지도에서 열기";
   config.pszContent = L"선택한 지도 서비스의 웹사이트가 기본 브라우저에서 열립니다.";
   config.cButtons = ARRAYSIZE(buttons);
@@ -130,7 +130,7 @@ void FlutterWindow::OpenMapChooser(
     const int fallback = MessageBoxW(
         GetHandle(),
         L"Yes: Kakao Map\nNo: Naver Map\nCancel: Close",
-        L"Daily", MB_YESNOCANCEL | MB_ICONQUESTION);
+        L"DailyCalendar", MB_YESNOCANCEL | MB_ICONQUESTION);
     selected = fallback == IDYES ? 1001 : fallback == IDNO ? 1002 : IDCANCEL;
   }
   if (common_controls != nullptr) {
@@ -236,7 +236,7 @@ void FlutterWindow::AddTrayIcon() {
   notify_icon_data_.uCallbackMessage = kTrayIconMessage;
   notify_icon_data_.hIcon =
       LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
-  wcscpy_s(notify_icon_data_.szTip, L"Daily");
+  wcscpy_s(notify_icon_data_.szTip, L"DailyCalendar");
 
   tray_icon_added_ = Shell_NotifyIcon(NIM_ADD, &notify_icon_data_) == TRUE;
   if (tray_icon_added_) {
@@ -276,7 +276,7 @@ void FlutterWindow::ShowTrayMenu() {
     return;
   }
 
-  AppendMenu(menu, MF_STRING, kTrayOpenCommand, L"Open Daily");
+  AppendMenu(menu, MF_STRING, kTrayOpenCommand, L"Open DailyCalendar");
   AppendMenu(menu, MF_STRING, kTrayMiniCalendarCommand, L"Mini Calendar");
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenu(menu, MF_STRING, kTrayExitCommand, L"Exit");
@@ -307,7 +307,7 @@ void FlutterWindow::ShowMiniCalendar() {
     return;
   }
 
-  MessageBox(hwnd, BuildMiniCalendarText().c_str(), L"Daily Mini Calendar",
+  MessageBox(hwnd, BuildMiniCalendarText().c_str(), L"DailyCalendar Mini Calendar",
              MB_OK | MB_ICONINFORMATION);
 }
 
@@ -342,7 +342,7 @@ std::wstring FlutterWindow::BuildMiniCalendarText() {
     }
   }
 
-  stream << L"\n\nOpen Daily to view and add schedules.";
+  stream << L"\n\nOpen DailyCalendar to view and add schedules.";
   return stream.str();
 }
 
