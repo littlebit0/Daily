@@ -127,7 +127,7 @@ jobs:
           if-no-files-found: error
 
   windows:
-    name: Windows release ZIP
+    name: Windows release ZIP and installer
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -143,6 +143,19 @@ jobs:
         env:
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: flutter build windows --release --no-pub --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$env:GOOGLE_DESKTOP_CLIENT_SECRET"
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_TAG.TrimStart("v")
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { throw "Inno Setup compiler was not found." }
+          & $iscc "/DMyAppVersion=$version" tool\windows\installer.iss
       - name: Stage ZIP
         shell: pwsh
         run: |
@@ -152,7 +165,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: release-windows
-          path: dist/*.zip
+          path: dist/*
           if-no-files-found: error
 
   publish:

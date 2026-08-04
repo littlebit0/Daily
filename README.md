@@ -24,6 +24,7 @@ GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 - GitHub Release macOS DMG: `daily-macos-3.0.1-unsigned.dmg`
 - GitHub Release Android APK: `daily-android-3.0.1.apk`
 - GitHub Release Windows ZIP: `daily-windows-3.0.1.zip`
+- GitHub Release Windows 설치 프로그램: `daily-windows-3.0.1-setup.exe` (설치 후 새 릴리스를 자동으로 적용)
 
 공유 설정과 Google Drive 동기화 스키마 변경이 포함되어 네 플랫폼 산출물을 같은
 릴리스에 제공합니다. Android와 Windows는 자동 빌드 검증 후 실제 OS에서 계정,
