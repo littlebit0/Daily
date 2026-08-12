@@ -47,6 +47,8 @@ let launchTargets: [ImageTarget] = [
     ImageTarget(path: "ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@3x.png", width: 504, height: 555),
 ]
 
+let appleOnly = CommandLine.arguments.contains("--apple-only")
+
 func color(_ hex: UInt32) -> NSColor {
     let red = CGFloat((hex >> 16) & 0xff) / 255
     let green = CGFloat((hex >> 8) & 0xff) / 255
@@ -73,14 +75,14 @@ func drawIcon(size: Int) -> NSImage {
 
     let bounds = CGRect(x: 0, y: 0, width: side, height: side)
     let bg = NSGradient(
-        starting: color(0xF8FBFF),
-        ending: color(0xDCEAFF)
+        starting: color(0xFFFFFF),
+        ending: color(0xEEF3FA)
     )!
-    bg.draw(in: NSBezierPath(rect: bounds), angle: -45)
+    bg.draw(in: NSBezierPath(rect: bounds), angle: -55)
 
-    let inset = side * 0.15
-    let card = CGRect(x: inset, y: side * 0.16, width: side - inset * 2, height: side * 0.70)
-    let radius = side * 0.11
+    let inset = side * 0.13
+    let card = CGRect(x: inset, y: side * 0.14, width: side - inset * 2, height: side * 0.73)
+    let radius = side * 0.13
 
     context.saveGState()
     context.setShadow(offset: CGSize(width: 0, height: -side * 0.018), blur: side * 0.05, color: NSColor.black.withAlphaComponent(0.14).cgColor)
@@ -88,47 +90,52 @@ func drawIcon(size: Int) -> NSImage {
     roundedPath(card, radius).fill()
     context.restoreGState()
 
-    color(0xD5DFEF).setStroke()
+    color(0xE1E7F0).setStroke()
     let border = roundedPath(card.insetBy(dx: side * 0.006, dy: side * 0.006), radius)
     border.lineWidth = max(1, side * 0.006)
     border.stroke()
 
-    let header = CGRect(x: card.minX, y: card.maxY - card.height * 0.27, width: card.width, height: card.height * 0.27)
+    let header = CGRect(x: card.minX, y: card.maxY - card.height * 0.26, width: card.width, height: card.height * 0.26)
     let headerPath = roundedPath(header, radius)
     context.saveGState()
     roundedPath(card, radius).addClip()
-    let headerGradient = NSGradient(starting: color(0x2F6BFF), ending: color(0x27C6D9))!
+    let headerGradient = NSGradient(starting: color(0x2867F0), ending: color(0x4A8CFF))!
     headerGradient.draw(in: headerPath, angle: 0)
     context.restoreGState()
 
     color(0xEEF4FF).setFill()
-    let ringY = card.maxY - card.height * 0.135
+    let ringY = card.maxY - card.height * 0.13
     for x in [card.minX + card.width * 0.28, card.maxX - card.width * 0.28] {
         let ring = CGRect(x: x - side * 0.027, y: ringY - side * 0.027, width: side * 0.054, height: side * 0.054)
         NSBezierPath(ovalIn: ring).fill()
     }
 
-    let textSize = side * 0.33
+    let textSize = side * 0.37
     let paragraph = NSMutableParagraphStyle()
     paragraph.alignment = .center
     let attrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: textSize, weight: .heavy),
-        .foregroundColor: color(0x162033),
+        .font: NSFont.systemFont(ofSize: textSize, weight: .medium),
+        .foregroundColor: color(0x242936),
         .paragraphStyle: paragraph,
     ]
-    let textRect = CGRect(x: card.minX, y: card.minY + card.height * 0.16, width: card.width, height: card.height * 0.34)
-    NSString(string: "D").draw(in: textRect, withAttributes: attrs)
+    let textRect = CGRect(
+        x: card.minX,
+        y: card.minY + card.height * 0.20,
+        width: card.width,
+        height: card.height * 0.42
+    )
+    NSString(string: "24").draw(in: textRect, withAttributes: attrs)
 
-    let dotSize = side * 0.058
-    for row in 0..<2 {
-        for col in 0..<3 {
-            let x = card.minX + card.width * (0.28 + CGFloat(col) * 0.22)
-            let y = card.minY + card.height * (0.12 + CGFloat(row) * 0.13)
-            let dot = CGRect(x: x - dotSize / 2, y: y - dotSize / 2, width: dotSize, height: dotSize)
-            (row == 1 && col == 1 ? color(0x2F6BFF) : color(0xD9E3F3)).setFill()
-            NSBezierPath(ovalIn: dot).fill()
-        }
-    }
+    let markerWidth = side * 0.085
+    let markerHeight = max(1, side * 0.016)
+    let marker = CGRect(
+        x: card.midX - markerWidth / 2,
+        y: card.minY + card.height * 0.12,
+        width: markerWidth,
+        height: markerHeight
+    )
+    color(0xFF624F).setFill()
+    roundedPath(marker, markerHeight / 2).fill()
 
     image.unlockFocus()
     return image
@@ -193,7 +200,7 @@ func writePNG(_ image: NSImage, path: String, width: Int, height: Int) throws {
     }
 }
 
-for target in targets {
+for target in targets where !appleOnly || target.path.hasPrefix("ios/") || target.path.hasPrefix("macos/") {
     try writePNG(drawIcon(size: target.size), path: target.path, width: target.size, height: target.size)
     print("wrote \(target.path)")
 }
