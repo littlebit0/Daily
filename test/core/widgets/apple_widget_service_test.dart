@@ -3,8 +3,11 @@ import 'package:daily/core/widgets/apple_widget_service.dart';
 import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_category.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
+  setUpAll(() => initializeDateFormatting('ko'));
+
   test('builds month, today, and D-day widget data', () {
     final now = DateTime(2026, 7, 28, 10);
     final events = [
@@ -24,7 +27,7 @@ void main() {
 
     final snapshot = AppleWidgetSnapshotBuilder.build(
       now: now,
-      settings: AppSettings(),
+      settings: AppSettings(language: AppLanguage.korean),
       gridStart: DateTime(2026, 6, 28),
       monthEvents: events,
       allEvents: events,
@@ -76,6 +79,7 @@ void main() {
     final snapshot = AppleWidgetSnapshotBuilder.build(
       now: now,
       settings: AppSettings(
+        language: AppLanguage.korean,
         hiddenCategoryIds: const ['hidden'],
         calendarShowHolidays: false,
       ),
@@ -98,7 +102,7 @@ void main() {
 
     final snapshot = AppleWidgetSnapshotBuilder.build(
       now: DateTime(2026, 7, 28),
-      settings: AppSettings(),
+      settings: AppSettings(language: AppLanguage.korean),
       gridStart: DateTime(2026, 6, 28),
       monthEvents: [event],
       allEvents: [event],

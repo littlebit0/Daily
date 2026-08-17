@@ -39,6 +39,16 @@ Future<void> _openWelcomeStartPage(WidgetTester tester) async {
 }
 
 void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.instance.platformDispatcher.localesTestValue =
+        const [Locale('ko')];
+  });
+
+  tearDown(() {
+    TestWidgetsFlutterBinding.instance.platformDispatcher
+        .clearLocalesTestValue();
+  });
+
   test(
     'macOS and Windows use desktop text scales instead of iPhone scales',
     () {
@@ -122,6 +132,99 @@ void main() {
         repository.load().monthNavigationMode,
         MonthNavigationMode.vertical,
       );
+    },
+  );
+
+  test(
+    'week and day layout mode remains selected after settings reload',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = SettingsRepository(preferences: preferences);
+
+      await repository.save(
+        repository.load().copyWith(
+          weekDayLayoutMode: WeekDayLayoutMode.schedule,
+        ),
+      );
+
+      expect(repository.load().weekDayLayoutMode, WeekDayLayoutMode.schedule);
+    },
+  );
+
+  testWidgets(
+    'schedule view scrolls time vertically and changes week horizontally',
+    (tester) async {
+      tester.view.physicalSize = const Size(393, 852);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      SharedPreferences.setMockInitialValues({
+        'onboardingCompleted': true,
+        'defaultCalendarView': 'week',
+        'weekDayLayoutMode': 'schedule',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(_FakeNotification()),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+            eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+            googleDriveAuthServiceProvider.overrideWithValue(
+              _FakeGoogleDriveAuthService(),
+            ),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('schedule-timeline')), findsWidgets);
+      expect(
+        find.byKey(const ValueKey('schedule-all-day-toggle')),
+        findsWidgets,
+      );
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DailyApp)),
+      );
+      final initialDate = container.read(selectedDateProvider);
+      final timeScroll = find
+          .byKey(const ValueKey('schedule-time-scroll'))
+          .first;
+      final scrollable = tester.widget<SingleChildScrollView>(timeScroll);
+      final initialOffset = scrollable.controller!.offset;
+      await tester.drag(timeScroll, const Offset(0, -180));
+      await tester.pumpAndSettle();
+
+      expect(scrollable.controller!.offset, greaterThan(initialOffset));
+      expect(container.read(selectedDateProvider), initialDate);
+
+      await tester.tap(
+        find.byKey(const ValueKey('schedule-all-day-toggle')).first,
+      );
+      await tester.pump();
+      expect(find.byIcon(Icons.event_busy_outlined), findsWidgets);
+
+      await tester.drag(
+        find.byKey(const ValueKey('schedule-timeline')).first,
+        const Offset(-280, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(selectedDateProvider).difference(initialDate).inDays,
+        7,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
     },
   );
 
@@ -948,7 +1051,14 @@ void main() {
     final reservedSpaceRect = tester.getRect(
       find.byKey(const ValueKey('ios-calendar-header-reserved-space')),
     );
-    expect(periodButtonRect.width, lessThan(130));
+    expect(periodButtonRect.width, lessThan(180));
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('calendar-period-button')),
+        matching: find.byType(FittedBox),
+      ),
+      findsOneWidget,
+    );
     expect(periodButtonRect.left, lessThan(16));
     expect(reservedSpaceRect.left, closeTo(periodButtonRect.right, 0.1));
     expect(reservedSpaceRect.width, greaterThan(0));
@@ -1114,35 +1224,155 @@ void main() {
       tester.getRect(find.byKey(const ValueKey('ios-calendar-toolbar'))),
       iosToolbarBeforeAi,
     );
-    final calendarRectWithAi = tester.getRect(find.byType(PageView));
-    final aiPanelRect = tester.getRect(
-      find.byKey(const ValueKey('inline-ai-layout-panel')),
-    );
-    final bottomBarRect = tester.getRect(
-      find.byKey(const ValueKey('calendar-bottom-bar')),
-    );
-    expect(aiPanelRect.top, closeTo(calendarRectWithAi.bottom, 0.1));
-    expect(aiPanelRect.bottom, closeTo(bottomBarRect.top, 0.1));
     expect(find.byType(BottomSheet), findsNothing);
     expect(find.byTooltip('AI 입력 닫기'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('AI 입력 닫기'));
+    debugDefaultTargetPlatformOverride = null;
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('iOS calendar view slider expands for English labels', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({
+      'onboardingCompleted': true,
+      'appleUserIdentifier': 'apple-user',
+      'appleEmail': 'hwi@example.com',
+      'language': AppLanguage.english.name,
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(_FakeNotification()),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(),
+          ),
+        ],
+        child: const DailyApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
+    final viewSlider = find.byKey(const ValueKey('calendar-view-button'));
+    expect(find.text('Week'), findsOneWidget);
+    expect(find.text('Month'), findsOneWidget);
+    expect(find.text('Day'), findsOneWidget);
+    expect(tester.getSize(viewSlider).width, greaterThan(76));
     expect(
-      find.byKey(const ValueKey('inline-ai-layout-panel')),
-      findsOneWidget,
+      tester.getRect(viewSlider).right,
+      lessThanOrEqualTo(
+        tester.getRect(find.byKey(const ValueKey('bottom-mode-switcher'))).left,
+      ),
     );
-    expect(
-      tester
-          .getSize(find.byKey(const ValueKey('inline-ai-layout-panel')))
-          .height,
-      0,
+
+    debugDefaultTargetPlatformOverride = null;
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Signal typed event changes require explicit confirmation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    const signalChannel = MethodChannel('daily/signal_voice');
+    final signalCalls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(signalChannel, (call) async {
+          signalCalls.add(call);
+          return switch (call.method) {
+            'startListening' => throw PlatformException(
+              code: 'listening_cancelled',
+            ),
+            'cancelListening' || 'speak' => null,
+            'runSignal'
+                when (call.arguments as Map<Object?, Object?>)['confirmed'] ==
+                    false => throw PlatformException(
+              code: 'signal_confirmation_required',
+            ),
+            'runSignal' => <String, Object?>{
+              'message': '일정을 추가했습니다.',
+              'success': true,
+            },
+            _ => throw PlatformException(code: 'unexpected_method'),
+          };
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(signalChannel, null);
+    });
+
+    SharedPreferences.setMockInitialValues({
+      'onboardingCompleted': true,
+      'appleUserIdentifier': 'apple-user',
+      'appleEmail': 'hwi@example.com',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(_FakeNotification()),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(),
+          ),
+        ],
+        child: const DailyApp(),
+      ),
     );
-    expect(
-      tester.getSize(find.byType(PageView)).height,
-      closeTo(calendarHeightBeforeAi, 0.1),
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('AI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('텍스트로 입력'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('signal-text-input')),
+      '내일 오전 9시부터 10시까지 운동 일정 추가',
     );
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    await tester.pumpAndSettle();
+
+    expect(find.text('이 명령을 실행할까요?'), findsOneWidget);
+    final previewCall = signalCalls.singleWhere(
+      (call) => call.method == 'runSignal',
+    );
+    expect(previewCall.arguments, {
+      'command': '내일 오전 9시부터 10시까지 운동 일정 추가',
+      'confirmed': false,
+    });
+
+    await tester.tap(find.widgetWithText(FilledButton, '실행'));
+    await tester.pumpAndSettle();
+
+    final runCall = signalCalls
+        .where((call) => call.method == 'runSignal')
+        .last;
+    expect(runCall.arguments, {
+      'command': '내일 오전 9시부터 10시까지 운동 일정 추가',
+      'confirmed': true,
+    });
+    expect(find.text('일정을 추가했습니다.'), findsOneWidget);
 
     debugDefaultTargetPlatformOverride = null;
     await tester.pumpWidget(const SizedBox.shrink());

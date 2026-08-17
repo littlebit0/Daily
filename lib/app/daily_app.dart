@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/di/app_providers.dart';
@@ -10,6 +11,7 @@ import '../core/auth/google_account.dart';
 import '../core/security/biometric_auth_service.dart';
 import '../core/security/app_lock_privacy_service.dart';
 import '../core/settings/app_settings.dart';
+import '../core/localization/app_localizations.dart';
 import '../features/calendar/presentation/month_calendar_page.dart';
 import '../features/onboarding/presentation/welcome_page.dart';
 import 'daily_theme.dart';
@@ -35,6 +37,27 @@ class DailyApp extends ConsumerWidget {
           ? 'DailyCalendar'
           : 'Daily',
       debugShowCheckedModeBanner: false,
+      locale: localeForLanguage(settings.language),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      localeResolutionCallback: (locale, supportedLocales) {
+        if (locale == null) return const Locale('en');
+        if (locale.languageCode == 'zh') {
+          return const Locale.fromSubtags(
+            languageCode: 'zh',
+            scriptCode: 'Hant',
+          );
+        }
+        return supportedLocales.firstWhere(
+          (supported) => supported.languageCode == locale.languageCode,
+          orElse: () => const Locale('en'),
+        );
+      },
       theme: DailyTheme.light(),
       darkTheme: DailyTheme.dark(),
       themeMode: switch (settings.themeMode) {
@@ -226,11 +249,13 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
                         const SizedBox(height: 18),
                         Text(
                           switch (lockMethod) {
-                            AppLockMethod.noPin => '잠금 상태에서는 화면을 볼 수 없습니다.',
+                            AppLockMethod.noPin => context.tr(
+                              '잠금 상태에서는 화면을 볼 수 없습니다.',
+                            ),
                             AppLockMethod.appPin when !_pinEntryVisible =>
-                              '잠금 상태입니다.',
-                            AppLockMethod.appPin => 'PIN 입력',
-                            AppLockMethod.system => '잠금 상태입니다.',
+                              context.tr('잠금 상태입니다.'),
+                            AppLockMethod.appPin => context.tr('PIN 입력'),
+                            AppLockMethod.system => context.tr('잠금 상태입니다.'),
                           },
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleLarge,
@@ -242,7 +267,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
                               key: const ValueKey('show-pin-entry-button'),
                               onPressed: _checking ? null : _showPinEntry,
                               icon: const Icon(Icons.password_outlined),
-                              label: const Text('비밀번호를 통해 잠금해제'),
+                              label: Text(context.tr('비밀번호를 통해 잠금해제')),
                             ),
                             if (_error.isNotEmpty) ...[
                               const SizedBox(height: 12),
@@ -276,7 +301,9 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
                           ],
                         ] else if (lockMethod == AppLockMethod.system) ...[
                           Text(
-                            '기기의 Face ID, Touch ID 또는 시스템 비밀번호로 확인합니다.',
+                            context.tr(
+                              '기기의 Face ID, Touch ID 또는 시스템 비밀번호로 확인합니다.',
+                            ),
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
@@ -286,7 +313,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
                                 ? null
                                 : _trySystemAuthentication,
                             icon: const Icon(Icons.lock_open_outlined),
-                            label: const Text('시스템 잠금으로 해제'),
+                            label: Text(context.tr('시스템 잠금으로 해제')),
                           ),
                           if (_error.isNotEmpty) ...[
                             const SizedBox(height: 12),
@@ -452,8 +479,8 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
       setState(() {
         _checking = false;
         _error = keepInputOnFailure
-            ? 'PIN을 계속 입력하거나 지워서 다시 입력하세요.'
-            : 'PIN이 일치하지 않습니다.';
+            ? context.tr('PIN을 계속 입력하거나 지워서 다시 입력하세요.')
+            : context.tr('PIN이 일치하지 않습니다.');
         if (!keepInputOnFailure) {
           _pin = '';
         }
@@ -475,7 +502,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
       }
     });
     final authenticated = await _biometricAuth.authenticate(
-      localizedReason: 'Daily 잠금을 해제하려면 인증이 필요합니다.',
+      localizedReason: context.tr('Daily 잠금을 해제하려면 인증이 필요합니다.'),
       allowDeviceCredentials: true,
     );
     if (!mounted) {
@@ -486,7 +513,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
       if (authenticated) {
         _unlocked = true;
       } else {
-        _error = '시스템 인증을 완료하지 못했습니다.';
+        _error = context.tr('시스템 인증을 완료하지 못했습니다.');
       }
     });
   }
@@ -502,10 +529,12 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
     });
     final authenticated = defaultTargetPlatform == TargetPlatform.macOS
         ? await _biometricAuth.authenticateWithBiometricsOrCompanion(
-            localizedReason: 'Touch ID 또는 Apple Watch로 Daily PIN 잠금을 해제합니다.',
+            localizedReason: context.tr(
+              'Touch ID 또는 Apple Watch로 Daily PIN 잠금을 해제합니다.',
+            ),
           )
         : await _biometricAuth.authenticate(
-            localizedReason: 'Daily PIN 잠금을 생체인식으로 해제합니다.',
+            localizedReason: context.tr('Daily PIN 잠금을 생체인식으로 해제합니다.'),
           );
     if (!mounted) {
       return;
@@ -515,7 +544,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
       if (authenticated) {
         _unlocked = true;
       } else {
-        _error = '생체인식을 완료하지 못했습니다. PIN을 입력해 주세요.';
+        _error = context.tr('생체인식을 완료하지 못했습니다. PIN을 입력해 주세요.');
         _pinEntryVisible = true;
       }
     });
@@ -611,6 +640,9 @@ class _AppHome extends ConsumerStatefulWidget {
 
 class _AppHomeState extends ConsumerState<_AppHome>
     with WidgetsBindingObserver {
+  static const _siriEventChangesChannel = MethodChannel(
+    'daily/siri_event_changes',
+  );
   static const _syncRestoreRetryDelays = <Duration>[
     Duration(seconds: 1),
     Duration(seconds: 3),
@@ -623,12 +655,21 @@ class _AppHomeState extends ConsumerState<_AppHome>
   var _syncRestoreRetryIndex = 0;
   ValueNotifier<int>? _settingsRevisionNotifier;
   VoidCallback? _settingsRevisionListener;
+  Future<void>? _siriChangeProcessing;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _startLocalNotificationServices();
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      _siriEventChangesChannel.setMethodCallHandler(_handleSiriEventChange);
+    }
+    unawaited(
+      _startLocalNotificationServices().then(
+        (_) => _processPendingSiriEventChanges(),
+      ),
+    );
     _startSyncIfConnected();
     _refreshAppleWidgets();
   }
@@ -636,6 +677,10 @@ class _AppHomeState extends ConsumerState<_AppHome>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      _siriEventChangesChannel.setMethodCallHandler(null);
+    }
     _syncRestoreRetryTimer?.cancel();
     final listener = _settingsRevisionListener;
     final notifier = _settingsRevisionNotifier;
@@ -645,12 +690,131 @@ class _AppHomeState extends ConsumerState<_AppHome>
     super.dispose();
   }
 
+  Future<Object?> _handleSiriEventChange(MethodCall call) async {
+    if (call.method != 'eventsChanged' || !mounted) {
+      return null;
+    }
+
+    await _processPendingSiriEventChanges(showFailure: true);
+    return null;
+  }
+
+  Future<void> _processPendingSiriEventChanges({bool showFailure = false}) {
+    final active = _siriChangeProcessing;
+    if (active != null) return active;
+    final operation = _processPendingSiriEventChangesImpl(showFailure);
+    _siriChangeProcessing = operation;
+    return operation.whenComplete(() {
+      if (identical(_siriChangeProcessing, operation)) {
+        _siriChangeProcessing = null;
+      }
+    });
+  }
+
+  Future<void> _processPendingSiriEventChangesImpl(bool showFailure) async {
+    try {
+      final rawChanges = await _siriEventChangesChannel
+          .invokeListMethod<Object?>('pendingChanges');
+      if (rawChanges == null || rawChanges.isEmpty) return;
+      final changes = rawChanges
+          .whereType<Map<Object?, Object?>>()
+          .map(_PendingSiriEventChange.fromMap)
+          .whereType<_PendingSiriEventChange>()
+          .toList();
+      if (changes.isEmpty) return;
+
+      ref.invalidate(eventsInRangeProvider);
+      final repository = ref.read(eventRepositoryProvider);
+      final notificationService = ref.read(notificationServiceProvider);
+      final alarmService = ref.read(alarmServiceProvider);
+      for (final change in changes) {
+        final event = await repository.findById(change.eventId);
+        await notificationService.cancelEventReminder(
+          change.eventId,
+          reminderMinutesBeforeList: {
+            ...change.reminderMinutesBefore,
+            ...?event?.reminderMinutesBeforeList,
+          }.toList(),
+        );
+        await alarmService.cancelEventAlarm(change.eventId);
+        if (event != null && !event.isDeleted) {
+          await notificationService.scheduleEventReminder(
+            event,
+            allowImmediate: true,
+          );
+          await alarmService.scheduleEventAlarm(event);
+        }
+      }
+      await ref.read(appleWidgetServiceProvider).refresh();
+      await _siriEventChangesChannel.invokeMethod<void>(
+        'acknowledgeChanges',
+        {'tokens': changes.map((change) => change.token).toList()},
+      );
+      try {
+        await ref
+            .read(googleDriveSyncServiceProvider)
+            .syncPendingChangesNow();
+      } catch (error, stackTrace) {
+        // The event remains sync_status=pending, so Drive retry is independent
+        // from the completed local notification/alarm/widget reconciliation.
+        debugPrint('Siri event Drive sync deferred: $error\n$stackTrace');
+        if (showFailure && mounted) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            SnackBar(
+              content: Text(
+                context.tr('일정은 저장했으며 클라우드 동기화는 연결 후 재시도됩니다.'),
+              ),
+            ),
+          );
+        }
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Siri event follow-up failed: $error\n$stackTrace');
+      if (showFailure && mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(
+              context.tr('일정은 저장했지만 알림 또는 동기화 처리가 보류되었습니다.'),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _reconcileAllEventSchedules() async {
+    final events = await ref.read(eventRepositoryProvider).allEventsForSync();
+    final notificationService = ref.read(notificationServiceProvider);
+    final alarmService = ref.read(alarmServiceProvider);
+    for (final event in events) {
+      // App Intents writes outside EventCommandService, so first remove every
+      // previous reservation for the event before applying its current state.
+      await notificationService.cancelEventReminder(
+        event.id,
+        reminderMinutesBeforeList: event.reminderMinutesBeforeList,
+      );
+      await alarmService.cancelEventAlarm(event.id);
+      if (event.isDeleted) {
+        continue;
+      }
+      await notificationService.scheduleEventReminder(
+        event,
+        allowImmediate: false,
+      );
+      await alarmService.scheduleEventAlarm(event);
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
         _syncRestoreRetryTimer?.cancel();
         _syncRestoreRetryIndex = 0;
+        // App Intents update the shared SQLite file outside Drift's active
+        // connection, so recreate range streams when Daily returns.
+        ref.invalidate(eventsInRangeProvider);
+        _processPendingSiriEventChanges();
         _startSyncIfConnected();
         _refreshAppleWidgets();
         break;
@@ -816,32 +980,50 @@ class _AppHomeState extends ConsumerState<_AppHome>
         .load();
   }
 
-  void _startLocalNotificationServices() {
-    unawaited(
-      Future.microtask(() async {
-        final notificationService = ref.read(notificationServiceProvider);
-        await notificationService.initialize();
-        final alarmService = ref.read(alarmServiceProvider);
-        await alarmService.requestAuthorization();
+  Future<void> _startLocalNotificationServices() async {
+    try {
+      final notificationService = ref.read(notificationServiceProvider);
+      await notificationService.initialize();
+      final alarmService = ref.read(alarmServiceProvider);
+      await alarmService.requestAuthorization();
 
-        final settings = ref.read(appSettingsProvider);
-        if (settings.morningBriefingEnabled) {
-          await notificationService.scheduleMorningBriefing(
-            hour: settings.morningBriefingHour,
-            minute: settings.morningBriefingMinute,
-          );
-        }
+      final settings = ref.read(appSettingsProvider);
+      if (settings.morningBriefingEnabled) {
+        await notificationService.scheduleMorningBriefing(
+          hour: settings.morningBriefingHour,
+          minute: settings.morningBriefingMinute,
+        );
+      }
 
-        final events = await ref
-            .read(eventRepositoryProvider)
-            .allEventsForSync();
-        for (final event in events) {
-          if (!event.isDeleted) {
-            await notificationService.scheduleEventReminder(event);
-            await alarmService.scheduleEventAlarm(event);
-          }
-        }
-      }).catchError((_) {}),
+      await _reconcileAllEventSchedules();
+    } catch (error, stackTrace) {
+      debugPrint('Local notification startup failed: $error\n$stackTrace');
+    }
+  }
+}
+
+class _PendingSiriEventChange {
+  const _PendingSiriEventChange({
+    required this.token,
+    required this.eventId,
+    required this.reminderMinutesBefore,
+  });
+
+  final String token;
+  final String eventId;
+  final List<int> reminderMinutesBefore;
+
+  static _PendingSiriEventChange? fromMap(Map<Object?, Object?> map) {
+    final token = map['token'];
+    final eventId = map['eventId'];
+    if (token is! String || eventId is! String) return null;
+    return _PendingSiriEventChange(
+      token: token,
+      eventId: eventId,
+      reminderMinutesBefore: (map['reminderMinutesBefore'] as List<Object?>? ?? const [])
+          .whereType<num>()
+          .map((value) => value.toInt())
+          .toList(),
     );
   }
 }

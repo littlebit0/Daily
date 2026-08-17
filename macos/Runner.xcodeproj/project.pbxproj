@@ -32,6 +32,7 @@
 		7DDA1B022EBC000100000001 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7DDA1B012EBC000100000001 /* GoogleService-Info.plist */; };
 		EA52C5B2E1BD412CFA0D0065 /* DailyWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 609A6B6568DD37F77D02DE96 /* DailyWidgets.swift */; };
 		F2922B7F66E1D16EB8E20128 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7F99C849E34B586D918C3621 /* Cocoa.framework */; };
+		D53333333333333333333333 /* DailySiriIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54444444444444444444444 /* DailySiriIntents.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -108,6 +109,7 @@
 		7F99C849E34B586D918C3621 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		B7623A302B3A8AAE2AC6D2F4 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D54444444444444444444444 /* DailySiriIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DailySiriIntents.swift; path = ../../apple_siri/DailySiriIntents.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -204,6 +206,7 @@
 		33FAB671232836740065AC1E /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				D54444444444444444444444 /* DailySiriIntents.swift */,
 				33CC10F02044A3C60003C045 /* AppDelegate.swift */,
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				7DDA1B012EBC000100000001 /* GoogleService-Info.plist */,
@@ -485,6 +488,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D53333333333333333333333 /* DailySiriIntents.swift in Sources */,
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
@@ -768,6 +772,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_NAME = "Daily Test";
+				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.test;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -883,7 +888,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 3.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.littlebit0.daily.test.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;

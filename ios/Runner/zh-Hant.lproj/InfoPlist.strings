@@ -1,0 +1,7 @@
+"NSAlarmKitUsageDescription" = "Daily 會在您選擇的行程時間發出系統鬧鐘。";
+"NSCalendarsFullAccessUsageDescription" = "僅在將 Apple 行事曆的行程匯入 Daily 時讀取行事曆。";
+"NSCalendarsUsageDescription" = "僅在將 Apple 行事曆的行程匯入 Daily 時讀取行事曆。";
+"NSFaceIDUsageDescription" = "Daily 使用 Face ID 安全地解除 App 鎖定。";
+"NSMicrophoneUsageDescription" = "僅在您向 Signal 說出行事曆指令時使用麥克風。";
+"NSSpeechRecognitionUsageDescription" = "Daily 會將您對 Signal 說出的行事曆指令轉成文字，以執行要求的操作。";
+"CFBundleSpokenName" = "Daily";

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../../core/calendar_import/calendar_import_models.dart';
 import '../../../core/calendar_import/google_calendar_source.dart';
 import '../../../core/di/app_providers.dart';
+import '../../../core/localization/app_localizations.dart';
 
 class CalendarImportPage extends ConsumerStatefulWidget {
   const CalendarImportPage({super.key});
@@ -38,13 +39,13 @@ class _CalendarImportPageState extends ConsumerState<CalendarImportPage> {
         .where((calendar) => _selected.contains(calendar.selectionKey))
         .toList(growable: false);
     return Scaffold(
-      appBar: AppBar(title: const Text('캘린더 데이터 옮기기')),
+      appBar: AppBar(title: Text(context.tr('캘린더 데이터 옮기기'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
         children: [
           if (nativeProvider != null)
             _ImportSourceSection(
-              title: nativeProvider.label,
+              title: _providerLabel(context, nativeProvider),
               icon: nativeProvider == CalendarImportProvider.apple
                   ? Icons.apple
                   : Icons.calendar_month_outlined,
@@ -58,7 +59,7 @@ class _CalendarImportPageState extends ConsumerState<CalendarImportPage> {
             ),
           const SizedBox(height: 14),
           _ImportSourceSection(
-            title: CalendarImportProvider.google.label,
+            title: _providerLabel(context, CalendarImportProvider.google),
             icon: Icons.account_circle_outlined,
             busy: _googleBusy,
             onLoad: _loadGoogleCalendars,
@@ -96,8 +97,11 @@ class _CalendarImportPageState extends ConsumerState<CalendarImportPage> {
                 : const Icon(Icons.move_to_inbox_outlined),
             label: Text(
               _importBusy
-                  ? '일정을 옮기는 중'
-                  : '${selectedCalendars.length}개 캘린더 가져오기',
+                  ? context.tr('일정을 옮기는 중')
+                  : context.tr(
+                      '{count}개 캘린더 가져오기',
+                      args: {'count': selectedCalendars.length},
+                    ),
             ),
           ),
         ),
@@ -158,7 +162,12 @@ class _CalendarImportPageState extends ConsumerState<CalendarImportPage> {
             key.startsWith('${provider.name}:') &&
             !values.any((calendar) => calendar.selectionKey == key),
       );
-      _message = values.isEmpty ? '가져올 수 있는 ${provider.label}가 없습니다.' : null;
+      _message = values.isEmpty
+          ? context.tr(
+              '가져올 수 있는 {provider}가 없습니다.',
+              args: {'provider': _providerLabel(context, provider)},
+            )
+          : null;
     });
   }
 
@@ -191,9 +200,14 @@ class _CalendarImportPageState extends ConsumerState<CalendarImportPage> {
         return;
       }
       setState(() {
-        _message =
-            '가져오기 완료: ${result.imported}개 추가, '
-            '${result.skipped}개 중복 제외, ${result.failed}개 실패';
+        _message = context.tr(
+          '가져오기 완료: {imported}개 추가, {skipped}개 중복 제외, {failed}개 실패',
+          args: {
+            'imported': result.imported,
+            'skipped': result.skipped,
+            'failed': result.failed,
+          },
+        );
       });
     } on CalendarImportException catch (error) {
       _showError(error);
@@ -211,9 +225,17 @@ class _CalendarImportPageState extends ConsumerState<CalendarImportPage> {
       return;
     }
     final message = switch (error) {
-      CalendarImportException(:final message) => message,
-      PlatformException(:final message) =>
-        message ?? '캘린더 권한 또는 연결 상태를 확인해 주세요.',
+      CalendarImportException(:final message) => context.tr(message),
+      PlatformException(:final code, :final message) => switch (code) {
+        'bad_arguments' => context.tr('가져올 캘린더를 선택해 주세요.'),
+        'calendar_permission_denied' => context.tr(
+          '설정에서 Daily의 캘린더 전체 접근을 허용해 주세요.',
+        ),
+        _ =>
+          message == null
+              ? context.tr('캘린더 권한 또는 연결 상태를 확인해 주세요.')
+              : context.tr(message),
+      },
       _ =>
         error
             .toString()
@@ -224,6 +246,13 @@ class _CalendarImportPageState extends ConsumerState<CalendarImportPage> {
     setState(() => _message = message);
   }
 }
+
+String _providerLabel(BuildContext context, CalendarImportProvider provider) =>
+    switch (provider) {
+      CalendarImportProvider.apple => context.tr('Apple 캘린더'),
+      CalendarImportProvider.samsung => context.tr('Samsung 캘린더'),
+      CalendarImportProvider.google => context.tr('Google 캘린더'),
+    };
 
 class _ImportSourceSection extends StatelessWidget {
   const _ImportSourceSection({
@@ -260,7 +289,7 @@ class _ImportSourceSection extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: '$title 불러오기',
+              tooltip: context.tr('{title} 불러오기', args: {'title': title}),
               onPressed: busy ? null : onLoad,
               icon: busy
                   ? const SizedBox.square(
@@ -274,7 +303,7 @@ class _ImportSourceSection extends StatelessWidget {
         if (calendars.isEmpty)
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text('$title 불러오기'),
+            title: Text(context.tr('{title} 불러오기', args: {'title': title})),
             trailing: const Icon(Icons.chevron_right),
             onTap: busy ? null : onLoad,
           )

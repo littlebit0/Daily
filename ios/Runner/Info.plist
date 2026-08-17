@@ -8,6 +8,15 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>$(APP_DISPLAY_NAME)</string>
+	<key>CFBundleSpokenName</key>
+	<string>Daily</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>ko</string>
+		<string>en</string>
+		<string>ja</string>
+		<string>zh-Hant</string>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -39,6 +48,27 @@
 	<string>234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>데일리</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>데일리</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>데일리 테스트</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>데일리 테스트</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>데일리 캘린더</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>데일리 캘린더</string>
+		</dict>
+	</array>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Daily가 사용자가 선택한 일정 시각에 시스템 알람을 울리기 위해 사용합니다.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
@@ -47,6 +77,10 @@
 	<string>Apple 캘린더의 일정을 Daily로 옮기기 위해 캘린더를 읽습니다.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Daily 앱 잠금을 안전하게 해제하기 위해 Face ID를 사용합니다.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Daily 시그널에 음성으로 일정 명령을 전달하기 위해 마이크를 사용합니다.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Daily 시그널이 사용자의 일정 명령을 이해하기 위해 음성을 텍스트로 변환합니다.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>LSApplicationQueriesSchemes</key>

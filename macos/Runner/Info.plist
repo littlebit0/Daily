@@ -12,6 +12,15 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleDisplayName</key>
 	<string>$(APP_DISPLAY_NAME)</string>
+	<key>CFBundleSpokenName</key>
+	<string>Daily</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>ko</string>
+		<string>en</string>
+		<string>ja</string>
+		<string>zh-Hant</string>
+	</array>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -41,8 +50,33 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>데일리</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>데일리</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>데일리 테스트</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>데일리 테스트</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>데일리 캘린더</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>데일리 캘린더</string>
+		</dict>
+	</array>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Daily 시그널에 음성으로 일정 명령을 전달하기 위해 마이크를 사용합니다.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Daily 시그널이 사용자의 일정 명령을 이해하기 위해 음성을 텍스트로 변환합니다.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

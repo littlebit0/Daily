@@ -8,6 +8,7 @@ import AlarmKit
 import SwiftUI
 import CryptoKit
 import EventKit
+import AppIntents
 
 private final class DailyAppleWidgets {
   static let channelName = "daily/apple_widgets"
@@ -36,11 +37,96 @@ private final class DailyAppleWidgets {
           options: .atomic
         )
         WidgetCenter.shared.reloadAllTimelines()
+        if #available(iOS 18.0, *) {
+          DailySiriSearchIndexer.scheduleRefresh()
+        }
         result(nil)
       } catch {
         result(FlutterError(code: "widget_snapshot_failed", message: error.localizedDescription, details: nil))
       }
     }
+  }
+}
+
+private final class DailySiriLogsBridge {
+  static func register(with binaryMessenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "daily/siri_logs", binaryMessenger: binaryMessenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "listLogs":
+        result(DailySiriLogStore.load().map { record in
+          [
+            "id": record.id,
+            "occurredAt": Int64(record.occurredAt.timeIntervalSince1970 * 1000),
+            "action": record.action,
+            "summary": record.summary,
+            "result": record.result,
+            "success": record.success,
+            "details": record.details ?? [:],
+          ] as [String: Any]
+        })
+      case "clearLogs":
+        DailySiriLogStore.clear()
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+}
+
+private final class DailySiriEventChangesBridge {
+  private let channel: FlutterMethodChannel
+
+  init(binaryMessenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(
+      name: "daily/siri_event_changes",
+      binaryMessenger: binaryMessenger
+    )
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "pendingChanges":
+        result(DailySiriEventChangeSignal.pending().map {
+          [
+            "token": $0.token,
+            "eventId": $0.eventID,
+            "action": $0.action,
+            "reminderMinutesBefore": $0.reminderMinutesBefore,
+          ]
+        })
+      case "acknowledgeChanges":
+        let arguments = call.arguments as? [String: Any]
+        DailySiriEventChangeSignal.acknowledge(tokens: arguments?["tokens"] as? [String] ?? [])
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    CFNotificationCenterAddObserver(
+      CFNotificationCenterGetDarwinNotifyCenter(),
+      Unmanaged.passUnretained(self).toOpaque(),
+      { _, observer, _, _, _ in
+        guard let observer else { return }
+        let bridge = Unmanaged<DailySiriEventChangesBridge>
+          .fromOpaque(observer)
+          .takeUnretainedValue()
+        DispatchQueue.main.async {
+          bridge.channel.invokeMethod("eventsChanged", arguments: nil)
+        }
+      },
+      DailySiriEventChangeSignal.notificationName as CFString,
+      nil,
+      .deliverImmediately
+    )
+  }
+
+  deinit {
+    CFNotificationCenterRemoveObserver(
+      CFNotificationCenterGetDarwinNotifyCenter(),
+      Unmanaged.passUnretained(self).toOpaque(),
+      CFNotificationName(DailySiriEventChangeSignal.notificationName as CFString),
+      nil
+    )
   }
 }
 
@@ -740,12 +826,20 @@ private final class DailyMapLauncher {
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let googleOAuthSession = DailyGoogleOAuthSession()
+  private var siriEventChangesBridge: DailySiriEventChangesBridge?
+  private var signalVoiceBridge: DailySignalVoiceBridge?
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
+    if #available(iOS 16.0, *) {
+      DailyAppShortcuts.updateAppShortcutParameters()
+    }
+    if #available(iOS 18.0, *) {
+      DailySiriSearchIndexer.scheduleRefresh()
+    }
     let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     if let registrar = registrar(forPlugin: "DailyNativeNotifications") {
       DailyNativeNotifications.register(with: registrar.messenger())
@@ -764,6 +858,19 @@ private final class DailyMapLauncher {
     }
     if let registrar = registrar(forPlugin: "DailyCalendarImport") {
       DailyCalendarImport.register(with: registrar.messenger())
+    }
+    if let registrar = registrar(forPlugin: "DailySiriLogsBridge") {
+      DailySiriLogsBridge.register(with: registrar.messenger())
+    }
+    if let registrar = registrar(forPlugin: "DailySiriEventChangesBridge") {
+      siriEventChangesBridge = DailySiriEventChangesBridge(
+        binaryMessenger: registrar.messenger()
+      )
+    }
+    if let registrar = registrar(forPlugin: "DailySignalVoiceBridge") {
+      signalVoiceBridge = DailySignalVoiceBridge(
+        binaryMessenger: registrar.messenger()
+      )
     }
     return launched
   }

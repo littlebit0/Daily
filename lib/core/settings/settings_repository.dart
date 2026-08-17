@@ -43,6 +43,7 @@ class SettingsRepository {
   static const _legacyCalendarEventTextSizeKey = 'calendarEventTextSize';
   static const _legacyCalendarDensityKey = 'calendarDensity';
   static const _defaultCalendarViewKey = 'defaultCalendarView';
+  static const _weekDayLayoutModeKey = 'weekDayLayoutMode';
   static const _hiddenCategoryIdsKey = 'hiddenCategoryIds';
   static const _calendarShowHolidaysKey = 'calendarShowHolidays';
   static const _calendarDdayOnlyKey = 'calendarDdayOnly';
@@ -52,6 +53,7 @@ class SettingsRepository {
   static const _use24HourTimeKey = 'use24HourTime';
   static const _themeModeKey = 'themeMode';
   static const _monthNavigationModeKey = 'monthNavigationMode';
+  static const _languageKey = 'language';
   static const _settingsSyncPendingKey = 'settingsSyncPending';
   static const _settingsSyncRevisionKey = 'settingsSyncRevision';
   static const _driveChangeTokenKey = 'driveChangePageToken';
@@ -92,6 +94,9 @@ class SettingsRepository {
       defaultCalendarView: CalendarViewMode.fromName(
         _preferences.getString(_defaultCalendarViewKey),
       ),
+      weekDayLayoutMode: WeekDayLayoutMode.fromName(
+        _preferences.getString(_weekDayLayoutModeKey),
+      ),
       hiddenCategoryIds: _loadStringList(_hiddenCategoryIdsKey),
       calendarShowHolidays:
           _preferences.getBool(_calendarShowHolidaysKey) ?? true,
@@ -109,6 +114,7 @@ class SettingsRepository {
       monthNavigationMode: MonthNavigationMode.fromName(
         _preferences.getString(_monthNavigationModeKey),
       ),
+      language: AppLanguage.fromName(_preferences.getString(_languageKey)),
     );
   }
 
@@ -183,6 +189,10 @@ class SettingsRepository {
       settings.defaultCalendarView.name,
     );
     await _preferences.setString(
+      _weekDayLayoutModeKey,
+      settings.weekDayLayoutMode.name,
+    );
+    await _preferences.setString(
       _hiddenCategoryIdsKey,
       jsonEncode(settings.hiddenCategoryIds),
     );
@@ -205,6 +215,7 @@ class SettingsRepository {
     );
     await _preferences.setBool(_use24HourTimeKey, settings.use24HourTime);
     await _preferences.setString(_themeModeKey, settings.themeMode.name);
+    await _preferences.setString(_languageKey, settings.language.name);
     if (markSyncPending) {
       await _preferences.setInt(
         _settingsSyncRevisionKey,
@@ -414,6 +425,7 @@ class SettingsRepository {
     await _preferences.remove(_legacyCalendarEventTextSizeKey);
     await _preferences.remove(_legacyCalendarDensityKey);
     await _preferences.remove(_defaultCalendarViewKey);
+    await _preferences.remove(_weekDayLayoutModeKey);
     await _preferences.remove(_hiddenCategoryIdsKey);
     await _preferences.remove(_calendarShowHolidaysKey);
     await _preferences.remove(_calendarDdayOnlyKey);

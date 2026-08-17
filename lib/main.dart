@@ -12,7 +12,12 @@ import 'core/update/app_update_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('ko');
+  await Future.wait([
+    initializeDateFormatting('ko'),
+    initializeDateFormatting('en'),
+    initializeDateFormatting('ja'),
+    initializeDateFormatting('zh_TW'),
+  ]);
   final preferences = await SharedPreferences.getInstance();
   final settingsRepository = SettingsRepository(preferences: preferences);
 

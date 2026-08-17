@@ -807,9 +807,13 @@ class GoogleDriveSyncService implements SyncService {
         appLockEnabled: localSettings.appLockEnabled,
         appLockBiometricsEnabled: localSettings.appLockBiometricsEnabled,
         appLockMethod: localSettings.appLockMethod,
+        language: localSettings.language,
         appTextSize: remoteSettings.hasAppTextSize
             ? remoteSettings.settings.appTextSize
             : localSettings.appTextSize,
+        weekDayLayoutMode: remoteSettings.hasWeekDayLayoutMode
+            ? remoteSettings.settings.weekDayLayoutMode
+            : localSettings.weekDayLayoutMode,
       ),
       markSyncPending: false,
     );
@@ -1162,6 +1166,7 @@ class GoogleDriveSyncService implements SyncService {
       hasAppTextSize:
           settingsJson.containsKey('appTextSize') ||
           settingsJson.containsKey('calendarEventTextSize'),
+      hasWeekDayLayoutMode: settingsJson.containsKey('weekDayLayoutMode'),
     );
   }
 
@@ -1494,6 +1499,7 @@ class GoogleDriveSyncService implements SyncService {
       'dDayReminderOffsets': settings.dDayReminderOffsets,
       'appTextSize': settings.appTextSize.name,
       'defaultCalendarView': settings.defaultCalendarView.name,
+      'weekDayLayoutMode': settings.weekDayLayoutMode.name,
       'hiddenCategoryIds': settings.hiddenCategoryIds,
       'calendarShowHolidays': settings.calendarShowHolidays,
       'calendarDdayOnly': settings.calendarDdayOnly,
@@ -1536,6 +1542,9 @@ class GoogleDriveSyncService implements SyncService {
       ),
       defaultCalendarView: CalendarViewMode.fromName(
         json['defaultCalendarView'] as String?,
+      ),
+      weekDayLayoutMode: WeekDayLayoutMode.fromName(
+        json['weekDayLayoutMode'] as String?,
       ),
       hiddenCategoryIds: _stringListValue(json['hiddenCategoryIds']),
       calendarShowHolidays: json['calendarShowHolidays'] as bool? ?? true,
@@ -1654,11 +1663,13 @@ class _DownloadedSettings {
   const _DownloadedSettings({
     required this.settings,
     required this.hasAppTextSize,
+    required this.hasWeekDayLayoutMode,
     required this.sourceDeviceId,
   });
 
   final AppSettings settings;
   final bool hasAppTextSize;
+  final bool hasWeekDayLayoutMode;
   final String? sourceDeviceId;
 }
 

@@ -37,12 +37,100 @@ private final class DailyAppleWidgets {
         if #available(macOS 11.0, *) {
           WidgetCenter.shared.reloadAllTimelines()
         }
+        if #available(macOS 15.0, *) {
+          DailySiriSearchIndexer.scheduleRefresh()
+        }
         result(nil)
       } catch {
         NSLog("[DailyWidgets] Snapshot update failed: \(error.localizedDescription)")
         result(FlutterError(code: "widget_snapshot_failed", message: error.localizedDescription, details: nil))
       }
     }
+  }
+}
+
+private final class DailySiriLogsBridge {
+  static func register(with flutterViewController: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "daily/siri_logs",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "listLogs":
+        result(DailySiriLogStore.load().map { record in
+          [
+            "id": record.id,
+            "occurredAt": Int64(record.occurredAt.timeIntervalSince1970 * 1000),
+            "action": record.action,
+            "summary": record.summary,
+            "result": record.result,
+            "success": record.success,
+            "details": record.details ?? [:],
+          ] as [String: Any]
+        })
+      case "clearLogs":
+        DailySiriLogStore.clear()
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+}
+
+private final class DailySiriEventChangesBridge {
+  private let channel: FlutterMethodChannel
+
+  init(flutterViewController: FlutterViewController) {
+    channel = FlutterMethodChannel(
+      name: "daily/siri_event_changes",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "pendingChanges":
+        result(DailySiriEventChangeSignal.pending().map {
+          [
+            "token": $0.token,
+            "eventId": $0.eventID,
+            "action": $0.action,
+            "reminderMinutesBefore": $0.reminderMinutesBefore,
+          ]
+        })
+      case "acknowledgeChanges":
+        let arguments = call.arguments as? [String: Any]
+        DailySiriEventChangeSignal.acknowledge(tokens: arguments?["tokens"] as? [String] ?? [])
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    CFNotificationCenterAddObserver(
+      CFNotificationCenterGetDarwinNotifyCenter(),
+      Unmanaged.passUnretained(self).toOpaque(),
+      { _, observer, _, _, _ in
+        guard let observer else { return }
+        let bridge = Unmanaged<DailySiriEventChangesBridge>
+          .fromOpaque(observer)
+          .takeUnretainedValue()
+        DispatchQueue.main.async {
+          bridge.channel.invokeMethod("eventsChanged", arguments: nil)
+        }
+      },
+      DailySiriEventChangeSignal.notificationName as CFString,
+      nil,
+      .deliverImmediately
+    )
+  }
+
+  deinit {
+    CFNotificationCenterRemoveObserver(
+      CFNotificationCenterGetDarwinNotifyCenter(),
+      Unmanaged.passUnretained(self).toOpaque(),
+      CFNotificationName(DailySiriEventChangeSignal.notificationName as CFString),
+      nil
+    )
   }
 }
 
@@ -791,6 +879,9 @@ private final class DailyAppLockPrivacy {
 }
 
 class MainFlutterWindow: NSWindow {
+  private var siriEventChangesBridge: DailySiriEventChangesBridge?
+  private var signalVoiceBridge: DailySignalVoiceBridge?
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -803,6 +894,13 @@ class MainFlutterWindow: NSWindow {
     DailyMacAlarms.register(with: flutterViewController)
     DailyMapLauncher.register(with: flutterViewController)
     DailyAppleWidgets.register(with: flutterViewController)
+    DailySiriLogsBridge.register(with: flutterViewController)
+    siriEventChangesBridge = DailySiriEventChangesBridge(
+      flutterViewController: flutterViewController
+    )
+    signalVoiceBridge = DailySignalVoiceBridge(
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
     DailyMacAuthentication.register(with: flutterViewController)
     DailyAppLockPrivacy.register(with: flutterViewController, window: self)
     DailyNotificationCenterDelegate.install()

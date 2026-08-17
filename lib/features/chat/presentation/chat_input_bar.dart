@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/di/app_providers.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../events/domain/event_draft.dart';
 
 class ChatInputBar extends ConsumerStatefulWidget {
@@ -60,7 +61,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           children: [
             if (widget.onClose != null) ...[
               IconButton(
-                tooltip: 'AI 입력 닫기',
+                tooltip: context.tr('AI 입력 닫기'),
                 onPressed: widget.onClose,
                 icon: const Icon(Icons.close),
               ),
@@ -73,15 +74,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 maxLines: 3,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _submit(),
-                decoration: const InputDecoration(
-                  hintText: '일정을 입력하세요',
-                  prefixIcon: Icon(Icons.chat_bubble_outline),
+                decoration: InputDecoration(
+                  hintText: context.tr('일정을 입력하세요'),
+                  prefixIcon: const Icon(Icons.chat_bubble_outline),
                 ),
               ),
             ),
             const SizedBox(width: 8),
             IconButton.filled(
-              tooltip: '등록',
+              tooltip: context.tr('등록'),
               onPressed: canSubmit ? _submit : null,
               icon: _submitting
                   ? const SizedBox.square(
@@ -149,9 +150,9 @@ class _DraftConfirmationSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheduleTime = _formatScheduleTime(draft);
+    final scheduleTime = _formatScheduleTime(context, draft);
     final reminder = draft.reminderMinutesBeforeList.isEmpty
-        ? '없음'
+        ? context.tr('없음')
         : draft.reminderMinutesBeforeList.map(_minutesLabel).join(', ');
 
     return SafeArea(
@@ -162,7 +163,7 @@ class _DraftConfirmationSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '이 일정으로 등록할까요?',
+              context.tr('이 일정으로 등록할까요?'),
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 14),
@@ -192,8 +193,11 @@ class _DraftConfirmationSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(scheduleTime),
-                  Text('분류: ${draft.category.label}'),
-                  Text('알림: $reminder'),
+                  Text(
+                    '${context.tr('분류')}: '
+                    '${context.l10n.categoryName(id: draft.category.id, label: draft.category.label)}',
+                  ),
+                  Text('${context.tr('알림')}: $reminder'),
                 ],
               ),
             ),
@@ -203,14 +207,14 @@ class _DraftConfirmationSheet extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('취소'),
+                    child: Text(context.tr('취소')),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton(
                     onPressed: () => Navigator.of(context).pop(true),
-                    child: const Text('등록'),
+                    child: Text(context.tr('등록')),
                   ),
                 ),
               ],
@@ -221,15 +225,16 @@ class _DraftConfirmationSheet extends StatelessWidget {
     );
   }
 
-  String _formatScheduleTime(EventDraft draft) {
-    final dateFormatter = DateFormat('yyyy년 M월 d일');
-    final timeFormatter = DateFormat('HH:mm');
+  String _formatScheduleTime(BuildContext context, EventDraft draft) {
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final dateFormatter = DateFormat.yMMMMd(locale);
+    final timeFormatter = DateFormat.Hm(locale);
     if (draft.allDay) {
       final inclusiveEnd = draft.endAt.subtract(const Duration(days: 1));
       if (_sameDay(draft.startAt, inclusiveEnd)) {
-        return '${dateFormatter.format(draft.startAt)}  종일';
+        return '${dateFormatter.format(draft.startAt)}  ${context.tr('종일')}';
       }
-      return '${dateFormatter.format(draft.startAt)} - ${dateFormatter.format(inclusiveEnd)}  종일';
+      return '${dateFormatter.format(draft.startAt)} - ${dateFormatter.format(inclusiveEnd)}  ${context.tr('종일')}';
     }
     if (_sameDay(draft.startAt, draft.endAt)) {
       return '${dateFormatter.format(draft.startAt)}  ${timeFormatter.format(draft.startAt)} - ${timeFormatter.format(draft.endAt)}';

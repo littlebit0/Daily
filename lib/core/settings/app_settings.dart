@@ -1,6 +1,21 @@
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_category.dart';
 
+enum AppLanguage {
+  system,
+  korean,
+  english,
+  japanese,
+  traditionalChinese;
+
+  static AppLanguage fromName(String? name) {
+    return AppLanguage.values.firstWhere(
+      (language) => language.name == name,
+      orElse: () => AppLanguage.system,
+    );
+  }
+}
+
 enum AppThemeMode {
   system('자동'),
   light('화이트'),
@@ -69,6 +84,18 @@ enum CalendarViewMode {
   }
 }
 
+enum WeekDayLayoutMode {
+  list,
+  schedule;
+
+  static WeekDayLayoutMode fromName(String? name) {
+    return WeekDayLayoutMode.values.firstWhere(
+      (mode) => mode.name == name,
+      orElse: () => WeekDayLayoutMode.list,
+    );
+  }
+}
+
 enum AppLockMethod {
   noPin('PIN 없이 잠금'),
   appPin('PIN 잠금'),
@@ -110,6 +137,7 @@ class AppSettings {
     this.dDayReminderOffsets = const [-7, -3, -1, 0],
     this.appTextSize = AppTextSize.basic,
     this.defaultCalendarView = CalendarViewMode.week,
+    this.weekDayLayoutMode = WeekDayLayoutMode.list,
     this.hiddenCategoryIds = const <String>[],
     this.calendarShowHolidays = true,
     this.calendarDdayOnly = false,
@@ -119,6 +147,7 @@ class AppSettings {
     this.use24HourTime = true,
     this.themeMode = AppThemeMode.system,
     this.monthNavigationMode = MonthNavigationMode.horizontal,
+    this.language = AppLanguage.system,
   }) : defaultReminderMinutesList = normalizeReminderMinutes(
          defaultReminderMinutesList ??
              (defaultReminderMinutes == null
@@ -151,6 +180,7 @@ class AppSettings {
   final List<int> dDayReminderOffsets;
   final AppTextSize appTextSize;
   final CalendarViewMode defaultCalendarView;
+  final WeekDayLayoutMode weekDayLayoutMode;
   final List<String> hiddenCategoryIds;
   final bool calendarShowHolidays;
   final bool calendarDdayOnly;
@@ -160,6 +190,7 @@ class AppSettings {
   final bool use24HourTime;
   final AppThemeMode themeMode;
   final MonthNavigationMode monthNavigationMode;
+  final AppLanguage language;
 
   AppSettings copyWith({
     int? defaultReminderMinutes,
@@ -180,6 +211,7 @@ class AppSettings {
     List<int>? dDayReminderOffsets,
     AppTextSize? appTextSize,
     CalendarViewMode? defaultCalendarView,
+    WeekDayLayoutMode? weekDayLayoutMode,
     List<String>? hiddenCategoryIds,
     bool? calendarShowHolidays,
     bool? calendarDdayOnly,
@@ -189,6 +221,7 @@ class AppSettings {
     bool? use24HourTime,
     AppThemeMode? themeMode,
     MonthNavigationMode? monthNavigationMode,
+    AppLanguage? language,
   }) {
     return AppSettings(
       defaultReminderMinutesList:
@@ -216,6 +249,7 @@ class AppSettings {
       dDayReminderOffsets: dDayReminderOffsets ?? this.dDayReminderOffsets,
       appTextSize: appTextSize ?? this.appTextSize,
       defaultCalendarView: defaultCalendarView ?? this.defaultCalendarView,
+      weekDayLayoutMode: weekDayLayoutMode ?? this.weekDayLayoutMode,
       hiddenCategoryIds: hiddenCategoryIds ?? this.hiddenCategoryIds,
       calendarShowHolidays: calendarShowHolidays ?? this.calendarShowHolidays,
       calendarDdayOnly: calendarDdayOnly ?? this.calendarDdayOnly,
@@ -226,6 +260,7 @@ class AppSettings {
       use24HourTime: use24HourTime ?? this.use24HourTime,
       themeMode: themeMode ?? this.themeMode,
       monthNavigationMode: monthNavigationMode ?? this.monthNavigationMode,
+      language: language ?? this.language,
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/calendar/korean_lunar_calendar.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../events/domain/calendar_event.dart';
 
 class CalendarMonthGrid extends StatefulWidget {
@@ -492,9 +493,14 @@ class CalendarWeekdayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labels = weekStartsOnMonday
-        ? const ['월', '화', '수', '목', '금', '토', '일']
-        : const ['일', '월', '화', '수', '목', '금', '토'];
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final firstDay = weekStartsOnMonday ? DateTime.monday : DateTime.sunday;
+    final labels = List.generate(
+      DateTime.daysPerWeek,
+      (index) => DateFormat.E(
+        locale,
+      ).format(DateTime(2024, 1, 1 + (firstDay - 1 + index) % 7)),
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
       child: Row(
@@ -506,7 +512,7 @@ class CalendarWeekdayHeader extends StatelessWidget {
                     label,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: _weekdayColor(
-                        label,
+                        labels.indexOf(label),
                         Theme.of(context).colorScheme,
                       ),
                       fontWeight: FontWeight.w800,
@@ -520,11 +526,14 @@ class CalendarWeekdayHeader extends StatelessWidget {
     );
   }
 
-  Color _weekdayColor(String label, ColorScheme colorScheme) {
-    if (label == '일') {
+  Color _weekdayColor(int index, ColorScheme colorScheme) {
+    final weekday = weekStartsOnMonday
+        ? (index + DateTime.monday - 1) % DateTime.daysPerWeek + 1
+        : (index + DateTime.sunday - 1) % DateTime.daysPerWeek + 1;
+    if (weekday == DateTime.sunday) {
       return const Color(0xffef4444);
     }
-    if (label == '토') {
+    if (weekday == DateTime.saturday) {
       return const Color(0xff2563eb);
     }
     return colorScheme.onSurfaceVariant;
@@ -1145,7 +1154,7 @@ class _EventSpanFlag extends StatelessWidget {
         event.startAt.day == segmentStart.day;
     final prefix = event.showDday && !compact ? '${_formatDday(event)}  ' : '';
     final suffix = showStartTime ? '  ${formatter.format(event.startAt)}' : '';
-    final title = event.title;
+    final title = context.l10n.eventTitle(event.title, holiday: event.holiday);
 
     return DecoratedBox(
       decoration: BoxDecoration(

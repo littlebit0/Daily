@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/di/app_providers.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../events/domain/calendar_event.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
@@ -25,7 +26,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('검색')),
+      appBar: AppBar(title: Text(context.tr('검색'))),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -36,10 +37,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _search(),
               decoration: InputDecoration(
-                hintText: '제목, 메모, 장소 검색',
+                hintText: context.tr('제목, 메모, 장소 검색'),
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: IconButton(
-                  tooltip: '검색',
+                  tooltip: context.tr('검색'),
                   onPressed: _search,
                   icon: const Icon(Icons.arrow_forward),
                 ),
@@ -60,7 +61,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   if (events.isEmpty) {
                     return Center(
                       child: Text(
-                        '검색 결과가 없습니다.',
+                        context.tr('검색 결과가 없습니다.'),
                         style: Theme.of(context).textTheme.labelMedium,
                       ),
                     );
@@ -112,10 +113,11 @@ class _SearchResultTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final date = DateFormat('yyyy년 M월 d일').format(event.startAt);
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final date = DateFormat.yMMMMd(locale).format(event.startAt);
     final time = event.allDay
-        ? '종일'
-        : DateFormat('HH:mm').format(event.startAt);
+        ? context.tr('종일')
+        : DateFormat.Hm(locale).format(event.startAt);
     return ListTile(
       onTap: onTap,
       shape: RoundedRectangleBorder(
@@ -126,7 +128,7 @@ class _SearchResultTile extends StatelessWidget {
         backgroundColor: Color(event.colorValue).withValues(alpha: 0.12),
         child: Icon(Icons.flag, color: Color(event.colorValue)),
       ),
-      title: Text(event.title),
+      title: Text(context.l10n.eventTitle(event.title, holiday: event.holiday)),
       subtitle: Text('$date  $time'),
     );
   }

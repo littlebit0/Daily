@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter/semantics.dart';
 
 import '../../../core/alarms/alarm_service.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../domain/calendar_event.dart';
 import '../domain/event_category.dart';
 import '../domain/event_draft.dart';
@@ -157,7 +159,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     final contentMaxHeight = MediaQuery.sizeOf(context).height * 0.72;
 
     return AlertDialog(
-      title: Text(widget.event == null ? '일정 추가' : '일정 수정'),
+      title: Text(context.tr(widget.event == null ? '일정 추가' : '일정 수정')),
       content: SizedBox(
         width: 430,
         child: ConstrainedBox(
@@ -179,10 +181,10 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                         controller: _titleController,
                         focusNode: _titleFocusNode,
                         decoration: InputDecoration(
-                          labelText: '제목',
+                          labelText: context.tr('제목'),
                           errorText:
                               _validationTarget == _ValidationTarget.title
-                              ? '제목을 입력하세요.'
+                              ? context.tr('제목을 입력하세요.')
                               : null,
                         ),
                         autofocus: true,
@@ -199,7 +201,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                         children: [
                           Expanded(
                             child: _LabeledPickerButton(
-                              label: '시작일',
+                              label: context.tr('시작일'),
                               icon: Icons.calendar_today_outlined,
                               value: startDateLabel,
                               onPressed: _pickStartDate,
@@ -208,7 +210,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _LabeledPickerButton(
-                              label: '종료일',
+                              label: context.tr('종료일'),
                               icon: Icons.event_available_outlined,
                               value: endDateLabel,
                               onPressed: _pickEndDate,
@@ -222,7 +224,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                           children: [
                             Expanded(
                               child: _LabeledPickerButton(
-                                label: '시작 시간',
+                                label: context.tr('시작 시간'),
                                 icon: Icons.schedule,
                                 value: startTimeLabel,
                                 onPressed: _pickStartTime,
@@ -231,7 +233,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: _LabeledPickerButton(
-                                label: '종료 시간',
+                                label: context.tr('종료 시간'),
                                 icon: Icons.schedule,
                                 value: endTimeLabel,
                                 onPressed: _pickEndTime,
@@ -247,13 +249,15 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                           _clearValidation();
                           setState(() => _allDay = value);
                         },
-                        title: const Text('종일'),
+                        title: Text(context.tr('종일')),
                         contentPadding: EdgeInsets.zero,
                       ),
                       DropdownButtonFormField<EventCategory>(
                         key: ValueKey(_category.id),
                         initialValue: _category,
-                        decoration: const InputDecoration(labelText: '분류'),
+                        decoration: InputDecoration(
+                          labelText: context.tr('분류'),
+                        ),
                         items: _usableCategories
                             .map(
                               (category) => DropdownMenuItem(
@@ -269,7 +273,12 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Text(category.label),
+                                    Text(
+                                      context.l10n.categoryName(
+                                        id: category.id,
+                                        label: category.label,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -284,14 +293,16 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                       ),
                       const SizedBox(height: 12),
                       InputDecorator(
-                        decoration: const InputDecoration(labelText: '알림'),
+                        decoration: InputDecoration(
+                          labelText: context.tr('알림'),
+                        ),
                         child: Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             FilterChip(
-                              label: const Text('없음'),
+                              label: Text(context.tr('없음')),
                               selected: _reminders.isEmpty,
                               onSelected: (_) {
                                 _clearValidation();
@@ -306,7 +317,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                                     _toggleReminder(minutes, selected),
                               ),
                             IconButton.outlined(
-                              tooltip: '알림 직접 입력',
+                              tooltip: context.tr('알림 직접 입력'),
                               onPressed: _pickCustomReminder,
                               icon: const Icon(Icons.edit_outlined),
                             ),
@@ -319,7 +330,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                           child: Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
-                              '종일 일정은 설정의 종일 알림 시간을 기준으로 예약됩니다.',
+                              context.tr('종일 일정은 설정의 종일 알림 시간을 기준으로 예약됩니다.'),
                               style: Theme.of(context).textTheme.labelSmall,
                             ),
                           ),
@@ -336,7 +347,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                                 !_alarmCanBeEnabled
                             ? null
                             : _toggleAlarm,
-                        title: const Text('일정 알람'),
+                        title: Text(context.tr('일정 알람')),
                         subtitle: Text(_alarmSubtitle),
                         contentPadding: EdgeInsets.zero,
                       ),
@@ -345,7 +356,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                           _frequency == RecurrenceFrequency.none) ...[
                         const SizedBox(height: 4),
                         _LabeledPickerButton(
-                          label: '종일 일정 알람 시각',
+                          label: context.tr('종일 일정 알람 시각'),
                           icon: Icons.alarm,
                           value: _allDayAlarmTime.format(context),
                           onPressed: _pickAllDayAlarmTime,
@@ -354,12 +365,14 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                       const SizedBox(height: 12),
                       DropdownButtonFormField<RecurrenceFrequency>(
                         initialValue: _frequency,
-                        decoration: const InputDecoration(labelText: '반복'),
+                        decoration: InputDecoration(
+                          labelText: context.tr('반복'),
+                        ),
                         items: RecurrenceFrequency.values
                             .map(
                               (frequency) => DropdownMenuItem(
                                 value: frequency,
-                                child: Text(frequency.label),
+                                child: Text(_frequencyLabel(frequency)),
                               ),
                             )
                             .toList(),
@@ -381,10 +394,9 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                           children: [
                             Expanded(
                               child: _LabeledPickerButton(
-                                label: '반복 간격',
+                                label: context.tr('반복 간격'),
                                 icon: Icons.repeat,
-                                value:
-                                    '$_recurrenceInterval${_frequencyUnitLabel()}마다',
+                                value: _recurrenceIntervalLabel(),
                                 onPressed: _pickRecurrenceInterval,
                               ),
                             ),
@@ -393,21 +405,21 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                               child:
                                   DropdownButtonFormField<_RecurrenceEndMode>(
                                     initialValue: _recurrenceEndMode,
-                                    decoration: const InputDecoration(
-                                      labelText: '반복 종료',
+                                    decoration: InputDecoration(
+                                      labelText: context.tr('반복 종료'),
                                     ),
-                                    items: const [
+                                    items: [
                                       DropdownMenuItem(
                                         value: _RecurrenceEndMode.never,
-                                        child: Text('종료 없음'),
+                                        child: Text(context.tr('종료 없음')),
                                       ),
                                       DropdownMenuItem(
                                         value: _RecurrenceEndMode.until,
-                                        child: Text('날짜까지'),
+                                        child: Text(context.tr('날짜까지')),
                                       ),
                                       DropdownMenuItem(
                                         value: _RecurrenceEndMode.count,
-                                        child: Text('횟수만큼'),
+                                        child: Text(context.tr('횟수만큼')),
                                       ),
                                     ],
                                     onChanged: (value) {
@@ -437,7 +449,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                         if (_recurrenceEndMode == _RecurrenceEndMode.until) ...[
                           const SizedBox(height: 8),
                           _LabeledPickerButton(
-                            label: '반복 종료일',
+                            label: context.tr('반복 종료일'),
                             icon: Icons.event_busy_outlined,
                             value: _formatDate(_recurrenceUntil ?? _endDate),
                             onPressed: _pickRecurrenceUntil,
@@ -446,9 +458,12 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                         if (_recurrenceEndMode == _RecurrenceEndMode.count) ...[
                           const SizedBox(height: 8),
                           _LabeledPickerButton(
-                            label: '반복 횟수',
+                            label: context.tr('반복 횟수'),
                             icon: Icons.format_list_numbered,
-                            value: '${_recurrenceCount ?? 10}회',
+                            value: context.tr(
+                              '{count}회',
+                              args: {'count': _recurrenceCount ?? 10},
+                            ),
                             onPressed: _pickRecurrenceCount,
                           ),
                         ],
@@ -460,36 +475,42 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                           _clearValidation();
                           setState(() => _showDday = value);
                         },
-                        title: const Text('D-day 표시'),
-                        subtitle: const Text('달력과 일정 목록에 D-day를 함께 표시합니다.'),
+                        title: Text(context.tr('D-day 표시')),
+                        subtitle: Text(
+                          context.tr('달력과 일정 목록에 D-day를 함께 표시합니다.'),
+                        ),
                         contentPadding: EdgeInsets.zero,
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _locationController,
-                        decoration: const InputDecoration(labelText: '장소'),
+                        decoration: InputDecoration(
+                          labelText: context.tr('장소'),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _urlController,
-                        decoration: const InputDecoration(
-                          labelText: 'URL / 링크',
+                        decoration: InputDecoration(
+                          labelText: context.tr('URL / 링크'),
                         ),
                         keyboardType: TextInputType.url,
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _weatherController,
-                        decoration: const InputDecoration(
-                          labelText: '날씨',
-                          hintText: '예: 흐림',
+                        decoration: InputDecoration(
+                          labelText: context.tr('날씨'),
+                          hintText: context.tr('예: 흐림'),
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _memoController,
                         maxLines: 3,
-                        decoration: const InputDecoration(labelText: '메모'),
+                        decoration: InputDecoration(
+                          labelText: context.tr('메모'),
+                        ),
                       ),
                     ],
                   ),
@@ -502,9 +523,9 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('취소'),
+          child: Text(context.tr('취소')),
         ),
-        FilledButton(onPressed: _submit, child: const Text('저장')),
+        FilledButton(onPressed: _submit, child: Text(context.tr('저장'))),
       ],
     );
   }
@@ -526,28 +547,28 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
 
   String _label(int? minutes) {
     if (minutes == null) {
-      return '없음';
+      return context.tr('없음');
     }
     if (minutes == 0) {
-      return '정시';
+      return context.tr('정시');
     }
     if (minutes < 60) {
-      return '$minutes분 전';
+      return context.tr('{count}분 전', args: {'count': minutes});
     }
     if (minutes % 1440 == 0) {
-      return '${minutes ~/ 1440}일 전';
+      return context.tr('{count}일 전', args: {'count': minutes ~/ 1440});
     }
     if (minutes % 60 == 0) {
-      return '${minutes ~/ 60}시간 전';
+      return context.tr('{count}시간 전', args: {'count': minutes ~/ 60});
     }
-    return '$minutes분 전';
+    return context.tr('{count}분 전', args: {'count': minutes});
   }
 
   Future<void> _pickCustomReminder() async {
     final picked = await _showNumberDialog(
       context: context,
-      title: '알림 직접 입력',
-      label: '몇 분 전에 알릴까요?',
+      title: context.tr('알림 직접 입력'),
+      label: context.tr('몇 분 전에 알릴까요?'),
       initialValue: _reminders.isEmpty ? 0 : _reminders.first,
       minValue: 0,
     );
@@ -562,8 +583,11 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   Future<void> _pickRecurrenceInterval() async {
     final picked = await _showNumberDialog(
       context: context,
-      title: '반복 간격',
-      label: '몇 ${_frequencyUnitLabel()}마다 반복할까요?',
+      title: context.tr('반복 간격'),
+      label: context.tr(
+        '몇 {unit}마다 반복할까요?',
+        args: {'unit': _frequencyUnitLabel()},
+      ),
       initialValue: _recurrenceInterval,
       minValue: 1,
     );
@@ -592,8 +616,8 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   Future<void> _pickRecurrenceCount() async {
     final picked = await _showNumberDialog(
       context: context,
-      title: '반복 횟수',
-      label: '몇 회 반복할까요?',
+      title: context.tr('반복 횟수'),
+      label: context.tr('몇 회 반복할까요?'),
       initialValue: _recurrenceCount ?? 10,
       minValue: 1,
     );
@@ -663,14 +687,14 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       _showValidation(
-        '제목을 입력해야 일정을 저장할 수 있습니다.',
+        context.tr('제목을 입력해야 일정을 저장할 수 있습니다.'),
         target: _ValidationTarget.title,
       );
       return;
     }
     if (_endDate.isBefore(_startDate)) {
       _showValidation(
-        '종료일은 시작일과 같거나 이후여야 합니다.',
+        context.tr('종료일은 시작일과 같거나 이후여야 합니다.'),
         target: _ValidationTarget.date,
       );
       return;
@@ -695,14 +719,14 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
           );
     if (!endAt.isAfter(startAt)) {
       _showValidation(
-        '종료 시간은 시작 시간보다 늦어야 합니다.',
+        context.tr('종료 시간은 시작 시간보다 늦어야 합니다.'),
         target: _ValidationTarget.time,
       );
       return;
     }
     if (_frequency != RecurrenceFrequency.none && _recurrenceInterval < 1) {
       _showValidation(
-        '반복 간격은 1 이상이어야 합니다.',
+        context.tr('반복 간격은 1 이상이어야 합니다.'),
         target: _ValidationTarget.recurrence,
       );
       return;
@@ -791,27 +815,31 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
 
   String get _alarmSubtitle {
     if (_frequency != RecurrenceFrequency.none) {
-      return '반복 알람은 추후 루틴 기능에서 사용할 수 있습니다.';
+      return context.tr('반복 알람은 추후 루틴 기능에서 사용할 수 있습니다.');
     }
     if (_alarmStateLoading) {
-      return '알람 지원 상태를 확인하고 있습니다.';
+      return context.tr('알람 지원 상태를 확인하고 있습니다.');
     }
     final isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
     return switch (_alarmState) {
-      AlarmAuthorizationState.unsupported => '이 운영체제에서는 일정 알람을 사용할 수 없습니다.',
-      AlarmAuthorizationState.denied => '시스템 설정에서 Daily의 알람 권한을 허용해야 합니다.',
+      AlarmAuthorizationState.unsupported => context.tr(
+        '이 운영체제에서는 일정 알람을 사용할 수 없습니다.',
+      ),
+      AlarmAuthorizationState.denied => context.tr(
+        '시스템 설정에서 Daily의 알람 권한을 허용해야 합니다.',
+      ),
       AlarmAuthorizationState.notDetermined =>
         isMacOS
-            ? '켜면 macOS 알림 권한을 요청하고 시작 시각에 시스템 알림을 전달합니다.'
-            : '켜면 시스템 알람 권한을 요청하고 정시 알림을 알람으로 대체합니다.',
+            ? context.tr('켜면 macOS 알림 권한을 요청하고 시작 시각에 시스템 알림을 전달합니다.')
+            : context.tr('켜면 시스템 알람 권한을 요청하고 정시 알림을 알람으로 대체합니다.'),
       AlarmAuthorizationState.authorized =>
         isMacOS
             ? (_allDay
-                  ? '선택한 시각에 소리와 다시 알림이 있는 macOS 시스템 알림을 전달합니다.'
-                  : '시작 시각에 소리와 다시 알림이 있는 macOS 시스템 알림을 전달합니다.')
+                  ? context.tr('선택한 시각에 소리와 다시 알림이 있는 macOS 시스템 알림을 전달합니다.')
+                  : context.tr('시작 시각에 소리와 다시 알림이 있는 macOS 시스템 알림을 전달합니다.'))
             : (_allDay
-                  ? '선택한 시각에 시스템 알람이 울립니다.'
-                  : '시작 시각의 정시 알림을 시스템 알람으로 대체합니다.'),
+                  ? context.tr('선택한 시각에 시스템 알람이 울립니다.')
+                  : context.tr('시작 시각의 정시 알림을 시스템 알람으로 대체합니다.')),
     };
   }
 
@@ -870,17 +898,41 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.year}년 ${date.month}월 ${date.day}일';
+    return DateFormat.yMMMMd(
+      Localizations.localeOf(context).toLanguageTag(),
+    ).format(date);
   }
 
   String _frequencyUnitLabel() {
     return switch (_frequency) {
-      RecurrenceFrequency.daily => '일',
-      RecurrenceFrequency.weekly => '주',
-      RecurrenceFrequency.monthly => '개월',
-      RecurrenceFrequency.yearly => '년',
-      RecurrenceFrequency.none => '번',
+      RecurrenceFrequency.daily =>
+        context.l10n.languageCode == 'ko' ? '일' : context.tr('일 보기'),
+      RecurrenceFrequency.weekly => context.tr('주'),
+      RecurrenceFrequency.monthly => context.tr('개월'),
+      RecurrenceFrequency.yearly => context.tr('년'),
+      RecurrenceFrequency.none => context.tr('번'),
     };
+  }
+
+  String _frequencyLabel(RecurrenceFrequency frequency) {
+    return switch (frequency) {
+      RecurrenceFrequency.none => context.tr('반복 없음'),
+      RecurrenceFrequency.daily => context.tr('매일'),
+      RecurrenceFrequency.weekly => context.tr('매주'),
+      RecurrenceFrequency.monthly => context.tr('매월'),
+      RecurrenceFrequency.yearly => context.tr('매년'),
+    };
+  }
+
+  String _recurrenceIntervalLabel() {
+    final key = switch (_frequency) {
+      RecurrenceFrequency.daily => '{count}일마다',
+      RecurrenceFrequency.weekly => '{count}주마다',
+      RecurrenceFrequency.monthly => '{count}개월마다',
+      RecurrenceFrequency.yearly => '{count}년마다',
+      RecurrenceFrequency.none => '{count}번마다',
+    };
+    return context.tr(key, args: {'count': _recurrenceInterval});
   }
 }
 
@@ -978,8 +1030,11 @@ Future<int?> _showNumberDialog({
           if (value == null || value < minValue) {
             setState(() {
               errorText = minValue == 0
-                  ? '0 이상의 숫자를 입력하세요.'
-                  : '$minValue 이상의 숫자를 입력하세요.';
+                  ? context.tr('0 이상의 숫자를 입력하세요.')
+                  : context.tr(
+                      '{count} 이상의 숫자를 입력하세요.',
+                      args: {'count': minValue},
+                    );
             });
             return;
           }
@@ -999,9 +1054,9 @@ Future<int?> _showNumberDialog({
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('취소'),
+              child: Text(context.tr('취소')),
             ),
-            FilledButton(onPressed: submit, child: const Text('적용')),
+            FilledButton(onPressed: submit, child: Text(context.tr('적용'))),
           ],
         );
       },

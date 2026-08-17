@@ -1,8 +1,19 @@
 import Cocoa
 import FlutterMacOS
+import AppIntents
 
 @main
 class AppDelegate: FlutterAppDelegate {
+  override func applicationDidFinishLaunching(_ notification: Notification) {
+    super.applicationDidFinishLaunching(notification)
+    if #available(macOS 13.0, *) {
+      DailyAppShortcuts.updateAppShortcutParameters()
+    }
+    if #available(macOS 15.0, *) {
+      DailySiriSearchIndexer.scheduleRefresh()
+    }
+  }
+
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return true
   }

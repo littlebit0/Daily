@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../../core/maps/map_launcher.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../domain/calendar_event.dart';
 import '../domain/event_category.dart';
 import '../domain/event_draft.dart';
@@ -30,7 +31,7 @@ class EventDetailsPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
-    final dateLabel = _formatDateLabel(date);
+    final dateLabel = _formatDateLabel(context, date);
     final liveEventsAsync = ref.watch(eventsInRangeProvider(_dayRange(date)));
     final dayEvents = liveEventsAsync.maybeWhen(
       data: (items) => _eventsForDay(items, date),
@@ -53,7 +54,7 @@ class EventDetailsPanel extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: '일정 추가',
+                  tooltip: context.tr('일정 추가'),
                   onPressed: () => _addEvent(
                     context,
                     ref,
@@ -72,7 +73,7 @@ class EventDetailsPanel extends ConsumerWidget {
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: [
                         Text(
-                          '일정이 없습니다.',
+                          context.tr('일정이 없습니다.'),
                           style: Theme.of(context).textTheme.labelMedium,
                         ),
                       ],
@@ -209,8 +210,8 @@ class EventDetailsPanel extends ConsumerWidget {
 
     final scope = await _showRecurringScopeDialog(
       context,
-      title: '반복 일정 수정',
-      actionLabel: '수정',
+      title: context.tr('반복 일정 수정'),
+      actionLabel: context.tr('수정'),
     );
     if (scope == null) {
       return;
@@ -241,17 +242,19 @@ class EventDetailsPanel extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('일정 삭제'),
-        content: Text('"${event.title}" 일정을 삭제할까요?'),
+        title: Text(context.tr('일정 삭제')),
+        content: Text(
+          context.tr('"{title}" 일정을 삭제할까요?', args: {'title': event.title}),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: Text(context.tr('취소')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('삭제'),
+            child: Text(context.tr('삭제')),
           ),
         ],
       ),
@@ -266,8 +269,8 @@ class EventDetailsPanel extends ConsumerWidget {
       }
       final scope = await _showRecurringScopeDialog(
         context,
-        title: '반복 일정 삭제',
-        actionLabel: '삭제',
+        title: context.tr('반복 일정 삭제'),
+        actionLabel: context.tr('삭제'),
       );
       if (scope == null) {
         return;
@@ -350,35 +353,41 @@ class EventDetailsPanel extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: Text('이 반복 일정의 어느 범위에 $actionLabel을 적용할까요?'),
+        content: Text(
+          context.tr(
+            '이 반복 일정의 어느 범위에 {action}을 적용할까요?',
+            args: {'action': actionLabel},
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소'),
+            child: Text(context.tr('취소')),
           ),
           TextButton(
             onPressed: () =>
                 Navigator.of(context).pop(_RecurringChangeScope.onlyThis),
-            child: const Text('이 일정만'),
+            child: Text(context.tr('이 일정만')),
           ),
           TextButton(
             onPressed: () =>
                 Navigator.of(context).pop(_RecurringChangeScope.future),
-            child: const Text('이후 일정'),
+            child: Text(context.tr('이후 일정')),
           ),
           FilledButton(
             onPressed: () =>
                 Navigator.of(context).pop(_RecurringChangeScope.all),
-            child: const Text('전체 반복'),
+            child: Text(context.tr('전체 반복')),
           ),
         ],
       ),
     );
   }
 
-  String _formatDateLabel(DateTime date) {
-    const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
-    return '${date.month}월 ${date.day}일 ${weekdays[date.weekday - 1]}요일';
+  String _formatDateLabel(BuildContext context, DateTime date) {
+    return DateFormat.yMMMMEEEEd(
+      context.l10n.locale.toLanguageTag(),
+    ).format(date);
   }
 }
 
@@ -397,9 +406,9 @@ class _EventTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeLabel = _formatTimeLabel(event);
+    final timeLabel = _formatTimeLabel(context, event);
     final color = Color(event.colorValue);
-    final title = event.title;
+    final title = context.l10n.eventTitle(event.title, holiday: event.holiday);
     return Material(
       color: color.withValues(alpha: event.holiday ? 0.07 : 0.08),
       shape: RoundedRectangleBorder(
@@ -479,7 +488,7 @@ class _EventTile extends StatelessWidget {
                               onPressed: () =>
                                   MapLauncher().openLocation(event.location!),
                               icon: const Icon(Icons.map_outlined, size: 16),
-                              label: const Text('지도 바로가기'),
+                              label: Text(context.tr('지도 바로가기')),
                               style: TextButton.styleFrom(
                                 padding: EdgeInsets.zero,
                                 minimumSize: const Size(0, 28),
@@ -525,7 +534,7 @@ class _EventTile extends StatelessWidget {
                     dimension: 48,
                     child: IconButton(
                       key: ValueKey('event-edit-${event.id}'),
-                      tooltip: '수정',
+                      tooltip: context.tr('수정'),
                       onPressed: onEdit,
                       icon: const Icon(Icons.edit_outlined),
                     ),
@@ -534,7 +543,7 @@ class _EventTile extends StatelessWidget {
                     dimension: 48,
                     child: IconButton(
                       key: ValueKey('event-delete-${event.id}'),
-                      tooltip: '삭제',
+                      tooltip: context.tr('삭제'),
                       onPressed: onDelete == null
                           ? null
                           : () => unawaited(onDelete!()),
@@ -562,15 +571,17 @@ class _EventTile extends StatelessWidget {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  String _formatTimeLabel(CalendarEvent event) {
-    final dateFormatter = DateFormat('M월 d일');
-    final timeFormatter = DateFormat('HH:mm');
+  String _formatTimeLabel(BuildContext context, CalendarEvent event) {
+    final locale = context.l10n.locale.toLanguageTag();
+    final dateFormatter = DateFormat.yMMMd(locale);
+    final timeFormatter = DateFormat.Hm(locale);
     if (event.allDay) {
       final inclusiveEnd = event.endAt.subtract(const Duration(days: 1));
       if (_sameDay(event.startAt, inclusiveEnd)) {
-        return '종일';
+        return context.tr('종일');
       }
-      return '${dateFormatter.format(event.startAt)} - ${dateFormatter.format(inclusiveEnd)} 종일';
+      return '${dateFormatter.format(event.startAt)} - '
+          '${dateFormatter.format(inclusiveEnd)} ${context.tr('종일')}';
     }
     if (_sameDay(event.startAt, event.endAt)) {
       return '${timeFormatter.format(event.startAt)} - ${timeFormatter.format(event.endAt)}';
@@ -638,13 +649,19 @@ class _EventDetailSheet extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          event.title,
+                          context.l10n.eventTitle(
+                            event.title,
+                            holiday: event.holiday,
+                          ),
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          event.category.label,
+                          context.l10n.categoryName(
+                            id: event.category.id,
+                            label: event.category.label,
+                          ),
                           style: Theme.of(
                             context,
                           ).textTheme.labelMedium?.copyWith(color: color),
@@ -660,29 +677,29 @@ class _EventDetailSheet extends StatelessWidget {
                   children: [
                     _DetailRow(
                       icon: Icons.schedule_outlined,
-                      label: '시간',
-                      value: _formatTimeLabel(event),
+                      label: context.tr('시간'),
+                      value: _formatTimeLabel(context, event),
                     ),
                     if (event.alarmEnabled)
                       _DetailRow(
                         icon: Icons.alarm_outlined,
-                        label: '일정 알람',
-                        value: _formatAlarmLabel(event),
+                        label: context.tr('일정 알람'),
+                        value: _formatAlarmLabel(context, event),
                       ),
                     if (event.location != null && event.location!.isNotEmpty)
                       _DetailActionRow(
                         icon: Icons.location_on_outlined,
-                        label: '장소',
+                        label: context.tr('장소'),
                         value: event.location!,
                         actionIcon: Icons.map_outlined,
-                        actionLabel: '지도 바로가기',
+                        actionLabel: context.tr('지도 바로가기'),
                         onPressed: () =>
                             MapLauncher().openLocation(event.location!),
                       ),
                     if (event.weather != null && event.weather!.isNotEmpty)
                       _DetailRow(
                         icon: Icons.cloud_outlined,
-                        label: '날씨',
+                        label: context.tr('날씨'),
                         value: event.weather!,
                       ),
                     if (event.url != null && event.url!.isNotEmpty)
@@ -691,13 +708,13 @@ class _EventDetailSheet extends StatelessWidget {
                         label: 'URI',
                         value: event.url!,
                         actionIcon: Icons.open_in_new,
-                        actionLabel: '열기',
+                        actionLabel: context.tr('열기'),
                         onPressed: () => _openUrl(event.url!),
                       ),
                     if (event.memo != null && event.memo!.isNotEmpty)
                       _DetailRow(
                         icon: Icons.notes_outlined,
-                        label: '메모',
+                        label: context.tr('메모'),
                         value: event.memo!,
                       ),
                     if (event.showDday)
@@ -715,7 +732,7 @@ class _EventDetailSheet extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         child: Text(
-                          '추가 상세정보가 없습니다.',
+                          context.tr('추가 상세정보가 없습니다.'),
                           style: Theme.of(context).textTheme.labelMedium,
                         ),
                       ),
@@ -731,7 +748,7 @@ class _EventDetailSheet extends StatelessWidget {
                       TextButton.icon(
                         onPressed: onDelete,
                         icon: const Icon(Icons.delete_outline),
-                        label: const Text('삭제'),
+                        label: Text(context.tr('삭제')),
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.red,
                         ),
@@ -741,7 +758,7 @@ class _EventDetailSheet extends StatelessWidget {
                       FilledButton.icon(
                         onPressed: onEdit,
                         icon: const Icon(Icons.edit_outlined),
-                        label: const Text('수정'),
+                        label: Text(context.tr('수정')),
                       ),
                     ],
                   ],
@@ -754,15 +771,17 @@ class _EventDetailSheet extends StatelessWidget {
     );
   }
 
-  String _formatTimeLabel(CalendarEvent event) {
-    final dateFormatter = DateFormat('yyyy년 M월 d일');
-    final timeFormatter = DateFormat('HH:mm');
+  String _formatTimeLabel(BuildContext context, CalendarEvent event) {
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final dateFormatter = DateFormat.yMMMMd(locale);
+    final timeFormatter = DateFormat.Hm(locale);
     if (event.allDay) {
       final inclusiveEnd = event.endAt.subtract(const Duration(days: 1));
       if (_sameDay(event.startAt, inclusiveEnd)) {
-        return '${dateFormatter.format(event.startAt)} 종일';
+        return '${dateFormatter.format(event.startAt)} ${context.tr('종일')}';
       }
-      return '${dateFormatter.format(event.startAt)} - ${dateFormatter.format(inclusiveEnd)} 종일';
+      return '${dateFormatter.format(event.startAt)} - '
+          '${dateFormatter.format(inclusiveEnd)} ${context.tr('종일')}';
     }
     return '${dateFormatter.format(event.startAt)} ${timeFormatter.format(event.startAt)} - '
         '${dateFormatter.format(event.endAt)} ${timeFormatter.format(event.endAt)}';
@@ -783,13 +802,18 @@ class _EventDetailSheet extends StatelessWidget {
     return difference > 0 ? 'D-$difference' : 'D+${difference.abs()}';
   }
 
-  String _formatAlarmLabel(CalendarEvent event) {
+  String _formatAlarmLabel(BuildContext context, CalendarEvent event) {
     if (!event.allDay) {
-      return '시작 시각 · 중지 또는 10분 후 다시 알림';
+      return context.tr('시작 시각 · 중지 또는 10분 후 다시 알림');
     }
     final minutes = event.allDayAlarmMinutes;
     final time = DateTime(2000, 1, 1, minutes ~/ 60, minutes % 60);
-    return '${DateFormat.jm('ko_KR').format(time)} · 중지 또는 10분 후 다시 알림';
+    return context.tr(
+      '{time} · 중지 또는 10분 후 다시 알림',
+      args: {
+        'time': DateFormat.jm(context.l10n.locale.toLanguageTag()).format(time),
+      },
+    );
   }
 
   Future<void> _openUrl(String value) async {

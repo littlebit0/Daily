@@ -871,6 +871,7 @@ void main() {
     () async {
       SharedPreferences.setMockInitialValues({
         'appTextSize': AppTextSize.large.name,
+        'weekDayLayoutMode': WeekDayLayoutMode.schedule.name,
         'categories': jsonEncode([
           {
             'id': 'basic',
@@ -963,6 +964,7 @@ void main() {
       expect(work.colorValue, 0xff10b981);
       expect(restored.defaultReminderMinutesList, [0, 10, 60]);
       expect(restored.appTextSize, AppTextSize.large);
+      expect(restored.weekDayLayoutMode, WeekDayLayoutMode.schedule);
       expect(service.settingsRevisionNotifier.value, 1);
     },
   );
@@ -970,6 +972,7 @@ void main() {
   test('restore settings applies an explicitly synced app text size', () async {
     SharedPreferences.setMockInitialValues({
       'appTextSize': AppTextSize.large.name,
+      'weekDayLayoutMode': WeekDayLayoutMode.list.name,
     });
     final preferences = await SharedPreferences.getInstance();
     final repository = _MemoryEventRepository();
@@ -991,7 +994,10 @@ void main() {
         return _jsonResponse({
           'schemaVersion': 2,
           'type': 'settings',
-          'settings': {'appTextSize': AppTextSize.basic.name},
+          'settings': {
+            'appTextSize': AppTextSize.basic.name,
+            'weekDayLayoutMode': WeekDayLayoutMode.schedule.name,
+          },
         });
       }
       return http.Response('unexpected ${request.method} ${request.url}', 500);
@@ -1010,6 +1016,10 @@ void main() {
     expect(
       SettingsRepository(preferences: preferences).load().appTextSize,
       AppTextSize.basic,
+    );
+    expect(
+      SettingsRepository(preferences: preferences).load().weekDayLayoutMode,
+      WeekDayLayoutMode.schedule,
     );
   });
 

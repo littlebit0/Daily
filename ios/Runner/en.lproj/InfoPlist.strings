@@ -1,0 +1,7 @@
+"NSAlarmKitUsageDescription" = "Daily uses alarms to alert you at the event time you choose.";
+"NSCalendarsFullAccessUsageDescription" = "Daily reads Apple Calendar events only when you import them into Daily.";
+"NSCalendarsUsageDescription" = "Daily reads Apple Calendar events only when you import them into Daily.";
+"NSFaceIDUsageDescription" = "Daily uses Face ID to securely unlock the app.";
+"NSMicrophoneUsageDescription" = "Daily uses the microphone only when you speak a calendar command to Signal.";
+"NSSpeechRecognitionUsageDescription" = "Daily converts your Signal calendar command to text so it can carry out the requested action.";
+"CFBundleSpokenName" = "Daily";

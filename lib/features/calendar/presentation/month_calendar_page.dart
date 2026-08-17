@@ -2,15 +2,18 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui show TextDirection;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../../core/settings/app_settings.dart';
-import '../../chat/presentation/chat_input_bar.dart';
+import '../../../core/localization/app_localizations.dart';
+import '../../../core/siri/signal_voice_service.dart';
 import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 import '../../events/domain/event_draft.dart';
@@ -18,6 +21,7 @@ import '../../events/presentation/event_details_panel.dart';
 import '../../events/presentation/event_editor_dialog.dart';
 import '../../settings/presentation/settings_page.dart';
 import '../widgets/calendar_month_grid.dart';
+import '../widgets/schedule_timeline_view.dart';
 
 enum _BottomCenterAction { quickAccess, calendar, ai }
 
@@ -59,6 +63,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
   Future<List<CalendarEvent>>? _searchResults;
   var _searchOpen = false;
   var _quickAccessSelected = false;
+  var _showAllDayScheduleEvents = true;
 
   @override
   void dispose() {
@@ -175,6 +180,10 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                                           viewMode: viewMode,
                                           settings: settings,
                                           searchQuery: searchQuery,
+                                          showAllDayScheduleEvents:
+                                              _showAllDayScheduleEvents,
+                                          onShowAllDayScheduleEventsChanged:
+                                              _setShowAllDayScheduleEvents,
                                           onMonthDelta: (delta) =>
                                               _moveVisibleRange(
                                                 ref,
@@ -203,6 +212,10 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                                                 viewMode: viewMode,
                                                 settings: settings,
                                                 searchQuery: searchQuery,
+                                                showAllDayScheduleEvents:
+                                                    _showAllDayScheduleEvents,
+                                                onShowAllDayScheduleEventsChanged:
+                                                    _setShowAllDayScheduleEvents,
                                                 onMonthDelta: (delta) =>
                                                     _moveVisibleRange(
                                                       ref,
@@ -251,6 +264,10 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                                           viewMode: viewMode,
                                           settings: settings,
                                           searchQuery: searchQuery,
+                                          showAllDayScheduleEvents:
+                                              _showAllDayScheduleEvents,
+                                          onShowAllDayScheduleEventsChanged:
+                                              _setShowAllDayScheduleEvents,
                                           onMonthDelta: (delta) =>
                                               _moveVisibleRange(
                                                 ref,
@@ -341,6 +358,11 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     }
   }
 
+  void _setShowAllDayScheduleEvents(bool value) {
+    if (_showAllDayScheduleEvents == value) return;
+    setState(() => _showAllDayScheduleEvents = value);
+  }
+
   void _closeSearch() {
     _searchDebounce?.cancel();
     if (_searchOpen || _searchResults != null) {
@@ -401,6 +423,10 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
   }
 
   void _toggleAiPanel() {
+    _toggleInlineAiPanel();
+  }
+
+  void _toggleInlineAiPanel() {
     _closeSearch();
     final opening = !_aiOpen.value;
     if (_quickAccessSelected) {
@@ -486,18 +512,16 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
   Widget _buildInlineAiPanel() {
     return ValueListenableBuilder<bool>(
       valueListenable: _aiOpen,
-      child: ChatInputBar(
-        key: const ValueKey('inline-ai-input'),
-        includeBottomSafeArea: false,
-        onClose: _closeAiPanel,
-      ),
-      builder: (context, aiOpen, child) => AnimatedSize(
+      builder: (context, aiOpen, _) => AnimatedSize(
         key: const ValueKey('inline-ai-layout-panel'),
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
         alignment: Alignment.bottomCenter,
         child: aiOpen
-            ? child
+            ? _SignalVoicePanel(
+                key: const ValueKey('inline-ai-input'),
+                onClose: _closeAiPanel,
+              )
             : const SizedBox(width: double.infinity, height: 0),
       ),
     );
@@ -520,12 +544,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
       bottom: bottomInset,
       child: ValueListenableBuilder<bool>(
         valueListenable: _aiOpen,
-        child: ChatInputBar(
-          key: const ValueKey('overlay-ai-input'),
-          includeBottomSafeArea: false,
-          onClose: _closeAiPanel,
-        ),
-        builder: (context, aiOpen, child) {
+        builder: (context, aiOpen, _) {
           return IgnorePointer(
             key: const ValueKey('inline-ai-panel-pointer'),
             ignoring: !aiOpen,
@@ -541,7 +560,12 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
                   offset: aiOpen ? Offset.zero : const Offset(0, 1.15),
-                  child: child,
+                  child: aiOpen
+                      ? _SignalVoicePanel(
+                          key: const ValueKey('overlay-ai-input'),
+                          onClose: _closeAiPanel,
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
             ),
@@ -577,7 +601,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
             return ListView(
               children: [
                 Text(
-                  '빠른 보기',
+                  context.tr('빠른 보기'),
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
@@ -585,18 +609,22 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                 const SizedBox(height: 16),
                 _QuickAccessCard(
                   icon: Icons.calendar_month_outlined,
-                  title: '월간 미니 캘린더',
-                  subtitle: '${currentMonth.year}년 ${currentMonth.month}월',
+                  title: context.tr('월간 미니 캘린더'),
+                  subtitle: DateFormat.yMMMM(
+                    Localizations.localeOf(context).toLanguageTag(),
+                  ).format(currentMonth),
                   items: _monthSummary(visibleEvents),
                   onTap: () => _selectCalendarView(CalendarViewMode.month),
                 ),
                 const SizedBox(height: 10),
                 _QuickAccessCard(
                   icon: Icons.today_outlined,
-                  title: '오늘 일정',
-                  subtitle: '${today.month}월 ${today.day}일',
+                  title: context.tr('오늘 일정'),
+                  subtitle: DateFormat.MMMd(
+                    Localizations.localeOf(context).toLanguageTag(),
+                  ).format(today),
                   items: todayEvents.isEmpty
-                      ? const ['일정 없음']
+                      ? [context.tr('일정 없음')]
                       : todayEvents
                             .take(4)
                             .map((event) => _eventPreview(event, settings))
@@ -614,9 +642,9 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                 _QuickAccessCard(
                   icon: Icons.flag_outlined,
                   title: 'D-day',
-                  subtitle: '중요한 날짜',
+                  subtitle: context.tr('중요한 날짜'),
                   items: ddayEvents.isEmpty
-                      ? const ['D-day 일정 없음']
+                      ? [context.tr('D-day 일정 없음')]
                       : ddayEvents
                             .take(4)
                             .map((event) => _eventPreview(event, settings))
@@ -648,14 +676,17 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     final normalCount = events.where((event) => !event.holiday).length;
     final ddayCount = events.where((event) => event.showDday).length;
     return [
-      '일정 $normalCount개',
-      'D-day $ddayCount개',
-      '공휴일 ${events.where((event) => event.holiday).length}개',
+      context.tr('일정 {count}개', args: {'count': normalCount}),
+      context.tr('D-day {count}개', args: {'count': ddayCount}),
+      context.tr(
+        '공휴일 {count}개',
+        args: {'count': events.where((event) => event.holiday).length},
+      ),
     ];
   }
 
   String _eventPreview(CalendarEvent event, AppSettings settings) {
-    final title = event.title;
+    final title = context.l10n.eventTitle(event.title, holiday: event.holiday);
     if (event.allDay) {
       return title;
     }
@@ -942,6 +973,368 @@ class _SizeReporterRenderObject extends RenderProxyBox {
   }
 }
 
+enum _SignalVoiceState {
+  listening,
+  processing,
+  awaitingConfirmation,
+  completed,
+  failed,
+}
+
+class _SignalVoicePanel extends ConsumerStatefulWidget {
+  const _SignalVoicePanel({super.key, required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  ConsumerState<_SignalVoicePanel> createState() => _SignalVoicePanelState();
+}
+
+class _SignalVoicePanelState extends ConsumerState<_SignalVoicePanel>
+    with WidgetsBindingObserver {
+  final _voice = SignalVoiceService.instance;
+  final _textController = TextEditingController();
+  final _textFocusNode = FocusNode();
+  _SignalVoiceState _state = _SignalVoiceState.listening;
+  String _transcript = '';
+  String _response = '';
+  String _conversation = '';
+  String _pendingCommand = '';
+  bool _closing = false;
+  bool _nativeListening = false;
+  bool _showTextInput = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _voice.setHandlers(
+      onTranscriptChanged: (transcript) {
+        if (mounted) setState(() => _transcript = transcript);
+      },
+      onListeningStarted: () {
+        if (mounted) setState(() => _nativeListening = true);
+      },
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _listen());
+  }
+
+  @override
+  void dispose() {
+    _closing = true;
+    WidgetsBinding.instance.removeObserver(this);
+    _voice.setHandlers();
+    _voice.cancelListening().catchError((_) {});
+    _textController.dispose();
+    _textFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_nativeListening || _closing) return;
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _nativeListening = false;
+      unawaited(_voice.cancelListening().catchError((_) {}));
+      if (mounted) {
+        setState(() {
+          _response = context.tr('음성 듣기가 중단되었습니다.');
+          _state = _SignalVoiceState.failed;
+        });
+      }
+    }
+  }
+
+  Future<void> _listen() async {
+    if (!mounted) return;
+    setState(() {
+      _state = _SignalVoiceState.listening;
+      _transcript = '';
+      _response = '';
+      _pendingCommand = '';
+      _showTextInput = false;
+    });
+    try {
+      final spoken = await _voice.startListening();
+      if (!mounted || _closing) return;
+      _nativeListening = false;
+      await _acceptCommand(spoken);
+    } on PlatformException catch (error) {
+      _nativeListening = false;
+      if (!mounted || _closing || error.code == 'listening_cancelled') return;
+      _showPlatformError(error);
+    } catch (_) {
+      _nativeListening = false;
+      if (!mounted || _closing) return;
+      setState(() {
+        _response = context.tr('음성 명령을 처리하지 못했습니다.');
+        _state = _SignalVoiceState.failed;
+      });
+    }
+  }
+
+  Future<void> _acceptCommand(String spoken) async {
+    final command = [
+      _conversation,
+      spoken.trim(),
+    ].where((part) => part.isNotEmpty).join(' ');
+    if (command.isEmpty) return;
+    setState(() => _transcript = spoken.trim());
+    // Native parsing asks for missing required fields first. Once the command
+    // is complete it returns signal_confirmation_required immediately before
+    // the mutation, so users confirm exactly once at the correct point.
+    await _execute(command, confirmed: false);
+  }
+
+  Future<void> _execute(String command, {required bool confirmed}) async {
+    setState(() {
+      _pendingCommand = '';
+      _state = _SignalVoiceState.processing;
+    });
+    try {
+      final result = await _voice.runSignal(command, confirmed: confirmed);
+      if (!mounted || _closing) return;
+      if (result.success) {
+        ref.invalidate(eventsInRangeProvider);
+        ref.invalidate(eventsForSelectedDateProvider);
+        unawaited(ref.read(appleWidgetServiceProvider).refresh());
+      }
+      setState(() {
+        _conversation = '';
+        _response = result.message;
+        _state = result.success
+            ? _SignalVoiceState.completed
+            : _SignalVoiceState.failed;
+      });
+      if (result.message.isNotEmpty) {
+        await _voice.speak(result.message);
+      }
+    } on PlatformException catch (error) {
+      if (!mounted || _closing) return;
+      _showPlatformError(error, command: command);
+    } catch (_) {
+      if (!mounted || _closing) return;
+      setState(() {
+        _response = context.tr('음성 명령을 처리하지 못했습니다.');
+        _state = _SignalVoiceState.failed;
+      });
+    }
+  }
+
+  void _showPlatformError(PlatformException error, {String? command}) {
+    if (error.code == 'signal_confirmation_required') {
+      final pending = command ?? _transcript;
+      final message = context.tr('이 명령을 실행할까요?');
+      setState(() {
+        _pendingCommand = pending;
+        _response = message;
+        _state = _SignalVoiceState.awaitingConfirmation;
+      });
+      unawaited(_voice.speak(message));
+      return;
+    }
+    final needsMoreInformation = error.code == 'signal_needs_input';
+    final message = switch (error.code) {
+      'signal_auth_cancelled' ||
+      'signal_cancelled' => context.tr('인증 또는 작업이 취소되었습니다.'),
+      'signal_auth_failed' => context.tr('기기 인증을 완료하지 못했습니다.'),
+      'signal_execution_failed' =>
+        error.message ?? context.tr('음성 명령을 처리하지 못했습니다.'),
+      _ when needsMoreInformation => context.tr('필요한 정보를 이어서 말씀해 주세요.'),
+      _ => error.message ?? context.tr('음성 명령을 처리하지 못했습니다.'),
+    };
+    setState(() {
+      if (needsMoreInformation && (command ?? _transcript).trim().isNotEmpty) {
+        _conversation = (command ?? _transcript).trim();
+      }
+      _response = message;
+      _state = _SignalVoiceState.failed;
+    });
+    if (needsMoreInformation) unawaited(_voice.speak(message));
+  }
+
+  Future<void> _finishListening() async {
+    try {
+      await _voice.finishListening();
+    } catch (_) {}
+  }
+
+  Future<void> _confirmCommand() async {
+    final command = _pendingCommand;
+    if (command.isEmpty) return;
+    await _execute(command, confirmed: true);
+  }
+
+  void _cancelCommand() {
+    setState(() {
+      _pendingCommand = '';
+      _conversation = '';
+      _response = context.tr('작업을 취소했습니다.');
+      _state = _SignalVoiceState.failed;
+    });
+  }
+
+  Future<void> _toggleTextInput() async {
+    if (_nativeListening) {
+      _nativeListening = false;
+      await _voice.cancelListening().catchError((_) {});
+    }
+    if (!mounted) return;
+    setState(() => _showTextInput = !_showTextInput);
+    if (_showTextInput) _textFocusNode.requestFocus();
+  }
+
+  Future<void> _submitTyped(String value) async {
+    final input = value.trim();
+    if (input.isEmpty) return;
+    _textController.clear();
+    await _acceptCommand(input);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final listening = _state == _SignalVoiceState.listening;
+    final processing = _state == _SignalVoiceState.processing;
+    final awaitingConfirmation =
+        _state == _SignalVoiceState.awaitingConfirmation;
+    final status = switch (_state) {
+      _SignalVoiceState.listening => context.tr('지금 듣는 중...'),
+      _SignalVoiceState.processing => context.tr('시그널 처리 중...'),
+      _SignalVoiceState.awaitingConfirmation => context.tr('실행 확인'),
+      _SignalVoiceState.completed => context.tr('완료'),
+      _SignalVoiceState.failed => context.tr('다시 말씀해 주세요'),
+    };
+
+    return Material(
+      color: colorScheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: IconButton.filled(
+                      tooltip: listening
+                          ? context.tr('듣기 완료')
+                          : context.tr('다시 듣기'),
+                      onPressed: processing || awaitingConfirmation
+                          ? null
+                          : listening
+                          ? _finishListening
+                          : _listen,
+                      icon: processing
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              listening
+                                  ? Icons.stop_rounded
+                                  : Icons.mic_rounded,
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 44),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            status,
+                            style: Theme.of(context).textTheme.labelLarge,
+                          ),
+                          if (_transcript.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              _transcript,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                          if (_response.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              _response,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: colorScheme.primary),
+                            ),
+                          ],
+                          if (awaitingConfirmation) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                FilledButton(
+                                  onPressed: _confirmCommand,
+                                  child: Text(context.tr('실행')),
+                                ),
+                                const SizedBox(width: 8),
+                                TextButton(
+                                  onPressed: _cancelCommand,
+                                  child: Text(context.tr('취소')),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: context.tr('텍스트로 입력'),
+                    onPressed: processing ? null : _toggleTextInput,
+                    icon: Icon(
+                      _showTextInput
+                          ? Icons.keyboard_hide_rounded
+                          : Icons.keyboard_alt_outlined,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: context.tr('AI 입력 닫기'),
+                    onPressed: widget.onClose,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              if (_showTextInput) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  key: const ValueKey('signal-text-input'),
+                  controller: _textController,
+                  focusNode: _textFocusNode,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: _submitTyped,
+                  decoration: InputDecoration(
+                    hintText: context.tr('Daily에 요청할 내용을 입력하세요.'),
+                    prefixIcon: const Icon(Icons.keyboard_alt_outlined),
+                    suffixIcon: IconButton(
+                      tooltip: context.tr('실행'),
+                      onPressed: () => _submitTyped(_textController.text),
+                      icon: const Icon(Icons.arrow_upward_rounded),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _InlineSearchPanel extends StatelessWidget {
   const _InlineSearchPanel({
     required this.controller,
@@ -981,18 +1374,18 @@ class _InlineSearchPanel extends StatelessWidget {
             onChanged: onChanged,
             onSubmitted: (_) => onSubmitted(),
             decoration: InputDecoration(
-              hintText: '제목, 메모, 장소 검색',
+              hintText: context.tr('제목, 메모, 장소 검색'),
               prefixIcon: const Icon(Icons.search),
               suffixIcon: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    tooltip: '검색',
+                    tooltip: context.tr('검색'),
                     onPressed: onSubmitted,
                     icon: const Icon(Icons.arrow_forward),
                   ),
                   IconButton(
-                    tooltip: '닫기',
+                    tooltip: context.tr('닫기'),
                     onPressed: onClose,
                     icon: const Icon(Icons.close),
                   ),
@@ -1019,7 +1412,7 @@ class _InlineSearchPanel extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      '검색 결과가 없습니다.',
+                      context.tr('검색 결과가 없습니다.'),
                       style: Theme.of(context).textTheme.labelMedium,
                     ),
                   ),
@@ -1055,10 +1448,11 @@ class _InlineSearchResultTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final date = DateFormat('yyyy년 M월 d일').format(event.startAt);
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final date = DateFormat.yMMMMd(locale).format(event.startAt);
     final time = event.allDay
-        ? '종일'
-        : DateFormat('HH:mm').format(event.startAt);
+        ? context.tr('종일')
+        : DateFormat.Hm(locale).format(event.startAt);
     return ListTile(
       dense: true,
       onTap: onTap,
@@ -1070,7 +1464,11 @@ class _InlineSearchResultTile extends StatelessWidget {
         backgroundColor: Color(event.colorValue).withValues(alpha: 0.12),
         child: Icon(Icons.flag, color: Color(event.colorValue)),
       ),
-      title: Text(event.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Text(
+        context.l10n.eventTitle(event.title, holiday: event.holiday),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       subtitle: Text('$date  $time'),
     );
   }
@@ -1119,6 +1517,8 @@ class _CalendarMainContent extends StatelessWidget {
     required this.viewMode,
     required this.settings,
     required this.searchQuery,
+    required this.showAllDayScheduleEvents,
+    required this.onShowAllDayScheduleEventsChanged,
     required this.onMonthDelta,
     required this.onDateSelected,
   });
@@ -1128,6 +1528,8 @@ class _CalendarMainContent extends StatelessWidget {
   final CalendarViewMode viewMode;
   final AppSettings settings;
   final String searchQuery;
+  final bool showAllDayScheduleEvents;
+  final ValueChanged<bool> onShowAllDayScheduleEventsChanged;
   final ValueChanged<int> onMonthDelta;
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
 
@@ -1146,6 +1548,8 @@ class _CalendarMainContent extends StatelessWidget {
         selectedDate: selectedDate,
         settings: settings,
         searchQuery: searchQuery,
+        showAllDayScheduleEvents: showAllDayScheduleEvents,
+        onShowAllDayScheduleEventsChanged: onShowAllDayScheduleEventsChanged,
         onWeekDelta: onMonthDelta,
         onDateSelected: onDateSelected,
       ),
@@ -1153,7 +1557,10 @@ class _CalendarMainContent extends StatelessWidget {
         selectedDate: selectedDate,
         settings: settings,
         searchQuery: searchQuery,
+        showAllDayScheduleEvents: showAllDayScheduleEvents,
+        onShowAllDayScheduleEventsChanged: onShowAllDayScheduleEventsChanged,
         onDayDelta: onMonthDelta,
+        onDateSelected: (date) => onDateSelected(date, const []),
       ),
     };
   }
@@ -1164,6 +1571,8 @@ class _WeekPageView extends StatefulWidget {
     required this.selectedDate,
     required this.settings,
     required this.searchQuery,
+    required this.showAllDayScheduleEvents,
+    required this.onShowAllDayScheduleEventsChanged,
     required this.onWeekDelta,
     required this.onDateSelected,
   });
@@ -1171,6 +1580,8 @@ class _WeekPageView extends StatefulWidget {
   final DateTime selectedDate;
   final AppSettings settings;
   final String searchQuery;
+  final bool showAllDayScheduleEvents;
+  final ValueChanged<bool> onShowAllDayScheduleEventsChanged;
   final ValueChanged<int> onWeekDelta;
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
 
@@ -1241,6 +1652,9 @@ class _WeekPageViewState extends State<_WeekPageView> {
             selectedDate: pageDate,
             settings: widget.settings,
             searchQuery: widget.searchQuery,
+            showAllDayScheduleEvents: widget.showAllDayScheduleEvents,
+            onShowAllDayScheduleEventsChanged:
+                widget.onShowAllDayScheduleEventsChanged,
             onDateSelected: widget.onDateSelected,
           );
         },
@@ -1305,12 +1719,16 @@ class _CalendarWeekPage extends ConsumerWidget {
     required this.selectedDate,
     required this.settings,
     required this.searchQuery,
+    required this.showAllDayScheduleEvents,
+    required this.onShowAllDayScheduleEventsChanged,
     required this.onDateSelected,
   });
 
   final DateTime selectedDate;
   final AppSettings settings;
   final String searchQuery;
+  final bool showAllDayScheduleEvents;
+  final ValueChanged<bool> onShowAllDayScheduleEventsChanged;
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
 
   @override
@@ -1318,13 +1736,36 @@ class _CalendarWeekPage extends ConsumerWidget {
     final range = _weekRangeFor(selectedDate, settings.weekStartsOnMonday);
     final eventsAsync = ref.watch(eventsInRangeProvider(range));
     return eventsAsync.when(
-      data: (events) => _CalendarWeekView(
-        selectedDate: selectedDate,
-        weekStartsOnMonday: settings.weekStartsOnMonday,
-        showLunarDates: settings.showLunarDates,
-        events: _filterVisibleEvents(events, settings, searchQuery),
-        onDateSelected: onDateSelected,
-      ),
+      data: (events) {
+        final visibleEvents = _filterVisibleEvents(
+          events,
+          settings,
+          searchQuery,
+        );
+        if (settings.weekDayLayoutMode == WeekDayLayoutMode.schedule) {
+          final days = List.generate(
+            7,
+            (index) => range.start.add(Duration(days: index)),
+          );
+          return ScheduleTimelineView(
+            days: days,
+            events: visibleEvents,
+            selectedDate: selectedDate,
+            use24HourTime: settings.use24HourTime,
+            showAllDayEvents: showAllDayScheduleEvents,
+            onShowAllDayEventsChanged: onShowAllDayScheduleEventsChanged,
+            onDateSelected: (date) =>
+                onDateSelected(date, _eventsForDay(visibleEvents, date)),
+          );
+        }
+        return _CalendarWeekView(
+          selectedDate: selectedDate,
+          weekStartsOnMonday: settings.weekStartsOnMonday,
+          showLunarDates: settings.showLunarDates,
+          events: visibleEvents,
+          onDateSelected: onDateSelected,
+        );
+      },
       error: (error, stackTrace) => Center(child: Text('$error')),
       loading: () => const Center(child: CircularProgressIndicator()),
     );
@@ -1336,13 +1777,19 @@ class _DayPageView extends StatefulWidget {
     required this.selectedDate,
     required this.settings,
     required this.searchQuery,
+    required this.showAllDayScheduleEvents,
+    required this.onShowAllDayScheduleEventsChanged,
     required this.onDayDelta,
+    required this.onDateSelected,
   });
 
   final DateTime selectedDate;
   final AppSettings settings;
   final String searchQuery;
+  final bool showAllDayScheduleEvents;
+  final ValueChanged<bool> onShowAllDayScheduleEventsChanged;
   final ValueChanged<int> onDayDelta;
+  final ValueChanged<DateTime> onDateSelected;
 
   @override
   State<_DayPageView> createState() => _DayPageViewState();
@@ -1411,6 +1858,10 @@ class _DayPageViewState extends State<_DayPageView> {
             date: pageDate,
             settings: widget.settings,
             searchQuery: widget.searchQuery,
+            showAllDayScheduleEvents: widget.showAllDayScheduleEvents,
+            onShowAllDayScheduleEventsChanged:
+                widget.onShowAllDayScheduleEventsChanged,
+            onDateSelected: widget.onDateSelected,
           );
         },
       ),
@@ -1469,23 +1920,40 @@ class _CalendarDayPage extends ConsumerWidget {
     required this.date,
     required this.settings,
     required this.searchQuery,
+    required this.showAllDayScheduleEvents,
+    required this.onShowAllDayScheduleEventsChanged,
+    required this.onDateSelected,
   });
 
   final DateTime date;
   final AppSettings settings;
   final String searchQuery;
+  final bool showAllDayScheduleEvents;
+  final ValueChanged<bool> onShowAllDayScheduleEventsChanged;
+  final ValueChanged<DateTime> onDateSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final eventsAsync = ref.watch(eventsInRangeProvider(_dayRangeFor(date)));
     return eventsAsync.when(
-      data: (events) => EventDetailsPanel(
-        date: date,
-        events: _eventsForDay(
+      data: (events) {
+        final visibleEvents = _eventsForDay(
           _filterVisibleEvents(events, settings, searchQuery),
           date,
-        ),
-      ),
+        );
+        if (settings.weekDayLayoutMode == WeekDayLayoutMode.schedule) {
+          return ScheduleTimelineView(
+            days: [date],
+            events: visibleEvents,
+            selectedDate: date,
+            use24HourTime: settings.use24HourTime,
+            showAllDayEvents: showAllDayScheduleEvents,
+            onShowAllDayEventsChanged: onShowAllDayScheduleEventsChanged,
+            onDateSelected: onDateSelected,
+          );
+        }
+        return EventDetailsPanel(date: date, events: visibleEvents);
+      },
       error: (error, stackTrace) => Center(child: Text('$error')),
       loading: () => const Center(child: CircularProgressIndicator()),
     );
@@ -2065,7 +2533,9 @@ class _AndroidHorizontalMonthIndicator extends StatelessWidget {
       key: const ValueKey('android-horizontal-month-indicator'),
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
-        '${month.month}월',
+        DateFormat.MMMM(
+          Localizations.localeOf(context).toLanguageTag(),
+        ).format(month),
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
           color: colorScheme.onSurfaceVariant,
           fontWeight: FontWeight.w700,
@@ -2088,7 +2558,9 @@ class _MonthBoundaryLabel extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            '${month.month}월',
+            DateFormat.MMMM(
+              Localizations.localeOf(context).toLanguageTag(),
+            ).format(month),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
               color: colorScheme.onSurface,
               fontSize: 34,
@@ -2296,27 +2768,36 @@ class _CalendarHeader extends ConsumerWidget {
     final showYearOnly =
         monthNavigationMode == MonthNavigationMode.vertical ||
         (compact && !ios);
+    final locale = Localizations.localeOf(context).toLanguageTag();
     final label = showYearOnly
-        ? '${month.year}년'
-        : '${month.year}년 ${month.month}월';
+        ? DateFormat.y(locale).format(month)
+        : DateFormat.yMMMM(locale).format(month);
     final colorScheme = Theme.of(context).colorScheme;
     final monthButton = TextButton.icon(
       key: const ValueKey('calendar-period-button'),
       onPressed: () => _showMonthPicker(context, ref),
       icon: const Icon(Icons.calendar_month_outlined, size: 20),
-      label: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: compact
-            ? Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 18)
-            : Theme.of(context).textTheme.headlineMedium,
+      label: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: ios ? 126 : double.infinity),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: compact
+                ? Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(fontSize: 18)
+                : Theme.of(context).textTheme.headlineMedium,
+          ),
+        ),
       ),
       style: TextButton.styleFrom(
         foregroundColor: colorScheme.onSurface,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         minimumSize: ios ? const Size(0, 44) : null,
-        maximumSize: ios ? const Size(120, 44) : null,
+        maximumSize: ios ? const Size(170, 44) : null,
         tapTargetSize: ios
             ? MaterialTapTargetSize.shrinkWrap
             : MaterialTapTargetSize.padded,
@@ -2325,34 +2806,34 @@ class _CalendarHeader extends ConsumerWidget {
     );
     final navigationActions = [
       IconButton(
-        tooltip: '이전',
+        tooltip: context.tr('이전'),
         onPressed: () => _moveVisibleRange(ref, -1),
         icon: const Icon(Icons.chevron_left),
       ),
       IconButton(
-        tooltip: '다음',
+        tooltip: context.tr('다음'),
         onPressed: () => _moveVisibleRange(ref, 1),
         icon: const Icon(Icons.chevron_right),
       ),
       IconButton(
-        tooltip: '오늘',
+        tooltip: context.tr('오늘'),
         onPressed: () => _goToday(ref),
         icon: const Icon(Icons.today_outlined),
       ),
     ];
     final utilityActions = [
       IconButton(
-        tooltip: searchOpen ? '검색 닫기' : '검색',
+        tooltip: context.tr(searchOpen ? '검색 닫기' : '검색'),
         onPressed: onSearchPressed,
         icon: Icon(searchOpen ? Icons.search_off : Icons.search),
       ),
       IconButton(
-        tooltip: '검색/필터',
+        tooltip: context.tr('검색/필터'),
         onPressed: () => _showFilterSheet(context, ref),
         icon: Icon(searchQuery.isEmpty ? Icons.filter_list : Icons.filter_alt),
       ),
       IconButton(
-        tooltip: '설정',
+        tooltip: context.tr('설정'),
         onPressed: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
@@ -2372,10 +2853,25 @@ class _CalendarHeader extends ConsumerWidget {
           ),
           minimumSize: WidgetStateProperty.all(const Size(38, 34)),
         ),
-        segments: const [
-          ButtonSegment(value: CalendarViewMode.week, label: Text('주')),
-          ButtonSegment(value: CalendarViewMode.month, label: Text('월')),
-          ButtonSegment(value: CalendarViewMode.day, label: Text('일')),
+        segments: [
+          ButtonSegment(
+            value: CalendarViewMode.week,
+            label: Text(
+              context.l10n.compactCalendarViewName(CalendarViewMode.week),
+            ),
+          ),
+          ButtonSegment(
+            value: CalendarViewMode.month,
+            label: Text(
+              context.l10n.compactCalendarViewName(CalendarViewMode.month),
+            ),
+          ),
+          ButtonSegment(
+            value: CalendarViewMode.day,
+            label: Text(
+              context.l10n.compactCalendarViewName(CalendarViewMode.day),
+            ),
+          ),
         ],
         onSelectionChanged: (selection) {
           if (selection.isNotEmpty) {
@@ -2384,7 +2880,7 @@ class _CalendarHeader extends ConsumerWidget {
         },
       );
       final quickAccessButton = IconButton(
-        tooltip: '빠른 보기',
+        tooltip: context.tr('빠른 보기'),
         isSelected: quickAccessSelected,
         style: IconButton.styleFrom(
           backgroundColor: quickAccessSelected
@@ -2546,14 +3042,17 @@ class _CalendarHeader extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
                 shrinkWrap: true,
                 children: [
-                  Text('검색/필터', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    context.tr('검색/필터'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: queryController,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: '현재 보기에서 검색',
-                      prefixIcon: Icon(Icons.search),
+                    decoration: InputDecoration(
+                      labelText: context.tr('현재 보기에서 검색'),
+                      prefixIcon: const Icon(Icons.search),
                     ),
                     onChanged: (value) =>
                         ref.read(calendarSearchQueryProvider.notifier).state =
@@ -2563,7 +3062,7 @@ class _CalendarHeader extends ConsumerWidget {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: ddayOnly,
-                    title: const Text('D-day 일정만 보기'),
+                    title: Text(context.tr('D-day 일정만 보기')),
                     onChanged: (value) async {
                       setState(() => ddayOnly = value);
                       final updated = ref
@@ -2576,7 +3075,7 @@ class _CalendarHeader extends ConsumerWidget {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: showHolidays,
-                    title: const Text('공휴일 표시'),
+                    title: Text(context.tr('공휴일 표시')),
                     onChanged: (value) async {
                       setState(() => showHolidays = value);
                       final updated = ref
@@ -2587,7 +3086,10 @@ class _CalendarHeader extends ConsumerWidget {
                     },
                   ),
                   const SizedBox(height: 8),
-                  Text('분류 표시', style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    context.tr('분류 표시'),
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
@@ -2595,7 +3097,12 @@ class _CalendarHeader extends ConsumerWidget {
                     children: [
                       for (final category in settings.categories)
                         FilterChip(
-                          label: Text(category.label),
+                          label: Text(
+                            context.l10n.categoryName(
+                              id: category.id,
+                              label: category.label,
+                            ),
+                          ),
                           selected: !hidden.contains(category.id),
                           onSelected: (selected) async {
                             setState(() {
@@ -2627,7 +3134,7 @@ class _CalendarHeader extends ConsumerWidget {
                               '';
                         },
                         icon: const Icon(Icons.clear),
-                        label: const Text('검색어 지우기'),
+                        label: Text(context.tr('검색어 지우기')),
                       ),
                       const Spacer(),
                       FilledButton(
@@ -2635,7 +3142,7 @@ class _CalendarHeader extends ConsumerWidget {
                           FocusManager.instance.primaryFocus?.unfocus();
                           Navigator.of(context).pop();
                         },
-                        child: const Text('완료'),
+                        child: Text(context.tr('완료')),
                       ),
                     ],
                   ),
@@ -2687,16 +3194,16 @@ class _CalendarBottomBar extends StatelessWidget {
           builder: (context, constraints) {
             const horizontalInset = 16.0;
             const gap = 8.0;
-            const expandedViewWidth = 96.0;
-            const collapsedViewWidth = 76.0;
             const expandedViewHeight = 48.0;
             const collapsedViewHeight = 40.0;
             const minimumViewWidth = 60.0;
-            const maximumCenterWidth = 152.0;
-            final centerLeft = (constraints.maxWidth - maximumCenterWidth) / 2;
-            final desiredViewWidth = calendarViewControlSelected
-                ? expandedViewWidth
-                : collapsedViewWidth;
+            final centerExpanded = selectedAction != null;
+            final centerWidth = centerExpanded ? 152.0 : 124.0;
+            final centerLeft = (constraints.maxWidth - centerWidth) / 2;
+            final desiredViewWidth = _preferredCalendarViewWidth(
+              context,
+              expanded: calendarViewControlSelected,
+            );
             final desiredViewHeight = calendarViewControlSelected
                 ? expandedViewHeight
                 : collapsedViewHeight;
@@ -2737,6 +3244,35 @@ class _CalendarBottomBar extends StatelessWidget {
       ),
     );
   }
+}
+
+double _preferredCalendarViewWidth(
+  BuildContext context, {
+  required bool expanded,
+}) {
+  final fontSize = expanded ? 13.0 : 11.0;
+  final fontWeight = expanded ? FontWeight.w800 : FontWeight.w600;
+  final textScaler = MediaQuery.textScalerOf(context);
+  final textDirection = Directionality.of(context);
+  var labelsWidth = 0.0;
+  for (final mode in CalendarViewMode.values) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: context.l10n.compactCalendarViewName(mode),
+        style: TextStyle(fontSize: fontSize, fontWeight: fontWeight),
+      ),
+      textDirection: textDirection,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+    labelsWidth += painter.width;
+  }
+  final baseWidth = expanded ? 96.0 : 76.0;
+  const horizontalPaddingPerLabel = 8.0;
+  return math.max(
+    baseWidth,
+    labelsWidth + horizontalPaddingPerLabel * CalendarViewMode.values.length,
+  );
 }
 
 class _CalendarViewButton extends StatefulWidget {
@@ -2853,7 +3389,7 @@ class _CalendarViewButtonState extends State<_CalendarViewButton> {
                         for (final mode in CalendarViewMode.values)
                           Expanded(
                             child: Tooltip(
-                              message: '${mode.label} 보기',
+                              message: context.l10n.calendarViewName(mode),
                               child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onTapDown: (_) {
@@ -2868,11 +3404,7 @@ class _CalendarViewButtonState extends State<_CalendarViewButton> {
                                     setState(() => _pressedMode = null),
                                 child: Center(
                                   child: Text(
-                                    switch (mode) {
-                                      CalendarViewMode.week => '주',
-                                      CalendarViewMode.month => '월',
-                                      CalendarViewMode.day => '일',
-                                    },
+                                    context.l10n.compactCalendarViewName(mode),
                                     style: TextStyle(
                                       color: mode == _visibleMode
                                           ? colorScheme.primary
@@ -3031,7 +3563,7 @@ class _BottomModeSwitcherState extends State<_BottomModeSwitcher> {
                       Row(
                         children: [
                           _BottomModeButton(
-                            tooltip: '빠른 보기',
+                            tooltip: context.tr('빠른 보기'),
                             icon: Icons.dashboard_outlined,
                             selected: action == _BottomCenterAction.quickAccess,
                             onTapDown: () =>
@@ -3041,7 +3573,7 @@ class _BottomModeSwitcherState extends State<_BottomModeSwitcher> {
                             onTapCancel: _cancelPress,
                           ),
                           _BottomModeButton(
-                            tooltip: '달력',
+                            tooltip: context.tr('달력'),
                             icon: Icons.calendar_month_outlined,
                             selected: action == _BottomCenterAction.calendar,
                             onTapDown: () =>
@@ -3267,7 +3799,7 @@ class _YearOverviewPageState extends State<_YearOverviewPage> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: '닫기',
+          tooltip: context.tr('닫기'),
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.close),
         ),
@@ -3526,8 +4058,11 @@ class _MiniMonthCalendar extends StatelessWidget {
     final now = DateTime.now();
     final theme = Theme.of(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final monthDate = DateTime(year, month);
+    final monthLabel = DateFormat.MMMM(locale).format(monthDate);
     return Semantics(
-      label: '$year년 $month월',
+      label: DateFormat.yMMMM(locale).format(monthDate),
       button: true,
       child: InkWell(
         key: ValueKey('mini-month-$year-$month'),
@@ -3539,6 +4074,11 @@ class _MiniMonthCalendar extends StatelessWidget {
             painter: _MiniMonthPainter(
               year: year,
               month: month,
+              monthLabel: monthLabel,
+              weekdayLabels: _localizedWeekdayLabels(
+                context,
+                weekStartsOnMonday: weekStartsOnMonday,
+              ),
               weekStartsOnMonday: weekStartsOnMonday,
               today: DateTime(now.year, now.month, now.day),
               textDirection: Directionality.of(context),
@@ -3569,6 +4109,8 @@ class _MiniMonthPainter extends CustomPainter {
   const _MiniMonthPainter({
     required this.year,
     required this.month,
+    required this.monthLabel,
+    required this.weekdayLabels,
     required this.weekStartsOnMonday,
     required this.today,
     required this.textDirection,
@@ -3585,6 +4127,8 @@ class _MiniMonthPainter extends CustomPainter {
 
   final int year;
   final int month;
+  final String monthLabel;
+  final List<String> weekdayLabels;
   final bool weekStartsOnMonday;
   final DateTime today;
   final ui.TextDirection textDirection;
@@ -3602,15 +4146,12 @@ class _MiniMonthPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     const inset = 4.0;
     final contentWidth = math.max(0.0, size.width - inset * 2);
-    final monthPainter = _textPainter('$month월', monthStyle);
+    final monthPainter = _textPainter(monthLabel, monthStyle);
     monthPainter.paint(canvas, Offset(inset, inset));
 
     final weekdayTop = inset + monthPainter.height + 3;
     final weekdayHeight = _scaledFontHeight(weekdayStyle);
     final cellWidth = contentWidth / 7;
-    final weekdays = weekStartsOnMonday
-        ? const ['월', '화', '수', '목', '금', '토', '일']
-        : const ['일', '월', '화', '수', '목', '금', '토'];
     for (var column = 0; column < 7; column++) {
       final color = column == 0
           ? sundayColor
@@ -3618,7 +4159,7 @@ class _MiniMonthPainter extends CustomPainter {
           ? saturdayColor
           : weekdayColor;
       final painter = _textPainter(
-        weekdays[column],
+        weekdayLabels[column],
         weekdayStyle.copyWith(color: color),
       );
       painter.paint(
@@ -3685,6 +4226,8 @@ class _MiniMonthPainter extends CustomPainter {
   bool shouldRepaint(covariant _MiniMonthPainter oldDelegate) {
     return year != oldDelegate.year ||
         month != oldDelegate.month ||
+        monthLabel != oldDelegate.monthLabel ||
+        !listEquals(weekdayLabels, oldDelegate.weekdayLabels) ||
         weekStartsOnMonday != oldDelegate.weekStartsOnMonday ||
         today != oldDelegate.today ||
         textDirection != oldDelegate.textDirection ||
@@ -3698,6 +4241,20 @@ class _MiniMonthPainter extends CustomPainter {
         todayBackground != oldDelegate.todayBackground ||
         todayForeground != oldDelegate.todayForeground;
   }
+}
+
+List<String> _localizedWeekdayLabels(
+  BuildContext context, {
+  required bool weekStartsOnMonday,
+}) {
+  final locale = Localizations.localeOf(context).toLanguageTag();
+  final firstDay = weekStartsOnMonday ? DateTime.monday : DateTime.sunday;
+  return List.generate(
+    DateTime.daysPerWeek,
+    (index) => DateFormat.E(
+      locale,
+    ).format(DateTime(2024, 1, 1 + (firstDay - 1 + index) % 7)),
+  );
 }
 
 class _CalendarWeekView extends StatelessWidget {
@@ -3808,7 +4365,9 @@ class _WeekDayPanel extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    _weekdayLabel(day),
+                    DateFormat.E(
+                      Localizations.localeOf(context).toLanguageTag(),
+                    ).format(day),
                     style: TextStyle(color: color, fontWeight: FontWeight.w800),
                   ),
                   const Spacer(),
@@ -3821,7 +4380,7 @@ class _WeekDayPanel extends StatelessWidget {
               const SizedBox(height: 10),
               if (events.isEmpty)
                 Text(
-                  '일정 없음',
+                  context.tr('일정 없음'),
                   style: Theme.of(
                     context,
                   ).textTheme.labelMedium?.copyWith(color: colorScheme.outline),
@@ -3870,11 +4429,6 @@ class _WeekDayPanel extends StatelessWidget {
     }
     return colorScheme.onSurface;
   }
-
-  String _weekdayLabel(DateTime day) {
-    const labels = ['월', '화', '수', '목', '금', '토', '일'];
-    return labels[day.weekday - 1];
-  }
 }
 
 class _WeekEventFlag extends StatelessWidget {
@@ -3885,7 +4439,7 @@ class _WeekEventFlag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final eventColor = Color(event.colorValue);
-    final title = event.title;
+    final title = context.l10n.eventTitle(event.title, holiday: event.holiday);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),

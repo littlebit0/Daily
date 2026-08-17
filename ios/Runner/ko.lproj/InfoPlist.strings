@@ -1,0 +1,7 @@
+"NSAlarmKitUsageDescription" = "Daily가 사용자가 선택한 일정 시각에 시스템 알람을 울리기 위해 사용합니다.";
+"NSCalendarsFullAccessUsageDescription" = "Apple 캘린더의 일정을 Daily로 옮기기 위해 캘린더를 읽습니다.";
+"NSCalendarsUsageDescription" = "Apple 캘린더의 일정을 Daily로 옮기기 위해 캘린더를 읽습니다.";
+"NSFaceIDUsageDescription" = "Daily 앱 잠금을 안전하게 해제하기 위해 Face ID를 사용합니다.";
+"NSMicrophoneUsageDescription" = "Signal에 캘린더 명령을 말할 때만 마이크를 사용합니다.";
+"NSSpeechRecognitionUsageDescription" = "Signal에 말한 캘린더 명령을 실행하기 위해 음성을 텍스트로 변환합니다.";
+"CFBundleSpokenName" = "데일리";

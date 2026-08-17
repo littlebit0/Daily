@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -16,12 +17,14 @@ import '../../../core/di/app_providers.dart';
 import '../../../core/security/biometric_auth_service.dart';
 import '../../../core/security/app_lock_privacy_service.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/support/bug_report_service.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
 import '../../../core/sync/google_drive_sync_service.dart';
 import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 import 'calendar_import_page.dart';
+import 'siri_activity_log_page.dart';
 
 const _fallbackAppVersion = '3.0.0';
 
@@ -161,9 +164,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final accountBusy = _appleBusy || _syncBusy;
 
     final pageTitle = switch (widget._destination) {
-      _SettingsDestination.notifications => '알림 설정',
-      _SettingsDestination.account => '계정 설정',
-      null => '설정',
+      _SettingsDestination.notifications => context.tr('알림 설정'),
+      _SettingsDestination.account => context.tr('계정 설정'),
+      null => context.tr('설정'),
     };
     return Scaffold(
       appBar: AppBar(title: Text(pageTitle)),
@@ -172,13 +175,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         children: [
           if (widget._destination == null)
             _SettingsSection(
-              title: '설정',
+              title: context.tr('설정'),
               children: [
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.notifications_outlined),
-                  title: const Text('알림'),
-                  subtitle: const Text('일정 알림, 아침 브리핑, D-day 알림'),
+                  title: Text(context.tr('알림')),
+                  subtitle: Text(context.tr('일정 알림, 아침 브리핑, D-day 알림')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -193,8 +196,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   key: const ValueKey('account-settings-navigation'),
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.account_circle_outlined),
-                  title: const Text('계정'),
-                  subtitle: const Text('Apple, Google, 동기화 및 계정 관리'),
+                  title: Text(context.tr('계정')),
+                  subtitle: Text(context.tr('Apple, Google, 동기화 및 계정 관리')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -204,11 +207,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                   ),
                 ),
+                if (defaultTargetPlatform == TargetPlatform.iOS ||
+                    defaultTargetPlatform == TargetPlatform.macOS) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    key: const ValueKey('siri-activity-log-navigation'),
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.record_voice_over_outlined),
+                    title: Text(context.tr('Siri 작업 기록')),
+                    subtitle: Text(
+                      context.tr('Siri와 자동화로 실행한 Daily 작업을 날짜별로 확인합니다.'),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const SiriActivityLogPage(),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           if (widget._destination == _SettingsDestination.notifications)
             _SettingsSection(
-              title: '알림',
+              title: context.tr('알림'),
               children: [
                 _NotificationTestTile(
                   message: _notificationMessage,
@@ -222,13 +244,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     child: OutlinedButton.icon(
                       onPressed: _openNotificationSettings,
                       icon: const Icon(Icons.settings_outlined),
-                      label: const Text('시스템 알림 설정 열기'),
+                      label: Text(context.tr('시스템 알림 설정 열기')),
                     ),
                   ),
                 ],
                 const Divider(height: 1),
                 _DefaultRemindersTile(
-                  title: '기본 일정 알림',
+                  title: context.tr('기본 일정 알림'),
                   values: settings.defaultReminderMinutesList,
                   presets: const [0, 10, 30, 60, 1440],
                   onChanged: (values) => _save(
@@ -237,8 +259,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   onCustom: () async {
                     final value = await _showNumberDialog(
                       context: context,
-                      title: '기본 알림 직접 입력',
-                      label: '몇 분 전에 알릴까요?',
+                      title: context.tr('기본 알림 직접 입력'),
+                      label: context.tr('몇 분 전에 알릴까요?'),
                       initialValue: settings.defaultReminderMinutes,
                     );
                     if (value != null && value >= 0) {
@@ -255,8 +277,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
                 const Divider(height: 1),
                 _TimeTile(
-                  title: '종일 일정 알림 시간',
-                  subtitle: '종일 일정의 알림 기준 시간',
+                  title: context.tr('종일 일정 알림 시간'),
+                  subtitle: context.tr('종일 일정의 알림 기준 시간'),
                   hour: settings.allDayReminderHour,
                   minute: settings.allDayReminderMinute,
                   use24HourTime: settings.use24HourTime,
@@ -277,8 +299,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.morningBriefingEnabled,
-                  title: const Text('아침 브리핑'),
-                  subtitle: const Text('매일 지정한 시간에 오늘 일정을 알려줍니다.'),
+                  title: Text(context.tr('아침 브리핑')),
+                  subtitle: Text(context.tr('매일 지정한 시간에 오늘 일정을 알려줍니다.')),
                   onChanged: (value) async {
                     final updated = settings.copyWith(
                       morningBriefingEnabled: value,
@@ -300,8 +322,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
                 if (settings.morningBriefingEnabled)
                   _TimeTile(
-                    title: '아침 브리핑 시간',
-                    subtitle: '브리핑을 받을 시간',
+                    title: context.tr('아침 브리핑 시간'),
+                    subtitle: context.tr('브리핑을 받을 시간'),
                     hour: settings.morningBriefingHour,
                     minute: settings.morningBriefingMinute,
                     use24HourTime: settings.use24HourTime,
@@ -327,8 +349,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   onCustom: () async {
                     final value = await _showNumberDialog(
                       context: context,
-                      title: 'D-day 알림 직접 입력',
-                      label: 'D-day 기준 일수. 예: -7, 0',
+                      title: context.tr('D-day 알림 직접 입력'),
+                      label: context.tr('D-day 기준 일수. 예: -7, 0'),
                       initialValue: -7,
                     );
                     if (value != null) {
@@ -346,8 +368,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           if (widget._destination == null)
             _SettingsSection(
-              title: '화면',
+              title: context.tr('화면'),
               children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.language_outlined),
+                  title: Text(context.tr('언어')),
+                  trailing: DropdownButtonHideUnderline(
+                    child: DropdownButton<AppLanguage>(
+                      value: settings.language,
+                      alignment: AlignmentDirectional.centerEnd,
+                      items: AppLanguage.values
+                          .map(
+                            (language) => DropdownMenuItem(
+                              value: language,
+                              child: Text(context.l10n.languageName(language)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (language) {
+                        if (language != null) {
+                          _save(settings.copyWith(language: language));
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Row(
@@ -355,7 +402,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       Expanded(
                         flex: 2,
                         child: Text(
-                          '테마',
+                          context.tr('테마'),
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                       ),
@@ -366,7 +413,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           key: const ValueKey('app-theme-mode-slider'),
                           values: AppThemeMode.values,
                           selected: settings.themeMode,
-                          labelFor: (mode) => mode.label,
+                          labelFor: context.l10n.themeName,
                           onChanged: (mode) =>
                               _save(settings.copyWith(themeMode: mode)),
                         ),
@@ -378,18 +425,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           if (widget._destination == null)
             _SettingsSection(
-              title: '달력',
+              title: context.tr('달력'),
               children: [
                 if (defaultTargetPlatform == TargetPlatform.iOS ||
                     defaultTargetPlatform == TargetPlatform.android) ...[
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.move_to_inbox_outlined),
-                    title: const Text('캘린더 데이터 옮기기'),
+                    title: Text(context.tr('캘린더 데이터 옮기기')),
                     subtitle: Text(
-                      defaultTargetPlatform == TargetPlatform.android
-                          ? 'Samsung 캘린더 또는 Google 캘린더에서 가져옵니다.'
-                          : 'Apple 캘린더 또는 Google 캘린더에서 가져옵니다.',
+                      context.tr(
+                        defaultTargetPlatform == TargetPlatform.android
+                            ? 'Samsung 캘린더 또는 Google 캘린더에서 가져옵니다.'
+                            : 'Apple 캘린더 또는 Google 캘린더에서 가져옵니다.',
+                      ),
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context).push(
@@ -402,14 +451,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ],
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('주 시작 요일'),
+                  title: Text(context.tr('주 시작 요일')),
                   trailing: SizedBox(
                     width: 132,
                     child: _ThreeWayCapsule<bool>(
                       key: const ValueKey('week-start-toggle'),
                       values: const [false, true],
                       selected: settings.weekStartsOnMonday,
-                      labelFor: (startsOnMonday) => startsOnMonday ? '월' : '일',
+                      labelFor: (startsOnMonday) =>
+                          context.tr(startsOnMonday ? '월' : '일'),
                       onChanged: (value) =>
                           _save(settings.copyWith(weekStartsOnMonday: value)),
                     ),
@@ -419,8 +469,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.showLunarDates,
-                  title: const Text('음력 표시'),
-                  subtitle: const Text('월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.'),
+                  title: Text(context.tr('음력 표시')),
+                  subtitle: Text(context.tr('월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.')),
                   onChanged: (value) =>
                       _save(settings.copyWith(showLunarDates: value)),
                 ),
@@ -435,12 +485,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             MonthNavigationMode.vertical
                         ? false
                         : settings.showAdjacentMonthDates,
-                    title: const Text('인접한 달 날짜 표시'),
+                    title: Text(context.tr('인접한 달 날짜 표시')),
                     subtitle: Text(
                       settings.monthNavigationMode ==
                               MonthNavigationMode.vertical
-                          ? '상하 스크롤에서는 월 경계를 명확히 구분하기 위해 사용할 수 없습니다.'
-                          : '월간 달력의 첫주와 마지막 주에 이전·다음 달을 표시합니다.',
+                          ? context.tr(
+                              '상하 스크롤에서는 월 경계를 명확히 구분하기 위해 사용할 수 없습니다.',
+                            )
+                          : context.tr('월간 달력의 첫주와 마지막 주에 이전·다음 달을 표시합니다.'),
                     ),
                     onChanged:
                         settings.monthNavigationMode ==
@@ -454,14 +506,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const Divider(height: 1),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('월간 이동 방식'),
+                  title: Text(context.tr('월간 이동 방식')),
                   trailing: SizedBox(
                     width: 224,
                     child: _ThreeWayCapsule<MonthNavigationMode>(
                       key: const ValueKey('month-navigation-mode-slider'),
                       values: MonthNavigationMode.values,
                       selected: settings.monthNavigationMode,
-                      labelFor: (mode) => mode.label,
+                      labelFor: context.l10n.navigationName,
                       onChanged: (value) => _save(
                         settings.copyWith(
                           monthNavigationMode: value,
@@ -477,20 +529,38 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const Divider(height: 1),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('기본 보기'),
-                  subtitle: const Text('앱을 열었을 때 먼저 보여줄 달력 보기'),
+                  title: Text(context.tr('기본 보기')),
+                  subtitle: Text(context.tr('앱을 열었을 때 먼저 보여줄 달력 보기')),
                   trailing: SizedBox(
                     width: 188,
                     child: _ThreeWayCapsule<CalendarViewMode>(
                       key: const ValueKey('default-calendar-view-slider'),
                       values: CalendarViewMode.values,
                       selected: settings.defaultCalendarView,
-                      labelFor: (mode) => mode.label,
+                      labelFor: context.l10n.calendarViewName,
                       onChanged: (value) {
                         _save(settings.copyWith(defaultCalendarView: value));
                         ref.read(calendarViewModeProvider.notifier).state =
                             value;
                       },
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(context.tr('주간·일간 표시 방식')),
+                  trailing: SizedBox(
+                    width: 168,
+                    child: _ThreeWayCapsule<WeekDayLayoutMode>(
+                      key: const ValueKey('week-day-layout-mode-slider'),
+                      values: WeekDayLayoutMode.values,
+                      selected: settings.weekDayLayoutMode,
+                      labelFor: (mode) => context.tr(
+                        mode == WeekDayLayoutMode.list ? '목록' : '스케줄',
+                      ),
+                      onChanged: (value) =>
+                          _save(settings.copyWith(weekDayLayoutMode: value)),
                     ),
                   ),
                 ),
@@ -504,16 +574,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           if (widget._destination == null)
             _SettingsSection(
-              title: '개인정보',
+              title: context.tr('개인정보'),
               children: [
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.appLockEnabled,
-                  title: const Text('앱 잠금'),
+                  title: Text(context.tr('앱 잠금')),
                   subtitle: Text(
                     settings.appLockEnabled
                         ? '앱 실행 시 ${settings.appLockMethod.label}으로 확인합니다.'
-                        : '앱을 다시 열 때 사용자를 확인합니다.',
+                        : context.tr('앱을 다시 열 때 사용자를 확인합니다.'),
                   ),
                   onChanged: (value) => value
                       ? _enableAppLock(settings)
@@ -533,7 +603,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: settings.appLockBiometricsEnabled,
-                      title: const Text('생체인식 잠금 해제'),
+                      title: Text(context.tr('생체인식 잠금 해제')),
                       subtitle: Text(
                         _biometricAuthenticationAvailable
                             ? defaultTargetPlatform == TargetPlatform.macOS
@@ -552,7 +622,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           if (widget._destination == null)
             _SettingsSection(
-              title: '분류',
+              title: context.tr('분류'),
               children: [
                 for (final category in settings.categories)
                   _CategoryTile(
@@ -573,7 +643,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   child: OutlinedButton.icon(
                     onPressed: () => _addCategory(settings),
                     icon: const Icon(Icons.add),
-                    label: const Text('분류 추가'),
+                    label: Text(context.tr('분류 추가')),
                   ),
                 ),
               ],
@@ -587,29 +657,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   child: IgnorePointer(
                     child: Column(
                       children: [
-                        const ListTile(
+                        ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: Icon(Icons.auto_awesome_outlined),
-                          title: Text('AI 기능'),
-                          subtitle: Text('개발 중입니다.'),
+                          title: Text(context.tr('AI 기능')),
+                          subtitle: Text(context.tr('개발 중입니다.')),
                         ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           value: settings.aiEnabled,
-                          title: const Text('Gemini 사용'),
+                          title: Text(context.tr('Gemini 사용')),
                           onChanged: (_) {},
                         ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           value: settings.blockSensitiveAi,
-                          title: const Text('민감 문장 AI 차단'),
+                          title: Text(context.tr('민감 문장 AI 차단')),
                           onChanged: (_) {},
                         ),
                         TextField(
                           controller: _apiKeyController,
                           obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Gemini API 키',
+                          decoration: InputDecoration(
+                            labelText: context.tr('Gemini API 키'),
                           ),
                         ),
                       ],
@@ -620,7 +690,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           if (widget._destination == _SettingsDestination.account)
             _SettingsSection(
-              title: '계정',
+              title: context.tr('계정'),
               children: [
                 _DailyAccountStatus(account: account),
                 const Divider(height: 1),
@@ -665,7 +735,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           if (widget._destination == null)
             _SettingsSection(
-              title: '앱 정보',
+              title: context.tr('앱 정보'),
               children: [
                 _AppVersionTile(
                   versionInfo: _appVersionInfo,
@@ -675,8 +745,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.bug_report_outlined),
-                  title: const Text('버그 제보'),
-                  subtitle: const Text('GitHub 제보 양식을 기본 브라우저에서 엽니다.'),
+                  title: Text(context.tr('버그 제보')),
+                  subtitle: Text(context.tr('GitHub 제보 양식을 기본 브라우저에서 엽니다.')),
                   trailing: const Icon(Icons.open_in_new),
                   onTap: _reportBug,
                 ),
@@ -711,7 +781,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('GitHub Repository를 열 수 없습니다.')),
+        SnackBar(content: Text(context.tr('GitHub Repository를 열 수 없습니다.'))),
       );
     }
   }
@@ -727,7 +797,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final opened = await BugReportService.open(environment);
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('버그 제보 페이지를 열 수 없습니다. 잠시 후 다시 시도하세요.')),
+        SnackBar(
+          content: Text(context.tr('버그 제보 페이지를 열 수 없습니다. 잠시 후 다시 시도하세요.')),
+        ),
       );
     }
   }
@@ -746,7 +818,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _connectApple() async {
     setState(() {
       _appleBusy = true;
-      _appleMessage = 'Apple 로그인 창을 여는 중입니다.';
+      _appleMessage = context.tr('Apple 로그인 창을 여는 중입니다.');
     });
     try {
       final account = await ref.read(appleSignInServiceProvider).signIn();
@@ -754,20 +826,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         return;
       }
       if (account == null) {
-        setState(() => _appleMessage = 'Apple 로그인이 취소되었습니다.');
+        setState(() => _appleMessage = context.tr('Apple 로그인이 취소되었습니다.'));
         return;
       }
       setState(() {
         _appleAccount = account;
         _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
-        _appleMessage = 'Apple 로그인이 완료되었습니다.';
+        _appleMessage = context.tr('Apple 로그인이 완료되었습니다.');
       });
       final restoredGoogleSync = await _restoreLinkedGoogleDriveSync();
       if (mounted) {
         setState(() {
           _appleMessage = restoredGoogleSync
-              ? 'Apple 로그인이 완료되었습니다. 연결된 Google Drive 동기화를 복원했습니다.'
-              : 'Apple 로그인이 완료되었습니다.';
+              ? context.tr('Apple 로그인이 완료되었습니다. 연결된 Google Drive 동기화를 복원했습니다.')
+              : context.tr('Apple 로그인이 완료되었습니다.');
         });
       }
     } on AppleSignInException catch (error) {
@@ -789,23 +861,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Apple 연동 해지'),
+        title: Text(context.tr('Apple 연동 해지')),
         content: const Text(
           'Apple 계정 연결을 해제할까요? iCloud 저장 기능은 아직 제공되지 않아 저장 내용 초기화는 사용할 수 없습니다.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: Text(context.tr('취소')),
           ),
-          const Tooltip(
+          Tooltip(
             message: 'iCloud 저장 기능이 추가된 후 사용할 수 있습니다.',
-            child: FilledButton(onPressed: null, child: Text('저장 내용 초기화')),
+            child: FilledButton(
+              onPressed: null,
+              child: Text(context.tr('저장 내용 초기화')),
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('연동 해지'),
+            child: Text(context.tr('연동 해지')),
           ),
         ],
       ),
@@ -824,7 +899,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         setState(() {
           _appleAccount = null;
           _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
-          _appleMessage = 'Apple 연동을 해지했습니다.';
+          _appleMessage = context.tr('Apple 연동을 해지했습니다.');
         });
       }
     } on Object catch (error) {
@@ -913,7 +988,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         }
         final pin = await _showPinSetupDialog(
           context: context,
-          title: '앱 잠금 PIN 설정',
+          title: context.tr('앱 잠금 PIN 설정'),
         );
         if (pin == null) {
           return false;
@@ -931,7 +1006,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('이 기기에서 시스템 잠금 인증을 사용할 수 없습니다.')),
+            SnackBar(
+              content: Text(context.tr('이 기기에서 시스템 잠금 인증을 사용할 수 없습니다.')),
+            ),
           );
         }
         return false;
@@ -945,7 +1022,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return showDialog<AppLockMethod>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('잠금 방식 선택'),
+        title: Text(context.tr('잠금 방식 선택')),
         children: [
           for (final method in AppLockMethod.values)
             SimpleDialogOption(
@@ -974,9 +1051,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   String _lockMethodDescription(AppLockMethod method) => switch (method) {
-    AppLockMethod.noPin => '앱을 벗어난 동안 화면만 가리고 복귀하면 자동으로 해제합니다.',
-    AppLockMethod.appPin => 'Daily 전용 PIN으로 잠그며 생체인식을 선택해서 함께 사용할 수 있습니다.',
-    AppLockMethod.system => '기기의 Face ID, Touch ID 또는 시스템 비밀번호로 인증합니다.',
+    AppLockMethod.noPin => context.tr('앱을 벗어난 동안 화면만 가리고 복귀하면 자동으로 해제합니다.'),
+    AppLockMethod.appPin => context.tr(
+      'Daily 전용 PIN으로 잠그며 생체인식을 선택해서 함께 사용할 수 있습니다.',
+    ),
+    AppLockMethod.system => context.tr(
+      '기기의 Face ID, Touch ID 또는 시스템 비밀번호로 인증합니다.',
+    ),
   };
 
   Future<void> _changePinBiometricUnlock(
@@ -1010,16 +1091,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         return await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
-                title: const Text('잠금 방식 변경'),
-                content: const Text('현재 PIN 없는 잠금 방식에서 변경을 계속할까요?'),
+                title: Text(context.tr('잠금 방식 변경')),
+                content: Text(context.tr('현재 PIN 없는 잠금 방식에서 변경을 계속할까요?')),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('취소'),
+                    child: Text(context.tr('취소')),
                   ),
                   FilledButton(
                     onPressed: () => Navigator.of(context).pop(true),
-                    child: const Text('계속'),
+                    child: Text(context.tr('계속')),
                   ),
                 ],
               ),
@@ -1050,7 +1131,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _testNotification() async {
     setState(() {
       _notificationBusy = true;
-      _notificationMessage = '알림 상태 확인 중입니다.';
+      _notificationMessage = context.tr('알림 상태 확인 중입니다.');
     });
     try {
       final notificationService = ref.read(notificationServiceProvider);
@@ -1060,7 +1141,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         return;
       }
       setState(() {
-        _notificationMessage = '테스트 알림을 보냈습니다. $summary';
+        _notificationMessage = context.tr(
+          '테스트 알림을 보냈습니다. {summary}',
+          args: {'summary': summary},
+        );
       });
     } on Object catch (error) {
       if (mounted) {
@@ -1090,7 +1174,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     if (urls.isEmpty) {
       setState(() {
-        _notificationMessage = 'Android에서는 시스템 설정 > 앱 > Daily > 알림에서 허용을 켜세요.';
+        _notificationMessage = context.tr(
+          'Android에서는 시스템 설정 > 앱 > Daily > 알림에서 허용을 켜세요.',
+        );
       });
       return;
     }
@@ -1103,7 +1189,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     if (mounted) {
       setState(() {
-        _notificationMessage = '시스템 알림 설정을 열 수 없습니다. OS 설정에서 Daily 알림을 허용하세요.';
+        _notificationMessage = context.tr(
+          '시스템 알림 설정을 열 수 없습니다. OS 설정에서 Daily 알림을 허용하세요.',
+        );
       });
     }
   }
@@ -1177,17 +1265,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('분류 삭제'),
-        content: Text('"${category.label}" 분류를 삭제할까요?'),
+        title: Text(context.tr('분류 삭제')),
+        content: Text(
+          context.tr(
+            '"{category}" 분류를 삭제할까요?',
+            args: {
+              'category': context.l10n.categoryName(
+                id: category.id,
+                label: category.label,
+              ),
+            },
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: Text(context.tr('취소')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('삭제'),
+            child: Text(context.tr('삭제')),
           ),
         ],
       ),
@@ -1283,7 +1381,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       setState(() {
         _googleDriveAccount = account;
         _dailyAccount = ref.read(settingsRepositoryProvider).dailyAccount();
-        _syncMessage = 'Google Drive 연결이 완료되었습니다.';
+        _syncMessage = context.tr('Google Drive 연결이 완료되었습니다.');
       });
     } on Object catch (error) {
       if (mounted && _isCurrentGoogleDriveConnectAttempt(attempt)) {
@@ -1360,7 +1458,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       setState(() {
         _activeGoogleDriveConnectAttempt = null;
         _syncBusy = false;
-        _syncMessage = 'Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.';
+        _syncMessage = context.tr('Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.');
       });
     }
   }
@@ -1381,7 +1479,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             .value;
         setState(
           () => _syncMessage = status.message.isEmpty
-              ? '백업할 변경 사항이 없습니다.'
+              ? context.tr('백업할 변경 사항이 없습니다.')
               : status.message,
         );
       }
@@ -1400,19 +1498,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Google Drive에서 복원'),
-        content: const Text(
-          'Google Drive AppData의 일정과 설정을 이 기기에 복원할까요? '
-          '이 기기의 더 최신이거나 아직 백업되지 않은 변경은 유지됩니다.',
+        title: Text(context.tr('Google Drive에서 복원')),
+        content: Text(
+          context.tr(
+            'Google Drive AppData의 일정과 설정을 이 기기에 복원할까요? 이 기기의 더 최신이거나 아직 백업되지 않은 변경은 유지됩니다.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: Text(context.tr('취소')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('복원'),
+            child: Text(context.tr('복원')),
           ),
         ],
       ),
@@ -1433,7 +1532,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ref.read(appSettingsProvider.notifier).state = ref
             .read(settingsRepositoryProvider)
             .load();
-        setState(() => _syncMessage = 'Google Drive 복원 완료');
+        setState(() => _syncMessage = context.tr('Google Drive 복원 완료'));
       }
     } on Object catch (error) {
       if (mounted) {
@@ -1450,23 +1549,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final deleteBackup = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Google 연동 해지'),
-        content: const Text(
-          'Google 계정 연결을 해제할까요? Google Drive AppData 백업은 유지하거나 함께 삭제할 수 있습니다. 로컬 일정과 설정은 유지됩니다.',
+        title: Text(context.tr('Google 연동 해지')),
+        content: Text(
+          context.tr(
+            'Google 계정 연결을 해제할까요? Google Drive AppData 백업은 유지하거나 함께 삭제할 수 있습니다. 로컬 일정과 설정은 유지됩니다.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(null),
-            child: const Text('취소'),
+            child: Text(context.tr('취소')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('연동만 해제'),
+            child: Text(context.tr('연동만 해제')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('백업 삭제 후 해제'),
+            child: Text(context.tr('백업 삭제 후 해제')),
           ),
         ],
       ),
@@ -1516,19 +1617,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('로그아웃'),
-        content: const Text(
-          '이 기기의 일정, 설정, 로그인 정보를 삭제하고 시작 화면으로 돌아갑니다. '
-          'Google Drive AppData의 백업은 삭제하지 않습니다.',
+        title: Text(context.tr('로그아웃')),
+        content: Text(
+          context.tr(
+            '이 기기의 일정, 설정, 로그인 정보를 삭제하고 시작 화면으로 돌아갑니다. Google Drive AppData의 백업은 삭제하지 않습니다.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: Text(context.tr('취소')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('로그아웃'),
+            child: Text(context.tr('로그아웃')),
           ),
         ],
       ),
@@ -1590,20 +1692,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('백업을 완료하지 못했습니다'),
-            content: const Text(
-              '아직 Google Drive에 백업되지 않은 변경이 있을 수 있습니다. '
-              '그래도 이 기기의 데이터를 삭제하고 로그아웃할까요?',
+            title: Text(context.tr('백업을 완료하지 못했습니다')),
+            content: Text(
+              context.tr(
+                '아직 Google Drive에 백업되지 않은 변경이 있을 수 있습니다. 그래도 이 기기의 데이터를 삭제하고 로그아웃할까요?',
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('취소'),
+                child: Text(context.tr('취소')),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
                 style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('백업 없이 로그아웃'),
+                child: Text(context.tr('백업 없이 로그아웃')),
               ),
             ],
           ),
@@ -1616,10 +1719,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final dailyAccount = _dailyAccount;
     final hasGoogleAccount = dailyAccount?.googleAccount != null;
     final hasDailyAccount = dailyAccount?.hasProviders ?? false;
-    final title = hasDailyAccount ? 'Daily 계정 탈퇴' : '로컬 데이터 초기화';
+    final title = context.tr(hasDailyAccount ? 'Daily 계정 탈퇴' : '로컬 데이터 초기화');
     final content = hasDailyAccount
-        ? 'Daily 계정의 Apple/Google 연결 및 병합 정보, Google Drive AppData 백업, 이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다. 향후 iCloud 저장 데이터도 이 경로에서 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.'
-        : '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다.';
+        ? context.tr(
+            'Daily 계정의 Apple/Google 연결 및 병합 정보, Google Drive AppData 백업, 이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다. 향후 iCloud 저장 데이터도 이 경로에서 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.',
+          )
+        : context.tr('이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다.');
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1629,12 +1734,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: Text(context.tr('취소')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(hasDailyAccount ? 'Daily 계정 탈퇴' : '초기화'),
+            child: Text(context.tr(hasDailyAccount ? 'Daily 계정 탈퇴' : '초기화')),
           ),
         ],
       ),
@@ -1736,30 +1841,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     final text = error.toString().trim();
     if (text.isEmpty) {
-      return '요청을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      return context.tr('요청을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     }
     final lower = text.toLowerCase();
     if (lower.contains('socketexception') ||
         lower.contains('failed host lookup') ||
         lower.contains('network') ||
         lower.contains('timeoutexception')) {
-      return '네트워크 연결을 확인한 뒤 다시 시도해 주세요.';
+      return context.tr('네트워크 연결을 확인한 뒤 다시 시도해 주세요.');
     }
     if (lower.contains('invalid_grant') ||
         lower.contains('invalid_token') ||
         text.contains('HTTP 401')) {
-      return 'Google Drive 연결이 만료되었습니다. 다시 연결해 주세요.';
+      return context.tr('Google Drive 연결이 만료되었습니다. 다시 연결해 주세요.');
     }
     if (lower.contains('permission') ||
         lower.contains('insufficient') ||
         text.contains('HTTP 403')) {
-      return 'Google Drive 권한이 부족합니다. 다시 연결해 권한을 승인해 주세요.';
+      return context.tr('Google Drive 권한이 부족합니다. 다시 연결해 권한을 승인해 주세요.');
     }
     if (text.contains('HTTP 429')) {
-      return 'Google Drive 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+      return context.tr('Google Drive 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.');
     }
     if (RegExp(r'HTTP 5\d\d').hasMatch(text)) {
-      return 'Google Drive 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.';
+      return context.tr('Google Drive 서버 응답이 불안정합니다. 잠시 후 다시 시도해 주세요.');
     }
     return text;
   }
@@ -1780,7 +1885,7 @@ class _AppTextSizeSlider extends StatelessWidget {
           Expanded(
             flex: 3,
             child: Text(
-              '전체 UI 글자 크기',
+              context.tr('전체 UI 글자 크기'),
               style: Theme.of(context).textTheme.titleSmall,
             ),
           ),
@@ -1791,7 +1896,7 @@ class _AppTextSizeSlider extends StatelessWidget {
               key: const ValueKey('app-text-size-slider'),
               values: AppTextSize.values,
               selected: textSize,
-              labelFor: (size) => size.label,
+              labelFor: context.l10n.textSizeName,
               onChanged: onChanged,
             ),
           ),
@@ -1820,7 +1925,10 @@ class _AppLockMethodSlider extends StatelessWidget {
         children: [
           Expanded(
             flex: 2,
-            child: Text('잠금 방식', style: Theme.of(context).textTheme.titleSmall),
+            child: Text(
+              context.tr('잠금 방식'),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1830,9 +1938,9 @@ class _AppLockMethodSlider extends StatelessWidget {
               values: AppLockMethod.values,
               selected: method,
               labelFor: (method) => switch (method) {
-                AppLockMethod.noPin => 'PIN 없음',
-                AppLockMethod.appPin => 'PIN 잠금',
-                AppLockMethod.system => '시스템',
+                AppLockMethod.noPin => context.tr('PIN 없음'),
+                AppLockMethod.appPin => context.tr('PIN 잠금'),
+                AppLockMethod.system => context.tr('시스템'),
               },
               enabledFor: (method) =>
                   method != AppLockMethod.system ||
@@ -2062,8 +2170,13 @@ class _AppVersionTile extends StatelessWidget {
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.info_outline),
-            title: const Text('Daily 버전'),
-            subtitle: Text('버전 $versionLabel · 더블 클릭하여 Github 확인하기'),
+            title: Text(context.tr('Daily 버전')),
+            subtitle: Text(
+              context.tr(
+                '버전 {version} · 더블 클릭하여 Github 확인하기',
+                args: {'version': versionLabel},
+              ),
+            ),
           ),
         );
       },
@@ -2091,8 +2204,8 @@ class _DefaultRemindersTile extends StatelessWidget {
     final selected = values.toSet();
     final options = normalizeReminderMinutes([...presets, ...values]);
     final summary = values.isEmpty
-        ? '새 일정에 알림을 자동으로 추가하지 않습니다.'
-        : values.map(_minutesLabel).join(', ');
+        ? context.tr('새 일정에 알림을 자동으로 추가하지 않습니다.')
+        : values.map((minutes) => _minutesLabel(context, minutes)).join(', ');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
@@ -2108,13 +2221,13 @@ class _DefaultRemindersTile extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               FilterChip(
-                label: const Text('없음'),
+                label: Text(context.tr('없음')),
                 selected: values.isEmpty,
                 onSelected: (_) => onChanged(const <int>[]),
               ),
               for (final minutes in options)
                 FilterChip(
-                  label: Text(_minutesLabel(minutes)),
+                  label: Text(_minutesLabel(context, minutes)),
                   selected: selected.contains(minutes),
                   onSelected: (enabled) {
                     final next = values.toSet();
@@ -2123,7 +2236,7 @@ class _DefaultRemindersTile extends StatelessWidget {
                   },
                 ),
               IconButton.outlined(
-                tooltip: '기본 알림 직접 입력',
+                tooltip: context.tr('기본 알림 직접 입력'),
                 onPressed: onCustom,
                 icon: const Icon(Icons.edit_outlined),
               ),
@@ -2161,7 +2274,7 @@ class _TimeTile extends StatelessWidget {
       title: Text(title),
       subtitle: Text('$subtitle · $label'),
       trailing: IconButton(
-        tooltip: '시간 선택',
+        tooltip: context.tr('시간 선택'),
         onPressed: () async {
           final picked = await showTimePicker(
             context: context,
@@ -2197,13 +2310,13 @@ class _TimeFormatTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('시간 표시 방식'),
-                SizedBox(height: 2),
-                Text(
+                Text(context.tr('시간 표시 방식')),
+                const SizedBox(height: 2),
+                const Text(
                   '시간 선택 화면의 기본 표시 방식을 정합니다.',
                   style: TextStyle(fontSize: 12),
                 ),
@@ -2246,7 +2359,7 @@ class _DdayOffsetsTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('D-day 알림'),
+          Text(context.tr('D-day 알림')),
           const SizedBox(height: 4),
           Text(
             'D-day 표시가 켜진 일정에 적용합니다.',
@@ -2271,7 +2384,7 @@ class _DdayOffsetsTile extends StatelessWidget {
                     onChanged(next.toList()..sort());
                   },
                 ),
-              ActionChip(label: const Text('직접 입력'), onPressed: onCustom),
+              ActionChip(label: Text(context.tr('직접 입력')), onPressed: onCustom),
             ],
           ),
         ],
@@ -2291,11 +2404,11 @@ class _NotificationTestTile extends StatelessWidget {
   final bool busy;
   final VoidCallback onPressed;
 
-  static const _defaultMessage = '즉시 알림을 보내고 예약 상태를 확인합니다.';
-
   @override
   Widget build(BuildContext context) {
-    final subtitle = message.isEmpty ? _defaultMessage : message;
+    final subtitle = message.isEmpty
+        ? context.tr('즉시 알림을 보내고 예약 상태를 확인합니다.')
+        : message;
     final button = FilledButton(
       onPressed: busy ? null : onPressed,
       child: busy
@@ -2303,7 +2416,7 @@ class _NotificationTestTile extends StatelessWidget {
               dimension: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : const Text('보내기'),
+          : Text(context.tr('보내기')),
     );
 
     return LayoutBuilder(
@@ -2311,7 +2424,7 @@ class _NotificationTestTile extends StatelessWidget {
         if (constraints.maxWidth >= 520) {
           return ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('알림 테스트'),
+            title: Text(context.tr('알림 테스트')),
             subtitle: Text(subtitle),
             trailing: button,
           );
@@ -2322,7 +2435,10 @@ class _NotificationTestTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('알림 테스트', style: Theme.of(context).textTheme.bodyLarge),
+              Text(
+                context.tr('알림 테스트'),
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
               const SizedBox(height: 2),
               Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 8),
@@ -2376,7 +2492,9 @@ class _CategoryTile extends StatelessWidget {
           ),
         ],
       ),
-      title: Text(category.label),
+      title: Text(
+        context.l10n.categoryName(id: category.id, label: category.label),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -2390,12 +2508,12 @@ class _CategoryTile extends StatelessWidget {
             )
           else ...[
             IconButton(
-              tooltip: '분류 수정',
+              tooltip: context.tr('분류 수정'),
               onPressed: onEdit,
               icon: const Icon(Icons.edit_outlined),
             ),
             IconButton(
-              tooltip: '분류 삭제',
+              tooltip: context.tr('분류 삭제'),
               onPressed: onDelete,
               icon: const Icon(Icons.delete_outline),
             ),
@@ -2445,19 +2563,21 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.account_circle_outlined),
-          title: const Text('Google 계정'),
-          subtitle: Text(linked ? email! : 'Google 로그인 시 Daily 계정에 연결됩니다.'),
+          title: Text(context.tr('Google 계정')),
+          subtitle: Text(
+            linked ? email! : context.tr('Google 로그인 시 Daily 계정에 연결됩니다.'),
+          ),
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.cloud_sync_outlined),
-          title: const Text('Google Drive 동기화'),
+          title: Text(context.tr('Google Drive 동기화')),
           subtitle: Text(
             sessionConnected
-                ? '이 계정의 Google Drive AppData에 일정을 백업하고 복원합니다.'
+                ? context.tr('이 계정의 Google Drive AppData에 일정을 백업하고 복원합니다.')
                 : linked
-                ? 'Google 인증 세션이 없습니다. 다시 연결하면 자동 동기화가 재개됩니다.'
-                : 'Google 로그인 시 Drive AppData 권한도 함께 승인합니다.',
+                ? context.tr('Google 인증 세션이 없습니다. 다시 연결하면 자동 동기화가 재개됩니다.')
+                : context.tr('Google 로그인 시 Drive AppData 권한도 함께 승인합니다.'),
           ),
         ),
         Row(
@@ -2480,13 +2600,15 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
                             : Icons.cloud_outlined,
                       ),
                 label: Text(
-                  connecting
-                      ? 'Google 연결 중'
-                      : sessionConnected
-                      ? '백업'
-                      : linked
-                      ? 'Google 다시 연결'
-                      : 'Google로 계속',
+                  context.tr(
+                    connecting
+                        ? 'Google 연결 중'
+                        : sessionConnected
+                        ? '백업'
+                        : linked
+                        ? 'Google 다시 연결'
+                        : 'Google로 계속',
+                  ),
                 ),
               ),
             ),
@@ -2496,7 +2618,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: busy ? null : onRestore,
                   icon: const Icon(Icons.cloud_download_outlined),
-                  label: const Text('복원'),
+                  label: Text(context.tr('복원')),
                 ),
               ),
             ],
@@ -2507,7 +2629,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: onCancelConnection,
             icon: const Icon(Icons.close),
-            label: const Text('연결 취소'),
+            label: Text(context.tr('연결 취소')),
           ),
         ],
         const SizedBox(height: 8),
@@ -2515,13 +2637,15 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: busy ? null : onDisconnect,
             icon: const Icon(Icons.link_off_outlined),
-            label: const Text('Google 연동 해지'),
+            label: Text(context.tr('Google 연동 해지')),
           ),
         if (linked) const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: busy ? null : onDeleteDailyAccount,
           icon: const Icon(Icons.person_remove_outlined),
-          label: Text(hasDailyAccount ? 'Daily 계정 탈퇴' : '로컬 데이터 초기화'),
+          label: Text(
+            context.tr(hasDailyAccount ? 'Daily 계정 탈퇴' : '로컬 데이터 초기화'),
+          ),
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.red,
             side: const BorderSide(color: Colors.red),
@@ -2529,7 +2653,10 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         ),
         if (message.isNotEmpty) ...[
           const SizedBox(height: 10),
-          Text(message, style: Theme.of(context).textTheme.labelMedium),
+          Text(
+            context.tr(message),
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
         ],
       ],
     );
@@ -2555,14 +2682,14 @@ class _AppleSignInSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     final connected = account != null;
     final title = connected
-        ? account!.displayName ?? account!.email ?? 'Apple로 로그인됨'
-        : 'Apple 로그인';
+        ? account!.displayName ?? account!.email ?? context.tr('Apple로 로그인됨')
+        : context.tr('Apple 로그인');
     final subtitle = connected
         ? [
             if (account!.email != null) account!.email!,
-            'Daily 계정에 연결된 Apple 로그인입니다.',
+            context.tr('Daily 계정에 연결된 Apple 로그인입니다.'),
           ].join('\n')
-        : 'Apple 로그인만으로 Daily를 사용할 수 있습니다.';
+        : context.tr('Apple 로그인만으로 Daily를 사용할 수 있습니다.');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2590,7 +2717,7 @@ class _AppleSignInSettings extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.apple),
-                  label: const Text('Apple로 계속'),
+                  label: Text(context.tr('Apple로 계속')),
                 ),
               ),
             ],
@@ -2600,12 +2727,15 @@ class _AppleSignInSettings extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: busy ? null : onDisconnect,
             icon: const Icon(Icons.link_off_outlined),
-            label: const Text('Apple 연동 해지'),
+            label: Text(context.tr('Apple 연동 해지')),
           ),
         ],
         if (message.isNotEmpty) ...[
           const SizedBox(height: 10),
-          Text(message, style: Theme.of(context).textTheme.labelMedium),
+          Text(
+            context.tr(message),
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
         ],
       ],
     );
@@ -2626,11 +2756,14 @@ class _DailyAccountStatus extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.person_outline),
-      title: const Text('Daily 계정'),
+      title: Text(context.tr('Daily 계정')),
       subtitle: Text(
         providers.isEmpty
-            ? 'Apple 또는 Google 계정을 연결할 수 있습니다.'
-            : '${providers.join(' · ')} 로그인 연결됨',
+            ? context.tr('Apple 또는 Google 계정을 연결할 수 있습니다.')
+            : context.tr(
+                '{providers} 로그인 연결됨',
+                args: {'providers': providers.join(' · ')},
+              ),
       ),
     );
   }
@@ -2653,7 +2786,7 @@ class _AccountLogoutButton extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.logout),
-      label: const Text('로그아웃'),
+      label: Text(context.tr('로그아웃')),
     );
   }
 }
@@ -2670,18 +2803,24 @@ class _SyncStatusTile extends StatelessWidget {
       builder: (context, status, _) {
         final lastSyncedAt = status.lastSyncedAt;
         final error = status.error;
-        final message = status.message;
+        final message = context.tr(status.message);
         final syncing = status.syncing;
         final subtitle = [
-          if (lastSyncedAt != null) '마지막 성공: ${_formatDateTime(lastSyncedAt)}',
+          if (lastSyncedAt != null)
+            context.tr(
+              '마지막 성공: {time}',
+              args: {'time': _formatDateTime(context, lastSyncedAt)},
+            ),
           if (message.isNotEmpty) message,
-          if (error != null && error.isNotEmpty) error,
+          if (error != null && error.isNotEmpty) context.tr(error),
         ].join('\n');
         return ListTile(
           contentPadding: EdgeInsets.zero,
           leading: Icon(syncing ? Icons.sync : Icons.cloud_done_outlined),
-          title: const Text('동기화 상태'),
-          subtitle: Text(subtitle.isEmpty ? '아직 동기화 기록이 없습니다.' : subtitle),
+          title: Text(context.tr('동기화 상태')),
+          subtitle: Text(
+            subtitle.isEmpty ? context.tr('아직 동기화 기록이 없습니다.') : subtitle,
+          ),
         );
       },
     );
@@ -2782,10 +2921,13 @@ class _CategoryDialogState extends State<_CategoryDialog> {
             TextField(
               controller: _controller,
               autofocus: true,
-              decoration: const InputDecoration(labelText: '이름'),
+              decoration: InputDecoration(labelText: context.tr('이름')),
             ),
             const SizedBox(height: 14),
-            Text('색상', style: Theme.of(context).textTheme.labelMedium),
+            Text(
+              context.tr('색상'),
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -2880,7 +3022,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
             FocusManager.instance.primaryFocus?.unfocus();
             Navigator.of(context).pop();
           },
-          child: const Text('취소'),
+          child: Text(context.tr('취소')),
         ),
         FilledButton(
           onPressed: () {
@@ -2953,7 +3095,7 @@ class _RgbColorDialogState extends State<_RgbColorDialog> {
     final pickerWidth = (screenSize.width - 128).clamp(200.0, 360.0);
     final maxContentHeight = screenSize.height * 0.62;
     return AlertDialog(
-      title: const Text('사용자 지정 색상'),
+      title: Text(context.tr('사용자 지정 색상')),
       content: SizedBox(
         width: pickerWidth,
         height: maxContentHeight,
@@ -2972,11 +3114,11 @@ class _RgbColorDialogState extends State<_RgbColorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('취소'),
+          child: Text(context.tr('취소')),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_colorValue),
-          child: const Text('적용'),
+          child: Text(context.tr('적용')),
         ),
       ],
     );
@@ -3185,7 +3327,7 @@ class _NumberDialogState extends State<_NumberDialog> {
             FocusManager.instance.primaryFocus?.unfocus();
             Navigator.of(context).pop();
           },
-          child: const Text('취소'),
+          child: Text(context.tr('취소')),
         ),
         FilledButton(
           onPressed: () {
@@ -3193,7 +3335,7 @@ class _NumberDialogState extends State<_NumberDialog> {
             FocusManager.instance.primaryFocus?.unfocus();
             Navigator.of(context).pop(value);
           },
-          child: const Text('적용'),
+          child: Text(context.tr('적용')),
         ),
       ],
     );
@@ -3236,7 +3378,7 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
   void _continue() {
     if (!_confirming) {
       if (_pin.length < 4) {
-        setState(() => _error = 'PIN은 4자리 이상이어야 합니다.');
+        setState(() => _error = context.tr('PIN은 4자리 이상이어야 합니다.'));
         return;
       }
       setState(() {
@@ -3249,7 +3391,7 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
     if (_pin != _firstPin) {
       setState(() {
         _pin = '';
-        _error = 'PIN이 일치하지 않습니다. 다시 입력하세요.';
+        _error = context.tr('PIN이 일치하지 않습니다. 다시 입력하세요.');
       });
       return;
     }
@@ -3286,7 +3428,7 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('취소'),
+          child: Text(context.tr('취소')),
         ),
         FilledButton(
           onPressed: _continue,
@@ -3370,20 +3512,20 @@ class _PinVerificationDialogState extends State<_PinVerificationDialog> {
     setState(() {
       _checking = false;
       _pin = '';
-      _error = 'PIN이 일치하지 않습니다.';
+      _error = context.tr('PIN이 일치하지 않습니다.');
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('PIN 확인'),
+      title: Text(context.tr('PIN 확인')),
       content: SizedBox(
         width: 300,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('앱 잠금을 해제하려면 PIN을 입력하세요.'),
+            Text(context.tr('앱 잠금을 해제하려면 PIN을 입력하세요.')),
             const SizedBox(height: 18),
             _PinEntryDots(
               filledCount: _pin.length,
@@ -3408,7 +3550,7 @@ class _PinVerificationDialogState extends State<_PinVerificationDialog> {
       actions: [
         TextButton(
           onPressed: _checking ? null : () => Navigator.of(context).pop(false),
-          child: const Text('취소'),
+          child: Text(context.tr('취소')),
         ),
       ],
     );
@@ -3486,7 +3628,7 @@ class _SecurePinKeypad extends StatelessWidget {
                   ),
                 ),
         IconButton(
-          tooltip: '한 자리 지우기',
+          tooltip: context.tr('한 자리 지우기'),
           onPressed: enabled ? onBackspace : null,
           icon: const Icon(Icons.backspace_outlined),
         ),
@@ -3495,20 +3637,20 @@ class _SecurePinKeypad extends StatelessWidget {
   }
 }
 
-String _minutesLabel(int minutes) {
+String _minutesLabel(BuildContext context, int minutes) {
   if (minutes == 0) {
-    return '정시';
+    return context.tr('정시');
   }
   if (minutes < 60) {
-    return '$minutes분 전';
+    return context.tr('{count}분 전', args: {'count': minutes});
   }
   if (minutes % 1440 == 0) {
-    return '${minutes ~/ 1440}일 전';
+    return context.tr('{count}일 전', args: {'count': minutes ~/ 1440});
   }
   if (minutes % 60 == 0) {
-    return '${minutes ~/ 60}시간 전';
+    return context.tr('{count}시간 전', args: {'count': minutes ~/ 60});
   }
-  return '$minutes분 전';
+  return context.tr('{count}분 전', args: {'count': minutes});
 }
 
 String _ddayLabel(int offset) {
@@ -3528,8 +3670,8 @@ String _timeLabel(int hour, int minute, {required bool use24HourTime}) {
   return '$period $displayHour:$paddedMinute';
 }
 
-String _formatDateTime(DateTime value) {
-  return '${value.month}월 ${value.day}일 '
-      '${value.hour.toString().padLeft(2, '0')}:'
-      '${value.minute.toString().padLeft(2, '0')}';
+String _formatDateTime(BuildContext context, DateTime value) {
+  return DateFormat.yMMMd(
+    context.l10n.locale.toLanguageTag(),
+  ).add_Hm().format(value);
 }

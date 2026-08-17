@@ -7,6 +7,7 @@ import '../../../core/auth/apple_sign_in_service.dart';
 import '../../../core/alarms/alarm_service.dart';
 import '../../../core/auth/google_account.dart';
 import '../../../core/di/app_providers.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
 
 enum _WelcomeAction { apple, local, googleDrive, notification }
@@ -68,7 +69,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                 child: _page < _lastPage
                     ? TextButton(
                         onPressed: () => _goToPage(_lastPage),
-                        child: const Text('건너뛰기'),
+                        child: Text(context.tr('건너뛰기')),
                       )
                     : const SizedBox.shrink(),
               ),
@@ -78,24 +79,29 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                 controller: _pageController,
                 onPageChanged: (value) => setState(() => _page = value),
                 children: [
-                  const _WelcomeIntroPage(
+                  _WelcomeIntroPage(
                     imagePath: 'assets/onboarding/week-calendar.png',
                     darkImagePath: 'assets/onboarding/dark/week-calendar.png',
-                    title: '일정을 한눈에',
-                    description: '월간, 주간, 일간 보기로 필요한 일정에 빠르게 집중하세요.',
+                    title: context.tr('일정을 한눈에'),
+                    description: context.tr(
+                      '월간, 주간, 일간 보기로 필요한 일정에 빠르게 집중하세요.',
+                    ),
                   ),
-                  const _WelcomeIntroPage(
+                  _WelcomeIntroPage(
                     imagePath: 'assets/onboarding/day-calendar.png',
                     darkImagePath: 'assets/onboarding/dark/day-calendar.png',
-                    title: '기록하고 바로 알림 받기',
-                    description: '자연스럽게 일정을 기록하고 일정 알림과 아침 브리핑을 받아보세요.',
+                    title: context.tr('기록하고 바로 알림 받기'),
+                    description: context.tr(
+                      '자연스럽게 일정을 기록하고 일정 알림과 아침 브리핑을 받아보세요.',
+                    ),
                   ),
-                  const _WelcomeIntroPage(
+                  _WelcomeIntroPage(
                     imagePath: 'assets/onboarding/dday-calendar.png',
                     darkImagePath: 'assets/onboarding/dark/dday-calendar.png',
-                    title: '중요한 날까지 이어서',
-                    description:
-                        'D-day와 분류를 활용하고 Google Drive로 여러 기기에서 이어서 사용하세요.',
+                    title: context.tr('중요한 날까지 이어서'),
+                    description: context.tr(
+                      'D-day와 분류를 활용하고 Google Drive로 여러 기기에서 이어서 사용하세요.',
+                    ),
                   ),
                   _buildStartPage(
                     context,
@@ -123,7 +129,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                                 ? null
                                 : () => _goToPage(_page - 1),
                             icon: const Icon(Icons.chevron_left),
-                            label: const Text('이전'),
+                            label: Text(context.tr('이전')),
                           )
                         : const SizedBox.shrink(),
                   ),
@@ -152,9 +158,12 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                     child: _page < _lastPage
                         ? TextButton(
                             onPressed: () => _goToPage(_page + 1),
-                            child: const Row(
+                            child: Row(
                               mainAxisAlignment: MainAxisAlignment.end,
-                              children: [Text('다음'), Icon(Icons.chevron_right)],
+                              children: [
+                                Text(context.tr('다음')),
+                                const Icon(Icons.chevron_right),
+                              ],
                             ),
                           )
                         : const SizedBox.shrink(),
@@ -189,13 +198,13 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Daily 시작하기',
+                context.tr('Daily 시작하기'),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 8),
               Text(
-                'Apple 또는 Google 계정을 연결하거나 계정 없이 로컬로 시작할 수 있습니다.',
+                context.tr('Apple 또는 Google 계정을 연결하거나 계정 없이 로컬로 시작할 수 있습니다.'),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
@@ -216,7 +225,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                           ),
                         )
                       : const Icon(Icons.apple),
-                  label: const Text('Apple로 계속'),
+                  label: Text(context.tr('Apple로 계속')),
                 ),
                 const SizedBox(height: 10),
               ],
@@ -228,7 +237,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.calendar_today_outlined),
-                label: const Text('로컬로 시작'),
+                label: Text(context.tr('로컬로 시작')),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
@@ -248,8 +257,8 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                     : const _GoogleMark(),
                 label: Text(
                   _busyAction == _WelcomeAction.googleDrive
-                      ? 'Google 연결 중'
-                      : 'Google로 계속',
+                      ? context.tr('Google 연결 중')
+                      : context.tr('Google로 계속'),
                 ),
               ),
               if (canCancelGoogleConnection) ...[
@@ -257,7 +266,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                 OutlinedButton.icon(
                   onPressed: _cancelGoogleDriveSignIn,
                   icon: const Icon(Icons.close),
-                  label: const Text('연결 취소'),
+                  label: Text(context.tr('연결 취소')),
                 ),
               ],
               const SizedBox(height: 10),
@@ -269,7 +278,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.notifications_active_outlined),
-                label: const Text('알림 권한 허용'),
+                label: Text(context.tr('알림 권한 허용')),
               ),
               if (_message.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -297,13 +306,13 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   Future<void> _startWithApple() async {
     setState(() {
       _busyAction = _WelcomeAction.apple;
-      _message = 'Apple 로그인 창을 여는 중입니다.';
+      _message = context.tr('Apple 로그인 창을 여는 중입니다.');
     });
     try {
       final account = await ref.read(appleSignInServiceProvider).signIn();
       if (account == null) {
         if (mounted) {
-          setState(() => _message = 'Apple 로그인이 취소되었습니다.');
+          setState(() => _message = context.tr('Apple 로그인이 취소되었습니다.'));
         }
         return;
       }
@@ -338,7 +347,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   Future<void> _connectAndRestore() async {
     setState(() {
       _busyAction = _WelcomeAction.googleDrive;
-      _message = 'Google 로그인 창을 여는 중입니다.';
+      _message = context.tr('Google 로그인 창을 여는 중입니다.');
     });
     try {
       final connected = await _connectGoogleDriveAndRestore(
@@ -465,7 +474,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     if (mounted) {
       setState(() {
         _busyAction = null;
-        _message = 'Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.';
+        _message = context.tr('Google Drive 연결이 취소되었습니다. 다시 연결할 수 있습니다.');
       });
     }
   }
@@ -491,12 +500,12 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   Future<void> _requestNotificationPermission() async {
     setState(() {
       _busyAction = _WelcomeAction.notification;
-      _message = '알림 권한 요청을 여는 중입니다.';
+      _message = context.tr('알림 권한 요청을 여는 중입니다.');
     });
     try {
       await ref.read(notificationServiceProvider).initialize();
       if (mounted) {
-        setState(() => _message = '알림 권한 설정을 확인했습니다.');
+        setState(() => _message = context.tr('알림 권한 설정을 확인했습니다.'));
       }
     } on Object catch (error) {
       if (mounted) {

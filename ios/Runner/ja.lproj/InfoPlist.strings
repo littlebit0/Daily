@@ -1,0 +1,7 @@
+"NSAlarmKitUsageDescription" = "選択した予定時刻にアラームを鳴らすために使用します。";
+"NSCalendarsFullAccessUsageDescription" = "Appleカレンダーの予定をDailyに読み込む場合にのみ使用します。";
+"NSCalendarsUsageDescription" = "Appleカレンダーの予定をDailyに読み込む場合にのみ使用します。";
+"NSFaceIDUsageDescription" = "Dailyのロックを安全に解除するためにFace IDを使用します。";
+"NSMicrophoneUsageDescription" = "Signalにカレンダー操作を話すときだけマイクを使用します。";
+"NSSpeechRecognitionUsageDescription" = "Signalに話したカレンダー操作を実行するため、音声をテキストに変換します。";
+"CFBundleSpokenName" = "デイリー";

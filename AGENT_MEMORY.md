@@ -8,6 +8,28 @@ profiles, keystore passwords, or private keys to this file.
 Historical app-version notes below `2.0.0` were intentionally removed on
 2026-06-06 at the user's request.
 
+## User Correction Memory
+
+- 사용자가 강하게 항의하거나 욕설을 한 경우 표현 자체만 문제 삼지 말고, 바로
+  직전에 에이전트가 무엇을 잘못 이해하거나 실행했는지 구체적으로 파악해 이
+  문서에 재발 방지 사항으로 남긴다.
+- 지적받은 작업을 임의로 다른 방식으로 대체하거나 롤백하지 않는다. 사용자의
+  원래 목표, 현재 적용 상태, 해결하지 못한 부분을 분리해 확인한다.
+- 사용자가 `대답만`, `작업하지 말고`라고 지시하면 파일 수정, 빌드, 설치 등
+  실행 작업을 하지 않고 질문에만 답한다.
+
+### 2026-08-15 LLM 버튼 처리 오류
+
+- 사용자 요구는 LLM 버튼에서 나타나는 단축어 받아쓰기 화면을 실제 Siri 호출로
+  교체하는 것이었다.
+- 에이전트는 실제 Siri 호출 경로를 해결하지 못한 상태에서 사용자 승인 없이
+  LLM 버튼을 기존 앱 내부 AI 입력 화면으로 롤백했다.
+- 잘못된 동작을 제거하는 것과 이전 기능으로 되돌리는 것은 서로 다른 작업이다.
+  목표 동작을 구현할 수 없다면 기존 동작을 임의로 변경하지 말고, 현재 상태와
+  제약을 설명한 뒤 사용자 결정을 받아야 한다.
+- 현재 LLM 버튼은 앱 내부 AI 입력 화면으로 롤백된 상태다. 사용자가 이를 잘못된
+  조치로 명확히 지적했으며, 후속 변경은 별도 지시에 따라 진행한다.
+
 ## Current State
 
 - Repository: `littlebit0/Daily`
@@ -3046,3 +3068,635 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - iOS/macOS release verification has been performed locally. Android and
   Windows remain shared-source targets but still require platform-specific
   build and manual verification before their 3.0.1 artifacts are published.
+
+## 2026-08-12 다국어 지원 작업
+
+- 지원 언어를 한국어, 영어, 일본어, 중국어 번체로 추가했다.
+- 기본값은 시스템 언어를 따르며, 미지원 시스템 언어는 영어로 표시한다.
+- 설정 > 화면 > 언어에서 시스템 설정, 한국어, English, 日本語, 繁體中文을
+  기기별로 직접 선택할 수 있다. 언어 선택은 계정 동기화로 다른 기기에
+  강제 적용되지 않는다.
+- 온보딩, 캘린더, 검색, 일정 추가/상세, 주요 설정, 알림과 Apple 위젯의 핵심
+  문구 및 날짜 형식이 선택 언어를 따른다.
+- 일정 빠른 추가·추가·수정 화면의 반복 주기 선택값, 반복 간격, 종료일 및
+  반복 횟수도 선택 언어를 따르도록 후속 보정했다.
+- 상하 월 스크롤 경계와 연 화면 미니 달력의 월명을 로케일 형식으로 바꾸고,
+  iOS 좌우 연월 제목의 긴 영어 월명은 잘리지 않도록 가변 폭과 자동 축소를
+  적용했다. 한국 공휴일 명칭은 저장값을 유지하면서 화면·검색·알림·Apple
+  위젯에서 선택 언어로 표시한다.
+- iOS는 네 언어의 캘린더, Face ID, AlarmKit 권한 설명을 앱 번들에 포함한다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - 현지화, 설정 저장, Apple 위젯, 기존 widget 테스트 총 56개 통과
+  - iOS Simulator debug 빌드 성공 및 네 개 `InfoPlist.strings` 포함 확인
+  - macOS debug 빌드 성공
+- Android와 Windows는 공유 Flutter UI가 적용되지만 각 실제 OS에서 언어 변경,
+  긴 번역 문구 레이아웃, 알림 문구를 수동 검증해야 한다.
+
+### 2026-08-13 iOS 캘린더 가져오기 번역 보정
+
+- 설정의 `Apple 캘린더 또는 Google 캘린더에서 가져옵니다.` 세부 설명이
+  번역 함수를 거치지 않던 누락을 수정했다.
+- iOS 네이티브 캘린더 권한 거절과 캘린더 선택 누락 오류를 오류 코드로
+  분기해 한국어, 영어, 일본어, 중국어 번체로 표시한다.
+- Google 캘린더 가져오기 과정의 로그인 필요 및 응답 형식 오류도 현재 앱
+  언어를 따르도록 보정했다.
+
+### 2026-08-13 계정 설정 및 캘린더 요일 번역 보정
+
+- macOS 일본어 계정 설정 GUI를 직접 확인해 Apple/Google 연결 상태, Drive
+  설명, 백업 버튼, 동기화 상태 및 Daily 계정 탈퇴에 남아 있던 한국어를
+  번역했다. 공유 Flutter 화면이므로 iOS에도 동일하게 적용된다.
+- 주간 달력의 `일정 없음`과 월간·주간·연간 미니 달력의 요일을 현재 언어로
+  표시한다.
+- 캘린더 보기의 주/월/일 명칭을 요일 번역과 분리했다. 영어에서는
+  `Week / Month / Day`로 표시하고 일요일은 계속 `Sun`으로 표시한다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - 현지화, 월간 그리드, 기존 widget 테스트 68개 통과
+  - macOS `Daily Test.app` 업데이트 설치 후 일본어 계정 설정 GUI 확인 완료
+  - iPhone 17 Simulator 업데이트 설치 완료, 설치 전후 SQLite SHA-256 동일
+- 빠른 보기 월 요약의 일정, D-day, 공휴일 개수 문구도 네 언어로 표시하도록
+  후속 보정했다.
+- iOS 하단 좌측 캘린더 보기 슬라이드는 고정 폭을 제거하고 번역된
+  `Week / Month / Day` 등의 실제 텍스트 폭에 따라 자동 확장한다. 중앙
+  슬라이드의 현재 폭과 화면 여유를 함께 계산해 두 슬라이드가 겹치지 않는다.
+
+### 2026-08-13 주간·일간 스케줄 표시 방식
+
+- 설정 > 달력에 `주간·일간 표시 방식` 목록/스케줄 2단 캡슐을
+  추가했다. 기본값은 기존 동작을 유지하는 `목록`이다.
+- 스케줄 모드는 주간·일간 날짜 이동을 기존 가로 `PageView`로만
+  처리하고, 페이지 내부의 24시간 축만 세로 스크롤한다.
+- 시간 일정은 시작·종료 시각에 맞춰 블록으로 표시하고, 중복 시간대의
+  일정은 여러 열로 배치한다. 현재 시간 표시선도 제공한다.
+- 종일 일정은 주간·일간 스케줄 하단 오른쪽의 원형 버튼으로 표시/
+  숨김을 즉시 전환한다. 표시 상태는 주간과 일간 화면이 공유한다.
+- 표시 방식은 로컬 설정과 Google Drive 설정 동기화에 포함된다.
+  기존 원격 설정 파일에 해당 키가 없으면 현재 기기의 선택을 보존한다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - 설정 저장·구버전 동기 호환·명시적 원격 설정 복원 테스트 통과
+  - 시간축 세로 스크롤, 가로 주 이동, 종일 일정 토글 widget 테스트 통과
+
+### 2026-08-13 Siri 및 App Intents 지원
+
+- iOS 16 이상과 macOS 13 이상에서 Apple App Intents 기반 Siri/단축어
+  기능을 추가했다. iOS와 macOS는 같은 `apple_siri/DailySiriIntents.swift`
+  구현을 사용한다.
+- 허용한 작업:
+  - 일정 한 건 추가
+  - 오늘, 내일, 지정 날짜, 다음 일정 조회
+  - 제목/메모/장소 텍스트 검색
+  - 정확한 제목으로 일정 한 건 수정
+  - 정확한 제목으로 일정 한 건 삭제. 삭제는 기기 인증과 Apple 표준 실행
+    확인을 모두 거친다.
+  - D-day 일정 조회
+  - Daily 캘린더 열기
+- 계정 탈퇴, 전체 데이터 초기화, Apple/Google 연결 해제, Google Drive
+  백업 삭제, 일괄 수정/삭제, 동기화 충돌 처리는 App Intent로 제공하지 않는다.
+  범용 LLM 명령을 Siri에 연결하는 우회 경로도 만들지 않았다.
+- 인증 정책:
+  - 일정 조회와 추가는 Siri 개인 인증이 필요하다.
+  - 일정 수정과 삭제는 로컬 기기 인증이 반드시 필요하다.
+  - 앱 열기만 인증 없이 허용한다.
+- 반복 일정 조회는 원본 레코드가 아니라 일/주/월/연 반복 간격, 종료일,
+  횟수, 제외 날짜를 반영한 실제 발생 일정으로 응답한다.
+- Siri가 앱 밖에서 SQLite를 변경한 뒤 Daily가 복귀하면 Drift 일정 범위
+  스트림을 다시 만들어 화면에 변경 사항이 반영되도록 했다. Siri 변경
+  레코드는 기존 v2 동기화가 업로드할 수 있도록 `pending` 또는
+  `pending_delete` 상태로 저장한다.
+- 설정 > Siri 작업 기록에서 실행 기록을 날짜별로 조회할 수 있다.
+  - 기록 항목: 실행 시각, 작업 종류, 확정된 일정 제목/검색어, 성공/실패,
+    결과
+  - 원문 음성, 전체 Siri 대화, 계정 토큰은 저장하지 않는다.
+  - 기록은 Apple App Group의 `daily-siri-action-logs.json`에 최대 1,000건
+    저장하며 사용자가 전체 삭제할 수 있다.
+  - 메뉴는 iOS와 macOS에서만 표시한다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub` 전체 162개 통과
+  - iOS Simulator와 macOS 네이티브 Xcode debug 컴파일 통과
+  - App Intents 메타데이터에서 9개 Intent와 인증 정책 추출 확인
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532`에 업데이트
+    설치 완료, 자동 실행하지 않음
+  - `/Applications/Daily Test.app` 업데이트 설치 및 코드 서명 검증 완료,
+    자동 실행하지 않음
+
+### 2026-08-13 Siri 인식 정밀화
+
+- 최초에는 `시그널` 단축어에서 `Daily Signal(매번 묻기)`를 사용했으나,
+  후속 발화를 Siri 전역 라우터가 다시 해석하면서 웹 검색이나 Apple 캘린더로
+  빠질 수 있음을 실제 사용에서 확인했다.
+- 최종 `시그널` 단축어는 `텍스트 받아쓰기 -> Daily Signal` 두 단계다.
+  받아쓰기 단계가 후속 발화를 단축어 안에서 먼저 캡처하고, Daily Signal에는
+  `받아쓰기한 텍스트`를 전달한다. 따라서 후속 문장을 Siri 전역 검색에 다시
+  넘기지 않는다.
+- Daily Signal은 전달된 문장을 허용 목록으로만 분류한다. 오늘, 내일, 지정
+  날짜, 다음 일정, 검색, D-day, 추가, 수정, 삭제 외의 명령은 실행하거나 다른
+  앱으로 보내지 않고 지원 작업을 다시 묻는다. 수정·삭제·추가 키워드를 조회
+  키워드보다 먼저 판정해 `내일 일정 삭제`를 단순 내일 조회로 오해하지 않는다.
+- `DailySiriAction` AppEnum에 오늘, 내일, 지정 날짜, 다음 일정, 검색, D-day,
+  추가, 수정, 삭제의 9개 작업과 한국어 동의어를 등록했다. `내일 일정 알려줘`,
+  `내일 스케줄`, `내일 일정 확인` 같은 표현은 일반 웹 검색 문자열이 아니라
+  Daily 작업 후보로 전달된다.
+- 일정 수정과 삭제는 자유 텍스트 제목 대신 `DailyEventEntity`를 사용한다.
+  Siri/단축어는 현재 SQLite에서 검색한 실제 일정 후보를 제시하며, 삭제의
+  기기 인증과 실행 확인 정책은 그대로 유지한다.
+- 오늘, 내일, 지정 날짜, 다음 일정, 검색, 추가, 수정, 삭제, D-day, 캘린더
+  열기의 직접 App Shortcut 10개를 등록했다. 각 Shortcut은 앱 이름을 포함한
+  한국어 및 영어 호출 예시를 제공한다.
+- iOS와 macOS의 Siri 앱 이름을 `Daily`로 명시하고 `데일리`, `데일리 테스트`,
+  `데일리 캘린더`를 대체 앱 이름으로 등록했다. `시그널`은 사용자 단축어와
+  앱 이름이 충돌하지 않도록 대체 앱 이름에는 넣지 않았다.
+- 지원 범위:
+  - 직접 App Shortcut은 iOS 16 이상, macOS 13 이상에서 제공한다.
+  - `시그널`의 제한 명령 분류와 구조화된 작업 선택은 AppEnum API를 사용할 수
+    있는 iOS 17 이상, macOS 14 이상에서 제공한다.
+  - Apple Calendar App Schema는 현재 설치된 Xcode 26.6 / iOS·macOS SDK
+    26.5에 타입이 없고 iOS 27/macOS 27 SDK가 필요하므로 이번 빌드에는
+    추측 구현을 넣지 않았다. Xcode 27 도입 후 기존 AppEntity를 Calendar App
+    Schema 엔티티와 연결하는 후속 검증이 필요하다.
+- 검증:
+  - iOS Simulator debug 빌드 성공
+  - macOS debug 빌드 성공 및 `/Users/kimhwi/Applications/Daily Test.app` 실행
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532` 업데이트 설치
+  - App Intents 메타데이터에서 11개 Intent, `DailyEventEntity`, 9개
+    `DailySiriAction` 값과 동의어, 10개 App Shortcut 추출 확인
+  - macOS 단축어 앱에서 `시그널`이 `텍스트 받아쓰기 -> Daily Signal` 순서이고
+    Signal phrase가 `받아쓰기한 텍스트`에 연결된 것을 재확인
+  - 실제 iPhone은 검증 시점에 Mac에서 오프라인 상태였다. 새 App Intent가
+    포함된 테스트 앱을 실제 iPhone에 설치하기 전에는 이 변경을 실기기에서
+    검증할 수 없다.
+
+### 2026-08-14 Apple Intelligence 생성형 명령 해석
+
+- iOS/macOS 26 이상에서 Apple Intelligence의 온디바이스 Foundation Models를
+  사용해 `시그널` 후속 문장을 구조화한다.
+  - 한국어, 영어, 일본어, 중국어 번체 문장에서 작업 종류, 대상 일정 표현,
+    검색어, 변경할 새 제목을 추출한다.
+  - 지원 작업은 오늘/내일/지정 날짜/다음 일정/검색/D-day/추가/수정/삭제로
+    제한하며, 관련 없거나 애매한 문장은 `unknown`으로 처리한다.
+  - 일정·제목·장소를 모델이 임의로 만들지 않도록 구조화 출력과 명시적
+    지침을 사용한다.
+- 안전성과 하위 호환성:
+  - 기존 키워드 판별기는 제거하지 않았다. Apple Intelligence 미지원 기기,
+    기능 꺼짐, 모델 준비 중, 현재 언어 미지원, 생성 실패 시 기존 판별기로
+    즉시 복귀한다.
+  - 명시적인 추가/수정/삭제 키워드는 생성형 모델보다 먼저 판정한다.
+  - 생성형 해석으로 수정·삭제가 선택돼도 기존 기기 인증, 실제 일정 엔티티
+    확인, 삭제 확인 창을 그대로 거치며 모델이 임의 실행하지 않는다.
+- iOS 18/macOS 15 이상에서는 `DailyEventEntity`를 Core Spotlight에
+  `IndexedEntity`로 등록한다.
+  - 제목, 메모, 장소, 시작/종료 시각, 종일 여부를 인덱싱해 Siri와 Apple
+    Intelligence가 실제 Daily 일정 엔티티를 의미 기반으로 찾을 수 있게 했다.
+  - 앱 시작, Flutter 일정/위젯 스냅샷 갱신, Siri 일정 추가·수정·삭제 뒤에
+    500ms 병합 지연을 두고 전용 Spotlight 인덱스를 갱신한다.
+- 현재 Xcode 26.6 / SDK 26.5에는 Calendar App Schema 타입이 없으므로 추측
+  구현은 넣지 않았다. Xcode 27 도입 후 Apple Calendar App Schema 연결을
+  별도로 검증해야 한다.
+- 검증:
+  - iPhone 17 Simulator 대상 iOS debug Xcode 빌드 통과
+  - macOS debug Xcode 빌드 통과
+  - 두 플랫폼 모두 App Intents 메타데이터 추출 단계 통과
+  - 시뮬레이터는 Apple Intelligence 모델을 제공하지 않으므로 실제 생성형
+    해석 품질은 Apple Intelligence가 활성화된 지원 실기기에서 확인해야 한다.
+
+### 2026-08-14 Siri/단축어 항상 허용 및 테스트 앱 서명 수정
+
+- macOS 테스트 앱이 `CODE_SIGNING_ALLOWED=NO` 빌드 뒤 ad-hoc 서명된 상태로
+  설치되어 App Intents의 앱 ID와 권한을 시스템이 정상적으로 신뢰하지 못하던
+  원인을 확인했다.
+- macOS `Daily Test.app`을 Apple Development 인증서와 Team
+  `A6Y73X2ZLS`로 다시 빌드·설치했다. 설치본에는 다음 entitlement가 유지된다.
+  - application identifier `A6Y73X2ZLS.com.littlebit0.daily.test`
+  - App Group `A6Y73X2ZLS.com.littlebit0.daily.widgets`
+  - Sign in with Apple, App Sandbox, 네트워크 권한
+- 앞으로 `CODE_SIGNING_ALLOWED=NO` 빌드는 컴파일 검증에만 사용할 수 있으며,
+  macOS 테스트 앱 설치본을 해당 산출물로 교체하거나 사후 ad-hoc 재서명하면
+  안 된다.
+- 통합 `Daily Signal` Intent의 전체 인증 정책을
+  `requiresLocalDeviceAuthentication`에서 `requiresAuthentication`으로
+  조정했다. 조회·검색·추가는 사용자가 Siri/단축어에서 선택한 `항상 허용`을
+  존중한다.
+- 일정 수정·삭제는 통합 Intent 내부에서 실행 직전에 `LAContext`의
+  `deviceOwnerAuthentication`을 별도로 요구한다. 따라서 파괴적 변경의
+  Touch ID/시스템 암호 보호는 유지된다.
+- iOS Simulator와 macOS Apple Development 서명 빌드가 모두 통과했고,
+  iPhone 17 Simulator 및 `/Users/kimhwi/Applications/Daily Test.app`에
+  업데이트 설치했다. App Intents 재등록을 위해 두 앱을 한 번 실행한 뒤
+  종료했다.
+- 기존 권한 캐시는 전역 초기화하지 않았다. 새 서명 설치본의 첫 실행에서
+  권한을 한 번 다시 물으면 `항상 허용`을 선택한 뒤 이후 반복 여부를 실기기에서
+  확인해야 한다.
+- 같은 bundle identifier의 임시 Xcode 빌드
+  `/private/tmp/daily-siri-test-derived/.../Daily Test.app`이 Launch Services에
+  함께 등록되면, 단축어 동작 목록에는 `Daily Signal`이 보여도 추가·실행 시
+  `알 수 없는 동작`으로 바뀐다. 임시 DerivedData를 clean하고 등록을 해제한 뒤
+  `/Users/kimhwi/Applications/Daily Test.app`만 다시 등록해 해결했다.
+- 기존 `시그널` 단축어의 끊어진 블록도 재등록 뒤 자동 복구되었다. 현재 구성은
+  `텍스트 받아쓰기 -> 받아쓰기한 텍스트를 Daily에서 실행`이며, 단축어 편집
+  화면에서 더 이상 `이 버전의 단축어 앱에서 이 동작을 찾을 수 없습니다`가
+  표시되지 않는다.
+
+### 2026-08-14 Siri 일정 즉시 반영 및 생성형 후속 질문
+
+- Siri/App Intent가 별도 SQLite 연결로 일정을 추가·수정·삭제하면 Drift의
+  기존 watch 쿼리가 외부 변경을 감지하지 못해 월간, 주간·일간, 오른쪽 하루
+  패널이 서로 다른 데이터를 잠시 표시하던 원인을 수정했다.
+- Siri 저장 직후 Darwin notification
+  `com.littlebit0.daily.siri.events-changed`를 전송한다. iOS/macOS Runner가 이를
+  수신해 Flutter `daily/siri_event_changes` 채널로 즉시 전달한다.
+- Flutter는 변경 신호 하나로 `eventsInRangeProvider` family 전체를 무효화한다.
+  이에 따라 현재 생성된 월간·주간·일간·하루 패널의 범위 스트림이 같은 시점에
+  다시 조회된다. 위젯 스냅샷도 갱신하고 Google Drive에 연결된 경우 pending
+  Siri 변경을 백업 큐로 전달한다.
+- `Daily Signal`은 명시적인 추가·수정·삭제 문장도 Apple Intelligence 구조화
+  해석을 실행한다. 이전에는 규칙 기반으로 mutation을 먼저 찾으면 생성형
+  해석을 건너뛰어 제목 외 일정 필드를 주입할 수 없었다.
+- 생성형 구조화 결과에 다음 필드를 추가했다.
+  - 새 일정 제목, 시작/종료, 종일 여부, 장소, 메모
+  - 수정 대상 표현, 새 제목, 새 시작/종료
+- 모델에는 현재 시각과 시간대를 제공해 오늘/내일 같은 상대 표현만 계산하게
+  하고, 사용자가 말하지 않은 제목·날짜·시간·장소·메모는 만들지 못하도록
+  지시했다. ISO 8601 형식으로 받은 시각만 실제 App Intent 입력으로 사용한다.
+- 일정 추가에서 제목이 빠지면 제목만, 완전한 시작 날짜·시간이 빠지면 시작
+  정보만 Siri가 이어서 질문한다. 종료는 선택 정보라 생략 시 기존 정책대로
+  시간 일정은 1시간, 종일 일정은 1일로 설정한다. 장소와 메모도 말한 경우에만
+  주입한다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub test/widget_test.dart` 52개 통과
+  - macOS Debug 네이티브 빌드 및 App Intents 메타데이터 추출 통과
+  - iPhone 17 Simulator 대상 iOS Debug 네이티브 빌드 및 App Intents
+    메타데이터 추출 통과
+  - 임시 macOS/iOS DerivedData 산출물 clean 완료. 기존 설치 앱은 교체하거나
+    실행하지 않았다.
+- 실기기에서는 Apple Intelligence가 활성화된 상태에서 다음을 수동 확인해야
+  한다.
+  - `내일 오후 3시에 병원 일정 추가`가 제목·시작을 한 번에 주입하는지
+  - `내일 병원 일정 추가`처럼 시간이 빠진 문장에서 시작 시각만 다시 묻는지
+  - 생성 직후 월간, 주간·일간, 하루 패널에 같은 일정이 동시에 나타나는지
+- 테스트 설치 업데이트:
+  - `/Users/kimhwi/Applications/Daily Test.app`을 Apple Development 서명
+    빌드로 업데이트하고 코드 서명·App Group·Apple 로그인 entitlement를
+    검증했다.
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532`의 기존
+    `com.littlebit0.daily` 위에 업데이트 설치했다. 설치 전후 `daily.sqlite`
+    SHA-256이 동일해 기존 일정 데이터가 유지됐다.
+  - 두 앱 모두 자동 실행하지 않았고 임시 DerivedData 앱 산출물을 clean했다.
+
+### 2026-08-14 Siri 한국어 시간대 해석 및 사용 기록 상세 보기
+
+- `오늘 일정 추가 헬스장 9~11시`가 `18~20시`로 저장되던 원인은 생성형
+  해석 결과의 UTC 시각을 한국 현지 시각처럼 사용하면서 9시간이 더해지는
+  경로였다.
+- Siri 발화에 포함된 한국어 상대 날짜와 시간 범위를 현지 달력 기준으로 먼저
+  확정하는 파서를 추가했다.
+  - `오늘`, `내일`, `모레`
+  - `9~11시`, `오후 1시부터 3시`, 단일 `9시`
+  - 명시적 App Intent 입력, 현지 발화 파서, Apple Intelligence 결과 순으로
+    우선 적용한다.
+- Apple Intelligence에 전달하는 현재 시각도 기기 현지 시간대와 시간대
+  식별자를 포함하도록 수정했다.
+- 설정의 Siri 사용 기록은 각 항목을 탭하면 시스템 하단 시트에서 동작, 상태,
+  실행 시각, 요약, 결과와 일정 제목·시작·종료·종일·장소·메모를 확인할 수
+  있다.
+- 원문 음성이나 전체 대화는 새로 저장하지 않는다. 일정 작업에서 생성된
+  구조화 필드만 기록하며 기존 상세 정보가 없는 기록도 계속 열 수 있다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - Siri 기록 상세 화면 및 전체 위젯 테스트 54개 통과
+  - iOS Simulator와 macOS 제품 빌드 통과
+  - 정확한 한국어 예문에 대한 iOS/macOS XCTest를 추가했다. 다만 기존 Xcode
+    테스트 타깃의 `TEST_HOST` 및 Swift Package 리소스 번들 중복 복사 문제로
+    네이티브 XCTest 실행 자체는 완료하지 못했으며, 제품 빌드에서 해당 Swift
+    코드는 정상 컴파일됐다.
+- 설치:
+  - `/Users/kimhwi/Applications/Daily Test.app`을 Apple Development 서명
+    빌드로 업데이트했다.
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532`에 업데이트
+    설치했고 설치 전후 `daily.sqlite` SHA-256이 동일함을 확인했다.
+  - 두 앱 모두 자동 실행하지 않았다.
+
+### 2026-08-17 Siri 변경 후속 처리 자가검증 및 보완
+
+- 앱이 종료된 상태에서 App Intent가 일정을 변경해도 후속 작업이 유실되지
+  않도록 iOS/macOS App Group에 영속 변경 큐를 추가했다.
+  - 변경 ID, 작업 종류, 변경 전후 알림 분 값을 기록한다.
+  - 앱 실행·복귀 시 큐를 읽어 해당 일정의 알림과 알람만 취소·재예약한다.
+  - Apple 위젯과 Google Drive 대기 변경까지 성공한 뒤에만 큐 항목을 제거한다.
+  - 실패 항목은 남겨 다음 실행·복귀에서 재시도하고, 실행 중 실패는 사용자에게
+    일정 저장은 완료됐지만 후속 처리가 보류됐다고 안내한다.
+- Siri 변경 한 건마다 전체 일정을 재예약하던 O(N) 처리를 제거하고 변경된
+  일정 ID만 처리한다. 앱 시작 예약 복구와 Siri 큐 처리는 순차 실행한다.
+- 앱 시작 예약 복구는 삭제된 일정의 기존 알림·알람도 취소한 뒤 활성 일정만
+  다시 예약한다.
+- 앱 내부 Signal 명령은 제목·날짜·시간·분류 등 필수 정보를 먼저 수집한 뒤,
+  실제 변경 직전에 한 번만 실행 확인을 요청한다.
+- 앱 내부 확인 상태를 전역 변수에서 각 `DailySignalCommandIntent` 인스턴스의
+  상태로 변경해 동시에 실행된 명령 사이에서 삭제 확인이 공유되지 않게 했다.
+- 음성 서비스 시작, 권한, 인식 실패, 취소 및 Signal 결과 누락 문구를 시스템
+  언어에 따라 한국어·영어·일본어·중국어 번체로 반환한다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub` 전체 165개 통과
+  - iPhone Simulator 대상 iOS Debug 빌드 통과
+  - macOS Debug 빌드 통과
+  - 실제 기기에서 앱이 완전히 종료된 상태의 Siri 추가·수정·삭제 후 앱 재실행,
+    알림·알람·위젯·Drive 후속 처리 확인은 수동 검증이 필요하다.
+
+#### 종료 상태 실사용 검증 결과
+
+- iPhone 17 Simulator와 `/Users/kimhwi/Applications/Daily Test.app`을 최신
+  Debug 빌드로 데이터 유지 업데이트했다.
+- iOS/macOS 앱을 완전히 종료한 상태에서 AppIntent가 생성하는 것과 동일한
+  SQLite 변경과 App Group 영속 큐를 만든 뒤 앱을 재실행했다.
+  - 추가 일정이 캘린더 DB와 화면에 반영됐다.
+  - iOS UserNotifications 예약 추가 로그와 위젯 스냅샷 갱신을 확인했다.
+  - 삭제 변경 재실행 시 예약 취소 경로가 실행되고 큐가 비워졌다.
+  - iOS/macOS 모두 추가 및 삭제 큐가 성공 후 `[]`로 정리됐다.
+- 검증 중 Google 계정 미연결 오류가 로컬 후속 처리 완료까지 막아 큐가 남는
+  결함을 발견해 수정했다.
+  - 알림·알람·위젯이 성공하면 Siri 큐는 완료 처리한다.
+  - Drive 실패는 일정의 `sync_status=pending` 또는 `pending_delete`로 별도
+    유지하며 계정 연결 후 기존 동기화 재시도 경로가 처리한다.
+- 검증용으로 만든 iOS/macOS 일정과 삭제 tombstone은 확인 후 모두 완전
+  제거했다. 기존 사용자 데이터는 변경하지 않았다.
+- 물리 iPhone은 검증 당시 Xcode에서 Offline 상태였다. 실제 Siri 시스템
+  오버레이 호출 자체는 물리 기기가 다시 연결된 뒤 최종 확인이 필요하다.
+
+### 2026-08-15 앱 내부 Signal 실행 안정화 및 직접 입력
+
+- 앱 내부 LLM 버튼의 Signal 패널은 Apple 공개 API인 Speech,
+  AVFoundation 및 App Intents 경로를 그대로 사용한다.
+- 음성 입력 중 중지 버튼은 인식 내용을 버리지 않고 현재 발화를 확정해
+  실행한다. 닫기 및 앱 비활성화는 실행 없이 인식을 취소한다.
+- 일정 추가·수정·삭제로 판단되는 명령은 실행 전에 앱 내부 확인 단계를
+  거친다. 네이티브 App Intent에도 확인 여부를 전달하므로 Flutter 쪽 문장
+  판별이 누락되더라도 변경 명령이 바로 실행되지 않는다.
+- 오류 상태를 누락 정보, 시스템 인증 취소, 시스템 인증 실패, 사용자 취소,
+  실제 실행 실패로 구분한다. 누락 정보 응답은 기존 대화 문맥을 유지해
+  후속 답변을 받을 수 있다.
+- 음성 인식이 어렵거나 시스템 Siri 오버레이를 사용할 수 없는 환경을 위해
+  키보드 아이콘으로 여는 텍스트 입력 경로를 추가했다. 이 경로도 음성과
+  동일한 `DailySignalCommandIntent`를 실행한다.
+- Siri/App Intent 일정 변경 후 Flutter에 이미 존재하던 일정 범위 갱신,
+  Apple 위젯 갱신 및 Google Drive 대기 변경 동기화 호출은 유지했다.
+- 실제 보완이 필요했던 알림·알람 갱신은 다음처럼 처리했다.
+  - 변경된 일정의 기존 일반 알림과 AlarmKit 예약을 먼저 취소한다.
+  - 삭제된 일정은 취소만 수행한다.
+  - 활성 일정은 현재 설정으로 일반 알림과 알람을 다시 예약한다.
+- 음성 인식 최대 시간은 30초, 무음 확정 기준은 2초로 조정했고 다른 오디오와
+  충돌을 줄이도록 iOS 오디오 세션을 구성했다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub` 전체 165개 통과
+  - `test/core/siri/signal_voice_service_test.dart` 2개 통과
+  - 텍스트 변경 명령이 확인 전에는 네이티브로 전달되지 않고, 사용자가
+    `실행`을 누른 뒤 `confirmed: true`로 전달되는 위젯 테스트 통과
+  - 주간 캘린더 진입·스와이프 위젯 집중 테스트 통과
+  - iPhone Simulator 대상 iOS Debug 빌드 통과
+  - macOS Debug 빌드 통과
+- 설치:
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532`의 기존
+    `com.littlebit0.daily` 앱에 업데이트 설치했다.
+  - `/Users/kimhwi/Applications/Daily Test.app`의
+    `com.littlebit0.daily.test` 앱에 3.0.1(3.0.1)을 업데이트 설치했다.
+- 실기기와 같은 Apple Siri 텍스트 오버레이 자동 검증은 macOS 컴퓨터 제어
+  API가 `Fn` 단독 입력 및 시스템 전역 Siri 오버레이 접근을 지원하지 않아
+  수행하지 못했다. 확인 과정에서 Siri 단축키는 기존 `Fn+S`로 원상복구했다.
+  앱 내부 텍스트 입력과 음성 입력은 동일한 App Intent를 사용하므로 코드 및
+  빌드 경로는 공통으로 검증됐다.
+- iPhone 17 Simulator 설치본 수동 검증:
+  - 첫 실행의 음성 인식 및 마이크 시스템 권한 안내가 정상 표시됐다.
+  - 음성 인식이 불가능한 시뮬레이터에서도 키보드 아이콘으로 텍스트 입력을
+    열 수 있었다.
+  - `오늘 일정 알려줘`를 입력해 `2026년 8월 15일 토요일`, 광복절 및 등록된
+    일정 없음 응답을 실제 App Intent에서 받았다.
+  - `내일 오전 9시부터 10시까지 검증 일정 추가`는 즉시 저장되지 않고
+    `실행/취소` 확인 상태로 전환됐다. `취소`를 눌러 테스트 일정은 생성하지
+    않았다.
+
+### 2026-08-15 앱 내부 Signal 음성 실행
+
+- 사용자의 최종 지시에 따라 앱 내부 LLM 버튼은 단축어 URL이나 Siri 시스템
+  화면을 호출하지 않는다. Apple이 공개한 `Speech`, `AVFoundation`, App
+  Intents API만 사용하는 앱 내부 Signal 음성 흐름으로 교체했다.
+- 버튼을 누른 시점에만 마이크와 음성 인식 권한을 요청하고 즉시 듣기를
+  시작한다. 음성을 텍스트로 변환한 뒤 기존 `DailySignalCommandIntent`에
+  전달하고, 실행 결과는 앱에 표시하면서 시스템 음성으로 읽는다.
+- 필수 정보가 부족하면 추가 정보를 요청하고, 다음 발화를 앞선 명령에 이어
+  다시 해석한다.
+- 일정 변경 성공 직후 `eventsInRangeProvider` 전체와 선택 날짜 공급자를
+  무효화하고 Apple 위젯을 갱신해 월간·주간·일간·상세 화면의 반영 지연을
+  방지한다.
+- iOS 권한 문구는 한국어, 영어, 일본어, 중국어 번체로 현지화했다. macOS
+  샌드박스에는 오디오 입력 권한을 추가했다.
+- 심사 안전 경계:
+  - 비공개 Siri API, Siri URL scheme, 접근성 자동 조작을 사용하지 않는다.
+  - 앱이 Siri 시스템 UI를 가장하지 않고 Daily의 Signal 음성 도구임을
+    화면에 명시한다.
+  - 권한은 기능 사용 시점에만 요청하며 거부 시 오류와 재시도 상태를
+    제공한다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - LLM 버튼/달력 레이아웃 회귀 위젯 테스트 통과
+  - iPhone Simulator iOS Debug 빌드 통과
+  - macOS Debug 빌드 통과
+- 이전 기록의 “AI 버튼이 시그널 단축어를 실행한다”는 설명은 더 이상 현재
+  동작이 아니다. 그 방식은 사용자가 지적한 잘못된 롤백이었으며 완전히
+  제거됐다.
+- 데이터 유지 업데이트 설치:
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532`의 기존
+    `com.littlebit0.daily`에 설치했고, 전후 `daily.sqlite` SHA-256은
+    `94fcb0568cb42b11d239bb59e0a0e861384a5772d6b1d6a470cb25a4b76fa89b`로
+    동일했다.
+  - `/Users/kimhwi/Applications/Daily Test.app`을 업데이트했고, 전후
+    `daily.sqlite` SHA-256은
+    `93ca987bdd7e0e4688f94e72054651d37291bdff41829d6257770c2d59888064`로
+    동일했다.
+  - 두 앱 모두 자동 실행하지 않았다.
+
+### 2026-08-15 Siri 응답 스니펫 및 잘못된 받아쓰기 연결 제거
+
+- Siri의 기본 `IntentDialog` 카드는 문자열의 줄바꿈을 한 문단으로 접기 때문에
+  일정별 `\n`만으로는 화면에서 행이 분리되지 않았다.
+- 오늘, 어제, 내일, 지정 날짜와 Signal 조회 결과를 SwiftUI 기반 App Intents
+  시스템 스니펫으로 함께 반환하도록 변경했다. 날짜 안내, 공휴일, 각 일정이
+  독립된 행으로 렌더링된다. Siri 음성 안내용 `IntentDialog`도 함께 유지한다.
+- 앱 내부 LLM 버튼에 연결돼 있던 `shortcuts://run-shortcut` 호출을 제거했다.
+  이 호출은 실제 Siri가 아니라 단축어의 받아쓰기 화면을 열던 잘못된 동작이다.
+  버튼은 현재 앱 내부 AI 입력 화면을 연다.
+- 실제 Siri 시스템 화면은 사용자가 `Siri야`, 측면 버튼 또는 타이핑으로 Siri를
+  호출했을 때 Daily App Intent가 응답한다. 앱이 Siri 시스템 청취 화면을
+  강제로 여는 공개 API는 없다.
+- 검증 및 설치:
+  - iOS Simulator Debug 빌드 통과
+  - macOS Debug 빌드 통과
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub` 전체 162개 통과
+  - iPhone 17 Simulator와 macOS `Daily Test.app`에 업데이트 설치했으며 자동
+    실행하지 않았다.
+
+### 2026-08-15 Siri 어제 조회 및 일정별 응답 구분 보완
+
+- `어제`가 지원 액션에 없어서 Apple Intelligence 해석 결과가 `오늘`로
+  잘못 귀결될 수 있던 문제를 수정했다.
+  - `yesterday`를 독립 `DailySiriAction`과 생성형 액션으로 추가했다.
+  - 한국어 `어제`, 영어 `yesterday`, 일본어 `昨日`, 중국어 번체 `昨天`을
+    규칙 기반으로 먼저 분류한다.
+  - 어제 자정부터 오늘 자정 전까지의 일정만 조회하며 Siri 실행 기록에도
+    `어제 일정 조회`로 구분한다.
+- 일정 응답은 Siri 화면에서 단일 줄바꿈이 접힐 수 있는 점을 고려해 일정과
+  안내 문장 사이를 빈 줄로 분리한다. 각 일정은 독립된 문장 블록이다.
+- 수정본을 iPhone 17 Simulator와 macOS `Daily Test.app`에 데이터 유지
+  업데이트 설치했고 자동 실행하지 않았다.
+- 검증:
+  - iOS Simulator Debug 빌드 통과
+  - macOS Debug 빌드 통과
+  - `./tool/flutter.sh analyze --no-pub` 통과
+- 앱 내부 버튼에서 Siri 시스템 청취 UI를 직접 여는 공개 API는 없다.
+  `INPreferences.requestSiriAuthorization`은 Siri가 Daily Intent를 호출할 권한만
+  요청하며 Siri UI를 실행하지 않는다. 기존 버튼의 `shortcuts://run-shortcut`
+  호출은 실제 Siri가 아니라 단축어 실행이므로 제품 동작을 변경하려면 앱 내부
+  음성 인식 또는 사용자 Siri 직접 호출 방식 중 결정이 필요하다.
+
+### 2026-08-15 Siri 일정 안내 문장 개선
+
+- 오늘·내일·지정 날짜 조회에서 각 일반 일정을 줄바꿈으로 분리해 일정 하나가
+  한 줄씩 전달되도록 변경했다.
+- 공휴일 안내가 실제로 앞에 존재할 때에만 첫 일반 일정에 `또한`에 해당하는
+  언어별 연결어를 사용한다. 공휴일이 없으면 일정 문장을 바로 시작한다.
+- iOS 26/macOS 26 이상에서 Apple Intelligence가 사용 가능한 경우에는
+  Foundation Models가 사실 기반 문장의 표현만 자연스럽게 다듬는다.
+  - 날짜, 요일, 시각, 일정 제목, 공휴일, 개수와 줄 수가 바뀌지 않았는지
+    검증한다.
+  - 검증 실패, 모델 미지원 또는 생성 실패 시에는 정확한 규칙 기반 원문을
+    그대로 사용한다.
+- Apple 공개 App Intents API는 앱 버튼이 Siri 시스템 청취 UI를 직접
+  시작하도록 허용하지 않는다. 현재 앱 내부 AI 버튼은 기존 `시그널` 단축어
+  실행을 유지한다. 이를 변경하려면 앱 내부 음성 인식으로 Daily 명령을 받는
+  방식 또는 사용자가 Siri를 직접 호출하도록 안내하는 방식 중 제품 결정을
+  받아야 한다. 비공개 URL scheme 우회는 배포 앱에 적용하지 않았다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub` 전체 162개 통과
+  - iPhone Simulator 대상 iOS Debug 빌드 통과
+  - macOS Debug 빌드 통과
+
+### 2026-08-15 Siri 시스템 언어 응답
+
+- Siri/App Intent가 반환하는 문장을 기기의 시스템 선호 언어에 맞춰 매 실행
+  시 선택하도록 수정했다.
+- 지원 언어는 앱과 동일한 한국어, 영어, 일본어, 중국어 번체다.
+  - `ko`는 한국어, `en`은 영어, `ja`는 일본어로 응답한다.
+  - `zh-Hant`, 대만, 홍콩, 마카오 중국어는 중국어 번체로 응답한다.
+  - 지원하지 않는 시스템 언어 및 중국어 간체는 영어로 폴백한다.
+- 다음 Siri 출력이 모두 같은 시스템 언어를 사용한다.
+  - 오늘·내일·지정 날짜·다음 일정·검색·D-day 조회 결과
+  - 일정 추가·수정·삭제 완료 응답
+  - 누락된 날짜·시간·제목과 검색어를 묻는 후속 질문
+  - 일정 수정·삭제 대상 선택 및 삭제 확인
+  - 수정·삭제 시 시스템 인증 사유
+  - 데이터 접근·일정 검색·중복 일정·잘못된 시간 오류
+- 날짜와 시각 형식도 선택된 시스템 언어의 지역 형식을 사용한다. 앱 내부에서
+  사용자가 선택한 표시 언어와는 별개이며, Siri 응답은 시스템 선호 언어를
+  따른다.
+- 검증:
+  - macOS Debug 제품 빌드 및 App Intents 메타데이터 생성 통과
+  - iPhone 17 Simulator 대상 iOS Debug 제품 빌드 및 App Intents 메타데이터
+    생성 통과
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - Siri 기록 상세 화면 및 전체 위젯 테스트 54개 통과
+  - iOS/macOS XCTest에 지원 언어 식별자와 영어 폴백 검증을 추가했다. 기존
+    Xcode 테스트 타깃의 리소스 번들 문제로 네이티브 XCTest 실행은 별도 보완이
+    필요하다.
+- 테스트 설치 업데이트:
+  - `/Users/kimhwi/Applications/Daily Test.app`을 Apple Development 서명
+    빌드로 업데이트했고 기존 macOS 데이터베이스 해시가 유지됐다.
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532`의 기존 앱에
+    업데이트 설치했고, 설치 전후 `daily.sqlite` SHA-256이 동일했다.
+  - 두 앱 모두 자동 실행하지 않았다.
+
+### 2026-08-15 Siri 공휴일 일정 인식
+
+- 원인: 한국 공휴일은 `event_records` SQLite에 저장되지 않고 Flutter의
+  `KoreanHolidayService`가 화면 조회 시 동적으로 합치는 읽기 전용 일정이다.
+  네이티브 Siri 조회는 SQLite만 읽고 있어 오늘·내일·지정 날짜·다음 일정 및
+  검색에서 공휴일이 누락됐다.
+- iOS/macOS 공유 Siri 계층에 Flutter와 같은 한국 공휴일 계산을 추가했다.
+  - 고정 공휴일
+  - 설날 연휴, 부처님 오신 날, 추석 연휴
+  - 주말·중복 공휴일에 따른 대체공휴일
+  - 2027년 이후 노동절과 2026년 이후 제헌절 규칙
+- Siri의 오늘·내일·지정 날짜·다음 일정 조회와 일정 검색에는 저장 일정과
+  동적 공휴일을 시간순으로 함께 반환한다.
+- 공휴일은 읽기 전용이므로 Siri 일정 수정·삭제 대상 목록과 Spotlight 수정
+  엔티티에는 포함하지 않는다.
+- 설정의 `공휴일 표시`가 꺼져 있으면 Siri 조회와 검색에서도 공휴일을 숨긴다.
+- 공휴일 제목은 Siri 시스템 응답 언어에 맞춰 한국어, 영어, 일본어, 중국어
+  번체로 반환하며 각 언어 제목과 `공휴일` 검색어를 인식한다.
+- 검증:
+  - macOS Debug 제품 빌드 및 App Intents 메타데이터 생성 통과
+  - iPhone 17 Simulator 대상 iOS Debug 제품 빌드 및 App Intents 메타데이터
+    생성 통과
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - Siri 기록 상세 화면 및 전체 위젯 테스트 54개 통과
+  - iOS/macOS XCTest에 2026년 설날, 부처님 오신 날 대체공휴일, 광복절,
+    광복절 대체공휴일 생성 검증을 추가했다. 기존 Xcode 테스트 타깃의 리소스
+    번들 문제로 네이티브 XCTest 실행은 별도 보완이 필요하다.
+- 설치:
+  - `/Users/kimhwi/Applications/Daily Test.app`을 Apple Development 서명
+    빌드로 데이터 유지 업데이트했다.
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532`에 데이터 유지
+    업데이트했고 설치 전후 `daily.sqlite` SHA-256이 동일했다.
+  - 두 앱 모두 자동 실행하지 않았다.
+
+### 2026-08-15 Siri 정확한 일정 안내, 필수 정보 수집, 앱 AI 진입
+
+- 오늘·내일·지정 날짜 일정 조회는 조회 날짜의 연·월·일·요일을 먼저 말하고,
+  공휴일과 일반 일정을 구분해 안내한다.
+  - 공휴일은 `이날은 공휴일로 광복절입니다` 형태로 별도 안내한다.
+  - 시간 일정은 시작과 종료 시각을 함께 말한다.
+  - 종일 및 연속일정은 시작일과 실제 마지막 날짜를 함께 말한다.
+  - 시각은 앱 설정 `use24HourTime`을 읽어 12시간제 또는 24시간제로 출력한다.
+  - 다음 일정, 일정 검색, D-day 결과도 시작·종료 날짜와 시각을 모두 말한다.
+- Siri 일정 추가·수정은 제목, 날짜/시간 또는 명시적 종일 여부, 분류를 필수로
+  수집한다.
+  - 시간 일정은 종료 시각까지 없으면 후속 질문을 한다.
+  - `8월 20일부터 30일`, `8월 20일부터 9월 10일` 같은 한국어 종일 날짜
+    범위를 인식하고 DB의 배타적 종료일 규칙에 맞춰 저장한다.
+  - 분류는 SharedPreferences의 `eventCategories`를 읽어 실제 사용자 분류 ID와
+    색상으로 저장하며, 존재하지 않는 분류는 다시 질문한다.
+  - 알림, 알람, D-day, 장소, 링크, 날씨, 메모는 사용자가 명시한 경우에만
+    저장하고, 추가 시 언급하지 않은 값은 비활성 또는 빈 값으로 둔다.
+  - App Intent로 변경된 일정은 Flutter UI 범위 전체를 즉시 무효화하고,
+    현재 일정의 알림·알람 예약 및 Google Drive 대기 변경 동기화를 갱신한다.
+- 이 단계에서 앱 내부 AI 버튼에 적용했던 단축어 URL 실행은 이후 사용자
+  지시에 따라 제거됐다. 현재 동작은 위 `앱 내부 Signal 음성 실행` 항목을
+  기준으로 한다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub` 전체 162개 통과
+  - iPhone Simulator 대상 iOS Debug 제품 빌드 및 App Intents 메타데이터 생성
+    통과
+  - macOS Debug 제품 빌드 및 App Intents 메타데이터 생성 통과
+  - iOS/macOS XCTest에 다월 종일 날짜 범위의 배타적 종료일 검증을 추가했다.
+    기존 테스트 타깃의 `TEST_HOST` 및 Swift Package 리소스 번들 문제로
+    네이티브 XCTest 실행 자체는 아직 별도 보완이 필요하다.
+- 수동 확인 필요:
+  - 앱 내부 Signal에서 제목·날짜·시간·분류 중 하나를 빠뜨렸을 때 각각 후속 질문하는지,
+    12/24시간 설정을 바꾼 뒤 조회 문장이 즉시 바뀌는지 확인한다.
+- 테스트 앱 업데이트 설치:
+  - iPhone 17 Simulator `BF524643-403E-4212-ACB7-621E11279532`의 기존
+    `com.littlebit0.daily` 앱에 3.0.1(3.0.1)을 업데이트 설치했다. 설치 전후
+    `daily.sqlite` SHA-256은
+    `94fcb0568cb42b11d239bb59e0a0e861384a5772d6b1d6a470cb25a4b76fa89b`로
+    동일하다.
+  - `/Users/kimhwi/Applications/Daily Test.app`에 Apple Development 서명된
+    3.0.1(3.0.1) 빌드를 업데이트 설치했다. 설치 전후 macOS `daily.sqlite`
+    SHA-256은
+    `40e4380801d1be593d8b59541bd846c76d486a61d15746f40783ea43fa8115e6`로
+    동일하다.
+  - 두 앱 모두 자동 실행하지 않았다.

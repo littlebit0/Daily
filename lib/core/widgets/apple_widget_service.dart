@@ -1,11 +1,14 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
 import '../settings/app_settings.dart';
 import '../settings/settings_repository.dart';
+import '../localization/app_localizations.dart';
 
 class AppleWidgetService {
   AppleWidgetService({
@@ -87,6 +90,12 @@ class AppleWidgetSnapshotBuilder {
     required List<CalendarEvent> allEvents,
   }) {
     final today = _dateOnly(now);
+    final locale = resolvedLocaleForLanguage(
+      settings.language,
+      PlatformDispatcher.instance.locale,
+    );
+    final localeName = locale.toLanguageTag();
+    final l10n = AppLocalizations(locale);
     final weekOffset = settings.weekStartsOnMonday
         ? today.weekday - DateTime.monday
         : today.weekday % DateTime.daysPerWeek;
@@ -128,10 +137,10 @@ class AppleWidgetSnapshotBuilder {
 
     return {
       'generatedAt': now.millisecondsSinceEpoch,
-      'monthTitle': '${now.year}년 ${now.month}월',
-      'weekTitle': weekStart.month == weekEnd.month
-          ? '${weekStart.month}월 ${weekStart.day}일 - ${weekEnd.day}일'
-          : '${weekStart.month}월 ${weekStart.day}일 - ${weekEnd.month}월 ${weekEnd.day}일',
+      'monthTitle': DateFormat.yMMMM(localeName).format(now),
+      'weekTitle':
+          '${DateFormat.MMMd(localeName).format(weekStart)} - '
+          '${DateFormat.MMMd(localeName).format(weekEnd)}',
       'weekStartsOnMonday': settings.weekStartsOnMonday,
       'monthDays': List.generate(42, (index) {
         final date = gridStart.add(Duration(days: index));
@@ -147,17 +156,17 @@ class AppleWidgetSnapshotBuilder {
               .map(
                 (event) => {
                   'id': event.occurrenceId ?? event.id,
-                  'title': event.title,
+                  'title': l10n.eventTitle(event.title, holiday: event.holiday),
                   'color': event.colorValue,
                 },
               )
               .toList(growable: false),
         };
       }),
-      'todayTitle': '${now.month}월 ${now.day}일',
+      'todayTitle': DateFormat.MMMd(localeName).format(now),
       'todayEvents': todayEvents
           .take(8)
-          .map(_eventJson)
+          .map((event) => _eventJson(event, l10n))
           .toList(growable: false),
       'todayRemainingCount': todayEvents.length > 8
           ? todayEvents.length - 8
@@ -169,7 +178,7 @@ class AppleWidgetSnapshotBuilder {
                 }
                 return left.startAt.compareTo(right.startAt);
               }))
-              .map(_eventJson)
+              .map((event) => _eventJson(event, l10n))
               .toList(growable: false),
       'ddays': ddayEvents
           .take(6)
@@ -178,7 +187,7 @@ class AppleWidgetSnapshotBuilder {
             final remaining = target.difference(today).inDays;
             return {
               'id': event.id,
-              'title': event.title,
+              'title': l10n.eventTitle(event.title, holiday: event.holiday),
               'dateLabel':
                   '${target.year}.${_two(target.month)}.${_two(target.day)}',
               'daysRemaining': remaining,
@@ -234,12 +243,15 @@ class AppleWidgetSnapshotBuilder {
     return result;
   }
 
-  static Map<String, Object?> _eventJson(CalendarEvent event) {
+  static Map<String, Object?> _eventJson(
+    CalendarEvent event,
+    AppLocalizations localizations,
+  ) {
     return {
       'id': event.occurrenceId ?? event.id,
-      'title': event.title,
+      'title': localizations.eventTitle(event.title, holiday: event.holiday),
       'timeLabel': event.allDay
-          ? '종일'
+          ? localizations.text('종일')
           : '${_two(event.startAt.hour)}:${_two(event.startAt.minute)}',
       'color': event.colorValue,
       'startAt': event.startAt.millisecondsSinceEpoch,

@@ -9,6 +9,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
 import '../settings/app_settings.dart';
+import '../localization/app_localizations.dart';
 import '../settings/settings_repository.dart';
 import '../time/korea_time.dart';
 import 'notification_service.dart';
@@ -112,8 +113,9 @@ class LocalNotificationService implements NotificationService {
     }
 
     final settings = _settingsRepository.load();
+    final l10n = _localizations(settings);
     final reminderMinutesList = event.reminderMinutesBeforeList;
-    final title = event.title;
+    final title = l10n.eventTitle(event.title, holiday: event.holiday);
     final base = _baseReminderTime(event, settings);
     var deliveredImmediateReminder = false;
     for (final reminderMinutes in reminderMinutesList) {
@@ -139,8 +141,11 @@ class LocalNotificationService implements NotificationService {
         id: _eventNotificationId(event.id, reminderMinutes),
         title: title,
         body: reminderMinutes == 0 || plan.deliverAt == base
-            ? '일정이 시작됩니다.'
-            : '일정 시작 ${_minutesLabel(reminderMinutes)}입니다.',
+            ? l10n.text('일정이 시작됩니다.')
+            : l10n.text(
+                '일정 시작 {time}입니다.',
+                args: {'time': _minutesLabel(reminderMinutes, l10n)},
+              ),
         plan: plan,
         payload: '${event.id}:reminder:$reminderMinutes',
       );
@@ -160,7 +165,7 @@ class LocalNotificationService implements NotificationService {
       await _deliverPlan(
         id: _eventDdayNotificationId(event.id, offset),
         title: '${_ddayLabel(offset)} $title',
-        body: 'D-day 일정 알림입니다.',
+        body: l10n.text('D-day 일정 알림입니다.'),
         plan: scheduled.isAfter(DateTime.now())
             ? ReminderDeliveryPlan.scheduled(scheduled)
             : const ReminderDeliveryPlan.none(),
@@ -201,6 +206,7 @@ class LocalNotificationService implements NotificationService {
     required int minute,
   }) async {
     await initialize();
+    final l10n = _localizations(_settingsRepository.load());
     await cancelMorningBriefing();
     final now = DateTime.now();
     var scheduled = DateTime(now.year, now.month, now.day, hour, minute);
@@ -212,7 +218,7 @@ class LocalNotificationService implements NotificationService {
       final briefingAt = scheduled.add(Duration(days: dayOffset));
       await _scheduleNotification(
         id: _morningBriefingNotificationId(dayOffset),
-        title: '오늘의 일정',
+        title: l10n.text('오늘의 일정'),
         body: await _morningBriefingBody(briefingAt),
         scheduled: briefingAt,
         payload: 'morning_briefing',
@@ -234,10 +240,11 @@ class LocalNotificationService implements NotificationService {
   @override
   Future<void> showTestNotification() async {
     await initialize();
+    final l10n = _localizations(_settingsRepository.load());
     await _showNotification(
       id: _testNotificationId(),
-      title: 'Daily 알림 테스트',
-      body: '이 알림이 보이면 Daily의 알림 표시 권한은 정상입니다.',
+      title: l10n.text('Daily 알림 테스트'),
+      body: l10n.text('이 알림이 보이면 Daily의 알림 표시 권한은 정상입니다.'),
       payload: 'notification_test',
     );
   }
@@ -250,6 +257,7 @@ class LocalNotificationService implements NotificationService {
     );
     final tomorrow = today.add(const Duration(days: 1));
     final settings = _settingsRepository.load();
+    final l10n = _localizations(settings);
     final events =
         (await _eventRepository.eventsInRange(
           today,
@@ -261,7 +269,7 @@ class LocalNotificationService implements NotificationService {
           return a.startAt.compareTo(b.startAt);
         });
     if (events.isEmpty) {
-      return '오늘 등록된 일정이 없습니다.';
+      return l10n.text('오늘 등록된 일정이 없습니다.');
     }
 
     const maxItems = 4;
@@ -269,14 +277,18 @@ class LocalNotificationService implements NotificationService {
         .take(maxItems)
         .map((event) => _briefingEventLabel(event, settings));
     final hiddenCount = events.length - maxItems;
-    final suffix = hiddenCount > 0 ? ' 외 $hiddenCount개 더 있습니다.' : '';
+    final suffix = hiddenCount > 0
+        ? l10n.text(' 외 {count}개 더 있습니다.', args: {'count': hiddenCount})
+        : '';
     return '${visible.join(' · ')}$suffix';
   }
 
   String _briefingEventLabel(CalendarEvent event, AppSettings settings) {
-    final title = event.title;
+    final title = _localizations(
+      settings,
+    ).eventTitle(event.title, holiday: event.holiday);
     if (event.allDay) {
-      return '종일 $title';
+      return '${_localizations(settings).text('종일')} $title';
     }
     final hour = event.startAt.hour.toString().padLeft(2, '0');
     final minute = event.startAt.minute.toString().padLeft(2, '0');
@@ -578,21 +590,29 @@ class LocalNotificationService implements NotificationService {
     );
   }
 
-  String _minutesLabel(int minutes) {
+  String _minutesLabel(int minutes, [AppLocalizations? localizations]) {
+    final l10n = localizations ?? _localizations(_settingsRepository.load());
     if (minutes == 0) {
-      return '정시';
+      return l10n.text('정시');
     }
     if (minutes < 60) {
-      return '$minutes분 전';
+      return l10n.text('{count}분 전', args: {'count': minutes});
     }
     if (minutes % 1440 == 0) {
-      return '${minutes ~/ 1440}일 전';
+      return l10n.text('{count}일 전', args: {'count': minutes ~/ 1440});
     }
     if (minutes % 60 == 0) {
-      return '${minutes ~/ 60}시간 전';
+      return l10n.text('{count}시간 전', args: {'count': minutes ~/ 60});
     }
-    return '$minutes분 전';
+    return l10n.text('{count}분 전', args: {'count': minutes});
   }
+
+  AppLocalizations _localizations(AppSettings settings) => AppLocalizations(
+    resolvedLocaleForLanguage(
+      settings.language,
+      PlatformDispatcher.instance.locale,
+    ),
+  );
 
   String _ddayLabel(int offset) {
     if (offset == 0) {
