@@ -6,25 +6,25 @@ Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로�
 
 ## 현재 버전
 
-- 앱 버전: `3.0.1 (3.0.1)`
+- 앱 버전: `3.1.0 (3.1.0)`
 - Android 패키지명: `com.littlebit0.dailycalendar`
 - Apple 앱/위젯 번들 ID: `com.littlebit0.daily`, `com.littlebit0.daily.widgets`
-- 현재 릴리스: `3.0.1`
+- 현재 릴리스: `3.1.0`
 - 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
 
 ## 배포 파일
 
 GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 
-3.0.1은 2.7.1 이후 추가된 Apple 위젯, 일정 알람, 외부 캘린더 가져오기,
-연간 보기, 상하 연속 월 스크롤, 다크 테마, 잠금 방식, Google Drive 동기화
-안정화와 검색·스크롤 성능 개선을 포함합니다.
+3.1.0은 Siri 일정 조회·추가·수정·삭제, Siri 실행 기록, 한국어·영어·일본어·
+중국어 번체, 주간·일간 시간표형 보기, 새 앱 아이콘과 동기화·알림·위젯
+안정성 개선을 포함합니다.
 
-- GitHub Release IPA: `daily-ios-3.0.1-unsigned.ipa`
-- GitHub Release macOS DMG: `daily-macos-3.0.1-unsigned.dmg`
-- GitHub Release Android APK: `daily-android-3.0.1.apk`
-- GitHub Release Windows ZIP: `daily-windows-3.0.1.zip`
-- GitHub Release Windows 설치 프로그램: `daily-windows-3.0.1-setup.exe` (설치 후 새 릴리스를 자동으로 적용)
+- GitHub Release IPA: `daily-ios-3.1.0-unsigned.ipa`
+- GitHub Release macOS DMG: `daily-macos-3.1.0-unsigned.dmg`
+- GitHub Release Android APK: `daily-android-3.1.0.apk`
+- GitHub Release Windows ZIP: `daily-windows-3.1.0.zip`
+- GitHub Release Windows 설치 프로그램: `daily-windows-3.1.0-setup.exe` (설치 후 새 릴리스를 자동으로 적용)
 
 공유 설정과 Google Drive 동기화 스키마 변경이 포함되어 네 플랫폼 산출물을 같은
 릴리스에 제공합니다. Android와 Windows는 자동 빌드 검증 후 실제 OS에서 계정,
@@ -38,9 +38,9 @@ GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 - macOS
 
 iOS 앱 `DailyCalendar`는 Apple App Store에서 무료 앱으로 배포 중입니다. iOS와
-macOS `3.0.1 (3.0.1)` 빌드는 App Store Connect에 업로드되었고, 제품 설명과 심사
-메모도 3.0.1 기준으로 갱신했습니다. GitHub IPA와 DMG는 App Store 설치 파일이
-아니며 별도 설치 및 검증용 산출물입니다.
+macOS `3.1.0 (3.1.0)` Transporter 제출 파일은 생성 및 배포 서명 검증을
+완료했습니다. GitHub IPA와 DMG는 App Store 설치 파일이 아니며 별도 설치 및
+검증용 산출물입니다.
 
 현재 계정/동기화 정책은 다음과 같습니다.
 
@@ -226,13 +226,12 @@ Windows release:
 
 ## 검증 상태
 
-3.0.1 Apple 제출 후보 기준 확인한 항목:
+3.1.0 Apple 제출 후보 기준 확인한 항목:
 
 - `./tool/flutter.sh analyze --no-pub`: 통과
-- `./tool/flutter.sh test --no-pub`: 전체 142개 통과
-- `./tool/flutter.sh test --no-pub test/widget_test.dart`: 48개 통과
-- `./tool/flutter.sh build ios --simulator --debug --no-pub`: 통과
-- App Store iOS IPA와 macOS PKG의 앱/위젯 버전 및 빌드 `3.0.1`: 확인
+- `./tool/flutter.sh test --no-pub`: 전체 165개 통과
+- App Store iOS IPA와 macOS PKG의 앱/위젯 버전 및 빌드 `3.1.0`: 확인
+- iOS와 macOS App Store 배포 서명 및 macOS Installer 서명: 확인
 - iPhone 17 시뮬레이터 설치 확인
 - Apple 로그인 후 Google Drive 자동 연결/복원 흐름 회귀 테스트 통과
 - Google 로그인 후 Apple 연결 표시 보존 회귀 테스트 통과
@@ -251,8 +250,8 @@ macOS, Android, Windows는 같은 공유 Flutter 계정/동기화 정책을 따�
 ## 스토어 배포 상태
 
 `DailyCalendar` iOS 앱은 App Store에서 무료 앱으로 배포 중입니다. iOS와 macOS
-`3.0.1 (3.0.1)` 제출 빌드는 Transporter 업로드 및 Apple 처리 완료 상태이며,
-App Store Connect의 3.0.1 제품 정보와 심사 메모가 준비되어 있습니다.
+`3.1.0 (3.1.0)` Transporter 제출용 iOS IPA와 macOS PKG는 생성 및 서명 검증을
+완료했습니다. App Store Connect 업로드와 빌드 처리는 다음 단계입니다.
 
 App Store Connect에서 확인 또는 수정할 항목:
 
@@ -268,7 +267,7 @@ App Store Connect에서 확인 또는 수정할 항목:
 - Encryption:
   - 별도 독자 암호화 알고리즘을 구현하지 않았다면 해당 없음으로 답변
 - Build:
-  - iOS와 macOS에서 각각 `3.0.1 (3.0.1)` 빌드를 선택
+  - iOS와 macOS에서 각각 `3.1.0 (3.1.0)` 빌드를 선택
   - 수출 규정 질문을 확인한 뒤 두 플랫폼을 같은 심사 제출에 추가
 
 Android Play Store와 Microsoft Store 배포는 보류 상태입니다. 다음 플랫폼 릴리스
@@ -291,8 +290,9 @@ Android keystore는 이후 Play Store 업데이트에 필요하므로 별도 안
 ## 문서
 
 - [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)
+- [릴리스 노트 3.1.0](docs/RELEASE_NOTES_3.1.0.md)
+- [App Store 업그레이드 사항 3.1.0](docs/APP_STORE_WHATS_NEW_3.1.0.md)
 - [릴리스 노트 3.0.1](docs/RELEASE_NOTES_3.0.1.md)
-- [App Store 업그레이드 사항 3.0.1](docs/APP_STORE_WHATS_NEW_3.0.1.md)
 - [App Review 메모 3.0.1](docs/APP_REVIEW_NOTES_3.0.1.md)
 - [릴리스 노트 2.6.0](docs/RELEASE_NOTES_2.6.0.md)
 - [릴리스 노트 2.0.4](docs/RELEASE_NOTES_2.0.4.md)
@@ -310,7 +310,7 @@ Android keystore는 이후 Play Store 업데이트에 필요하므로 별도 안
 - Microsoft Store Partner Center identity 확보 후 Store용 MSIX 생성
 - fresh Google 계정으로 Android/Windows/iOS/macOS 간 v2 동기화 재검증
 - Android 실제 기기 알림 검증
-- App Store Connect에서 iOS/macOS 3.0.1 최종 심사 제출
+- App Store Connect에 iOS/macOS 3.1.0 업로드 및 최종 심사 제출
 - macOS App Store 승인 후 실제 설치·업데이트 검증
 - Google Drive AppData v2 파일 암호화 검토
 - 동시 수정 충돌을 사용자에게 보여주는 conflict UX 추가

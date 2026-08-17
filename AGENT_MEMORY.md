@@ -8,6 +8,26 @@ profiles, keystore passwords, or private keys to this file.
 Historical app-version notes below `2.0.0` were intentionally removed on
 2026-06-06 at the user's request.
 
+## 2026-08-17 App Store Transporter 3.1.0 Build
+
+- Raised the shared visible app version and every iOS/macOS app and widget
+  target to `3.1.0 (3.1.0)`. Android and Windows packaging settings were not
+  changed in this Apple submission task.
+- Verification passed:
+  - `./tool/flutter.sh analyze --no-pub`
+  - `./tool/flutter.sh test --no-pub` (165 tests)
+  - iOS App Store archive and export
+  - macOS release build, archive, and Mac App Store export
+- Both exported applications use the `Cloud Managed Apple Distribution`
+  certificate for team `A6Y73X2ZLS`. The macOS installer package also has a
+  valid `3rd Party Mac Developer Installer` signature.
+- Transporter-ready artifacts:
+  - iOS: `dist/transporter-ios-3.1.0/Daily-iOS-AppStore-3.1.0-build-3.1.0.ipa`
+  - macOS: `dist/transporter-macos-3.1.0/Daily-macOS-AppStore-3.1.0-build-3.1.0.pkg`
+- SHA-256:
+  - iOS: `39df26833295a034825a85a2d3fd0a631f6129b1225d9efcc8ba25f81e552cab`
+  - macOS: `ff8510892d59d1996c94a98071ffab7e2bf3f5469d1757bcf085c6dbaeac824a`
+
 ## User Correction Memory
 
 - 사용자가 강하게 항의하거나 욕설을 한 경우 표현 자체만 문제 삼지 말고, 바로
@@ -38,9 +58,9 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - Windows/Android handoff path used by the previous agent:
   `C:\Users\com\Documents\New project\.codex-tools\portfolio_repos\Daily`
 - Branch: `main`
-- Current visible app version in repo: `3.0.1 (3.0.1)`
+- Current visible app version in repo: `3.1.0 (3.1.0)`
 - Current `pubspec.yaml` version has no `+` suffix.
-- iOS/macOS App Store binaries use app version and build `3.0.1`.
+- iOS/macOS App Store binaries use app version and build `3.1.0`.
 - Android maps the shared release to integer version code `301`.
 - Windows uses the required four-part package version `3.0.1.0`.
 - Latest published release tag before this release work: `v2.7.1`.
