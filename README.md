@@ -22,9 +22,9 @@ GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
 
 - GitHub Release IPA: `daily-ios-3.1.0-unsigned.ipa`
 - GitHub Release macOS DMG: `daily-macos-3.1.0-unsigned.dmg`
-- GitHub Release Android APK: `daily-android-3.1.0.apk`
-- GitHub Release Windows ZIP: `daily-windows-3.1.0.zip`
-- GitHub Release Windows 설치 프로그램: `daily-windows-3.1.0-setup.exe` (설치 후 새 릴리스를 자동으로 적용)
+
+이번 3.1.0 GitHub Release는 iOS와 macOS 공개 검증용 파일을 우선 제공합니다.
+Android와 Windows 3.1.0 설치 파일은 각 실제 OS 회귀 검증 후 별도로 제공합니다.
 
 공유 설정과 Google Drive 동기화 스키마 변경이 포함되어 네 플랫폼 산출물을 같은
 릴리스에 제공합니다. Android와 Windows는 자동 빌드 검증 후 실제 OS에서 계정,

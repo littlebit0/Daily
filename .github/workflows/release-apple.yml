@@ -1,0 +1,96 @@
+name: Release Apple Installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v3.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag }}
+
+jobs:
+  ios:
+    name: iOS unsigned IPA
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.0"
+          cache: true
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign --no-pub
+      - name: Stage IPA
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          mkdir -p dist Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          /usr/bin/zip -qry "dist/daily-ios-${version}-unsigned.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-ios
+          path: dist/*.ipa
+          if-no-files-found: error
+
+  macos:
+    name: macOS unsigned DMG
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.0"
+          cache: true
+      - run: flutter pub get
+      - name: Disable signing for the unsigned DMG
+        shell: bash
+        run: |
+          ruby -pi -e '
+            gsub(%q{CODE_SIGN_IDENTITY = "Apple Development";}, %q{CODE_SIGN_IDENTITY = "-";})
+            gsub(%q{CODE_SIGN_STYLE = Automatic;}, %q{CODE_SIGN_STYLE = Manual;})
+            gsub(%r{DEVELOPMENT_TEAM = [A-Z0-9]+;}, %q{DEVELOPMENT_TEAM = "";})
+          ' macos/Runner.xcodeproj/project.pbxproj
+      - name: Build macOS app
+        env:
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: flutter build macos --release --no-pub --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$GOOGLE_DESKTOP_CLIENT_SECRET"
+      - name: Stage DMG
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          mkdir -p dist dmg-root
+          cp -R build/macos/Build/Products/Release/Daily.app dmg-root/
+          hdiutil create -volname Daily -srcfolder dmg-root -ov -format UDZO "dist/daily-macos-${version}-unsigned.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [ios, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: Daily ${{ inputs.tag }}
+          body_path: docs/RELEASE_NOTES_3.1.0.md
+          files: dist/*
+          fail_on_unmatched_files: true

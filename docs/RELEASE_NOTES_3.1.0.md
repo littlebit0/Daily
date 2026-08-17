@@ -39,13 +39,10 @@
 
 ## GitHub 배포 파일
 
-GitHub Actions는 `v3.1.0` 태그에서 다음 공개 배포 파일을 생성합니다.
+GitHub Actions는 `v3.1.0` Apple 릴리스에서 다음 공개 배포 파일을 생성합니다.
 
 - `daily-ios-3.1.0-unsigned.ipa`
 - `daily-macos-3.1.0-unsigned.dmg`
-- `daily-android-3.1.0.apk`
-- `daily-windows-3.1.0.zip`
-- `daily-windows-3.1.0-setup.exe`
 
 GitHub의 unsigned IPA와 DMG는 App Store 제출 파일이 아닙니다. App Store
 Transporter 제출용 서명 파일은 공개 릴리스에 포함하지 않습니다.
