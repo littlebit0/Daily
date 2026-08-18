@@ -1,316 +1,195 @@
-# Daily
+# DailyCalendar
 
-Daily는 Flutter 기반 크로스 플랫폼 개인 캘린더 앱입니다. 로컬 SQLite를 우선 저장소로 사용하고, Google 계정을 연결하면 Google Drive AppData를 통해 Android, Windows, iOS, macOS 사이에서 일정과 앱 설정을 동기화합니다.
+<p align="center">
+  <img src="ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png" width="128" alt="DailyCalendar 앱 아이콘">
+</p>
 
-앱을 열면 설정한 기본 달력이 보이고 빠른 보기, 주간, 월간, 일간 및 연간 보기로 전환할 수 있습니다. 반복 일정, D-day, 음력, 공휴일, 알림과 알람, 위젯, 앱 잠금, 외부 캘린더 가져오기까지 개인 일정 관리에 필요한 흐름을 한 앱 안에서 처리합니다.
+<p align="center">
+  일정을 빠르게 기록하고 여러 기기에서 이어서 사용하는 개인 캘린더
+</p>
 
-## 현재 버전
+<p align="center">
+  <a href="https://github.com/littlebit0/Daily/releases/latest"><img src="https://img.shields.io/github/v/release/littlebit0/Daily?label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/version-3.1.0-2f6feb" alt="Version 3.1.0">
+  <img src="https://img.shields.io/badge/Flutter-iOS%20%7C%20macOS%20%7C%20Android%20%7C%20Windows-02569B?logo=flutter" alt="Flutter platforms">
+</p>
 
-- 앱 버전: `3.1.0 (3.1.0)`
-- Android 패키지명: `com.littlebit0.dailycalendar`
-- Apple 앱/위젯 번들 ID: `com.littlebit0.daily`, `com.littlebit0.daily.widgets`
-- 현재 릴리스: `3.1.0`
-- 저장소: [littlebit0/Daily](https://github.com/littlebit0/Daily)
-
-## 배포 파일
-
-GitHub Release에는 릴리스별 설치 파일을 업로드합니다.
-
-3.1.0은 Siri 일정 조회·추가·수정·삭제, Siri 실행 기록, 한국어·영어·일본어·
-중국어 번체, 주간·일간 시간표형 보기, 새 앱 아이콘과 동기화·알림·위젯
-안정성 개선을 포함합니다.
-
-- GitHub Release IPA: `daily-ios-3.1.0-unsigned.ipa`
-- GitHub Release macOS DMG: `daily-macos-3.1.0-unsigned.dmg`
-
-이번 3.1.0 GitHub Release는 iOS와 macOS 공개 검증용 파일을 우선 제공합니다.
-Android와 Windows 3.1.0 설치 파일은 각 실제 OS 회귀 검증 후 별도로 제공합니다.
-
-공유 설정과 Google Drive 동기화 스키마 변경이 포함되어 네 플랫폼 산출물을 같은
-릴리스에 제공합니다. Android와 Windows는 자동 빌드 검증 후 실제 OS에서 계정,
-동기화, 알림과 새 공유 화면 흐름을 추가로 확인해야 합니다.
-
-## 지원 플랫폼
-
-- Android
-- Windows
-- iOS
-- macOS
-
-iOS 앱 `DailyCalendar`는 Apple App Store에서 무료 앱으로 배포 중입니다. iOS와
-macOS `3.1.0 (3.1.0)` Transporter 제출 파일은 생성 및 배포 서명 검증을
-완료했습니다. GitHub IPA와 DMG는 App Store 설치 파일이 아니며 별도 설치 및
-검증용 산출물입니다.
-
-현재 계정/동기화 정책은 다음과 같습니다.
-
-- Apple 로그인 지원 플랫폼: iOS, macOS
-- Google Drive AppData 동기화 지원 플랫폼: Android, Windows, iOS, macOS
-- Apple 로그인 후 저장된 Google Drive 세션이 있으면 자동으로 복원
-- 저장된 Google Drive 세션이 없으면 Apple/local 모드로 진입하고 Google 로그인을 강제하지 않음
-- Google 로그인 후 현재 기기에 저장된 Apple 연결 표시가 있으면 상태를 유지
-- 서버 기반 Apple/Google 계정 병합은 아직 구현하지 않았으며 기기 간 연결 관계 복원은 지원하지 않음
-- 설정의 계정 섹션은 Apple/Google 상태를 분리해서 보여주되 `로그아웃` 버튼은 하나만 표시
-- 일반 `로그아웃`은 pending 변경 백업을 시도한 뒤 로컬 일정과 설정, 기기 인증 세션을 지우고 시작 화면으로 이동하며 Drive AppData는 유지
-- `계정 삭제`는 로컬 데이터, Apple/Google 연결 상태, Google Drive AppData 백업을 삭제하는 파괴적 경로
-
-## 핵심 기능
-
-- 주간/월간/일간 달력 보기 전환
-- 월간 달력 스와이프 이동과 자연스러운 페이지 전환
-- 날짜별 일정 색상 플래그 표시
-- 연속 일정의 다중 날짜 플래그 표시
-- 날짜 드래그 범위 선택 후 일정 추가
-  - Windows: 마우스 드래그
-  - Android: 길게 누른 뒤 드래그
-- 날짜 상세 패널과 모바일 하단 시트
-- 일정 추가, 수정, 삭제, 삭제 확인
-- 반복 일정 모델과 반복 일정 수정/삭제 범위 선택
-- 일정 검색과 달력 필터
-- 일정 URL, 위치와 날씨 메모
-- 일정별 D-day 표시와 D-day 알림
-- 대한민국 공휴일, 대체공휴일, 토/일/공휴일 색상 표시
-- 음력 날짜 표시
-- 주 시작 요일 설정
-- 사용자 분류 추가/삭제
-- 로컬 알림, 하루 종일 일정 알림, 아침 브리핑 알림
-- 복수 기본 일정 알림과 일정별 복수 알림
-- Apple·Samsung·Google 캘린더 데이터 가져오기
-- iOS 26 이상 일정별 시스템 알람, 중지와 10분 후 다시 알림
-- macOS 일정별 시스템 알림, 소리와 10분 후 다시 알림
-- PIN 없음 보호, Daily PIN, Apple 시스템 인증 방식의 앱 잠금
-- iPhone/iPad 홈 화면용 오늘 일정, 주간·월간 달력, D-day 위젯
-- iPhone/iPad 잠금화면용 오늘 일정 한 줄형·원형·직사각형 위젯
-- macOS 알림 센터와 바탕화면용 오늘 일정, 월간 달력, D-day 위젯
-- Android 월간/오늘/D-day 위젯 진입점
-- Windows 창 닫기 후 백그라운드/트레이 유지
-- Windows 트레이 미니 캘린더
-- macOS 마지막 창 닫기 후 앱 유지
-- iOS/macOS 빠른 접근 패널
-- Apple 로그인
-- Google 계정 로그인
-- Apple/Google 계정 연결 상태 자동 복원
-- 설정의 통합 로그아웃과 계정 삭제
-- Google Drive AppData 기반 백업, 복원, 자동 동기화
-
-Apple 위젯은 앱의 로컬 일정 스냅샷을 App Group으로 공유합니다. 잠금화면 위젯은
-오늘 남은 일정을 표시하며, 시스템 개인정보 설정에 따라 일정 제목이 가려질 수
+DailyCalendar는 월간, 주간, 일간 및 연간 보기로 일정을 관리하는 Flutter 기반
+크로스 플랫폼 캘린더입니다. 계정 없이 로컬로 사용할 수 있으며, Google 계정을
+연결하면 Google Drive AppData를 통해 일정과 설정을 백업하고 동기화할 수
 있습니다.
 
-iOS 26 이상에서는 반복하지 않는 일정마다 시스템 알람을 선택할 수 있습니다.
-시간 일정은 시작 시각에 울리고, 종일 일정은 사용자가 지정한 시각에 울립니다.
-일반 일정 알림은 함께 유지되며 알람을 선택한 경우에만 시작 시각의 정시 알림을
-알람으로 대체합니다. 반복 일정 알람은 추후 루틴 기능에서 별도로 제공합니다.
+## 다운로드
 
-macOS에서는 같은 일정 알람 설정을 앱이 종료된 상태에서도 전달되는 예약 시스템
-알림으로 제공합니다. 알림에는 소리, 중지, 10분 후 다시 알림이 포함됩니다.
-macOS는 AlarmKit을 지원하지 않으므로 iPhone의 전체 화면 지속 알람 UI 대신
-macOS 알림센터의 네이티브 알림 형태로 동작합니다.
+최신 공개 릴리스는 [GitHub Releases](https://github.com/littlebit0/Daily/releases/latest)에서
+확인할 수 있습니다.
 
-## 동기화 구조
+| 플랫폼 | 배포 상태 | 파일 |
+| --- | --- | --- |
+| iPhone / iPad | App Store 무료 배포 중 | App Store의 `DailyCalendar` |
+| iOS 테스트 | GitHub 공개 검증용 미서명 파일 | [daily-ios-3.1.0-unsigned.ipa](https://github.com/littlebit0/Daily/releases/download/v3.1.0/daily-ios-3.1.0-unsigned.ipa) |
+| macOS 테스트 | GitHub 공개 검증용 미서명 파일 | [daily-macos-3.1.0-unsigned.dmg](https://github.com/littlebit0/Daily/releases/download/v3.1.0/daily-macos-3.1.0-unsigned.dmg) |
+| Android / Windows | 소스 지원, 3.1.0 실기기 검증 진행 중 | 검증 완료 후 릴리스 제공 |
 
-Daily는 자체 서버를 운영하지 않고 Google Drive `appDataFolder`에 앱 전용 JSON 파일을 저장합니다.
+> GitHub의 IPA와 DMG는 App Store 제출 파일이 아닙니다. 미서명 IPA는 별도
+> 서명 없이는 iPhone에 직접 설치할 수 없으며, 재서명 과정에서 Sign in with
+> Apple 같은 entitlement가 유지되지 않을 수 있습니다. 일반 사용자는 App Store
+> 설치본을 권장합니다.
 
-2.0.0부터 기존 단일 `daily-sync-v1.json` 방식은 정상 동기화 경로에서 사용하지 않습니다. 현재 동기화는 v2 파일 세트를 사용합니다.
+## 주요 기능
 
-```plain text
+### 캘린더와 일정
+
+- 월간, 주간, 일간, 연간 및 빠른 보기
+- 주간·일간 시간표형 보기와 종일 일정 표시 제어
+- 일정 추가, 수정, 삭제, 검색 및 분류 필터
+- 반복 일정, 연속 일정, D-day, 음력과 대한민국 공휴일
+- 날짜 범위 드래그를 통한 연속 일정 입력
+- 외부 캘린더 가져오기
+- 위치, 지도 바로가기, 링크, 메모와 날씨 정보
+
+### 알림과 위젯
+
+- 일정별 복수 알림과 아침 브리핑
+- iOS 26 이상 일정별 시스템 알람
+- iPhone, iPad 및 macOS의 오늘 일정·주간·월간·D-day 위젯
+- iPhone 및 iPad 잠금화면 위젯
+- 일정 변경 시 알림, 알람과 위젯 즉시 갱신
+
+### Siri와 자동화
+
+- iOS 및 macOS Siri/App Intents 일정 조회, 검색, 추가, 수정과 삭제
+- 일정 변경 전 필수 정보 확인과 사용자 승인
+- 설정에서 날짜별 Siri 실행 기록 및 상세 결과 확인
+- Siri 작업 결과를 캘린더, 위젯, 알림과 동기화 상태에 즉시 반영
+
+### 계정과 동기화
+
+- 계정 없는 로컬 모드
+- iOS 및 macOS Sign in with Apple
+- 선택형 Google 계정 연결
+- Google Drive AppData 기반 일정·설정 백업 및 동기화
+- 일정별 증분 동기화, 삭제 tombstone과 충돌 병합
+- 통합 로그아웃 및 로컬·클라우드 데이터 삭제 흐름
+
+### 개인 설정
+
+- 한국어, 영어, 일본어, 중국어 번체
+- 시스템 언어 자동 적용 및 앱별 언어 선택
+- 라이트·다크 테마와 반응형 글자 크기
+- 사용자 분류, 직접 선택 색상과 분류별 표시 설정
+- PIN 없음 보호, Daily PIN 및 Apple 시스템 인증 앱 잠금
+
+## 플랫폼
+
+| 기능 | iOS / iPadOS | macOS | Android | Windows |
+| --- | :---: | :---: | :---: | :---: |
+| 캘린더와 로컬 저장 | O | O | O | O |
+| Google Drive AppData 동기화 | O | O | O | O |
+| Sign in with Apple | O | O | - | - |
+| Siri / App Intents | O | O | - | - |
+| Apple 위젯 | O | O | - | - |
+| 앱 잠금 | O | O | O | O |
+
+공유 Flutter 코드가 네 플랫폼의 사용자 경험을 유지합니다. Android와 Windows의
+3.1.0 배포 파일은 각 실제 OS에서 계정, 동기화, 알림과 UI 회귀 검증을 마친 뒤
+제공할 예정입니다.
+
+## 데이터와 개인정보 보호
+
+- 일정과 설정은 기본적으로 기기의 로컬 SQLite 데이터베이스에 저장됩니다.
+- Google 연결은 선택 사항이며 앱 전용 `appDataFolder`만 사용합니다.
+- 일반 Google Drive 파일은 읽거나 수정하지 않습니다.
+- 별도 일정 백엔드 서버를 운영하지 않습니다.
+- 광고, IDFA, 광고 측정, 데이터 브로커 공유 및 앱 간 사용자 추적을 사용하지
+  않습니다.
+
+자세한 내용은 [개인정보 처리방침](docs/PRIVACY_POLICY.md)과
+[개인정보 및 보안 설계](docs/PRIVACY_AND_SECURITY.md)를 확인하세요.
+
+## 동기화 방식
+
+DailyCalendar는 Google Drive AppData에 일정별 파일과 설정 파일을 분리해
+저장합니다.
+
+```text
 daily-sync-v2-event-{eventId}.json
-- schemaVersion: 2
-- type: event
-- event: 단일 일정 JSON
-- 하루 종일 일정: startDate, endDate 날짜 전용 필드 포함
-
 daily-sync-v2-settings.json
-- schemaVersion: 2
-- type: settings
-- settings: 비밀값을 제외한 앱 설정
 ```
 
-동작 방식:
+- 일정 생성·수정·삭제 시 변경된 일정만 업로드
+- 삭제 상태는 tombstone으로 다른 기기에 전파
+- 충돌은 일정별 `updatedAt` 또는 `deletedAt` 기준으로 병합
+- 종일 일정은 날짜 전용 필드로 보존해 시간대에 따른 날짜 밀림 방지
+- 앱 시작, 로그인, 포그라운드 복귀와 수동 요청 시 필요한 동기화 수행
 
-- 일정 생성, 수정, 삭제 시 변경된 일정 파일만 업로드
-- 삭제는 tombstone으로 남겨 다른 기기에 삭제 상태 전파
-- 앱 첫 실행, Google 로그인 직후, 포그라운드 복귀, 수동 동기화 때 v2 일정 파일 목록 병합
-- 로컬/원격 충돌은 일정별 `updatedAt` 또는 `deletedAt` 기준으로 최신 상태 선택
-- 하루 종일 일정은 `startDate`/`endDate`를 우선 사용해 플랫폼별 시간대 변환으로 날짜가 밀리지 않도록 처리
-- 설정은 `daily-sync-v2-settings.json`으로 일정 파일과 분리
+구성 방법과 데이터 형식은
+[Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)을 참고하세요.
 
-이 방식은 전체 백업 파일을 반복 업로드하지 않기 때문에 셀룰러 데이터 사용량과 동시 수정 충돌 가능성을 줄입니다.
+## 개발 시작
 
-## Google OAuth 설정
+### 요구 사항
 
-현재 Google Drive AppData 동기화 기준 프로젝트는 `234127810480`입니다.
+- Flutter SDK
+- Dart SDK `^3.11.5`
+- Apple 빌드: Xcode 및 Apple Developer 서명 환경
+- Android 빌드: Android Studio 또는 Android SDK
+- Windows 빌드: Visual Studio의 Desktop development with C++ 워크로드
 
-- Android 패키지명: `com.littlebit0.dailycalendar`
-- Android Web OAuth client: `234127810480-uvesp3703ktqon6oj90abhjc62k9g6me.apps.googleusercontent.com`
-- Windows Desktop OAuth client: `234127810480-caigb6e78fj43lv268t78sam64c3aivb.apps.googleusercontent.com`
-- iOS OAuth client: `234127810480-l6i9pnoq4hpg6as12n7g1q5h0cak39oa.apps.googleusercontent.com`
-- OAuth scope: `https://www.googleapis.com/auth/drive.appdata`
+### 설치와 실행
 
-iOS Google Drive 연결은 `ASWebAuthenticationSession` 기반 인앱 인증 시트를
-사용합니다. 앱 밖 Safari로 완전히 전환하지 않고 Daily 위에 인증 화면을 띄우며,
-Google callback URL은 iOS 네이티브 브리지에서 처리합니다.
-
-Windows/macOS Desktop OAuth는 PKCE loopback callback을 사용합니다. 현재 Windows Desktop OAuth client는 token exchange에 client secret을 요구하므로 secret은 Git에 커밋하지 않고 로컬 환경 변수 또는 로컬 OAuth JSON 파일로만 공급합니다.
-
-Windows 로컬 OAuth JSON 예시:
-
-```json
-{
-  "installed": {
-    "client_id": "<desktop-client-id>",
-    "client_secret": "<desktop-client-secret>"
-  }
-}
+```bash
+git clone https://github.com/littlebit0/Daily.git
+cd Daily
+./tool/flutter.sh pub get
+./tool/flutter.sh run -d macos
 ```
 
-지원 경로:
+iOS Simulator 실행 예시:
 
-- `%APPDATA%\Daily\google_desktop_oauth.json`
-- `%LOCALAPPDATA%\Daily\google_desktop_oauth.json`
-- `GOOGLE_DESKTOP_OAUTH_CONFIG`
-- `GOOGLE_DESKTOP_CLIENT_SECRET`
-
-자세한 설정은 [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)을 참고합니다.
-
-## 프로젝트 구조
-
-```plain text
-lib/
-- app/                         앱 루트와 lifecycle sync
-- core/calendar/               공휴일, 음력 계산
-- core/notifications/          로컬 알림, D-day, 브리핑 알림
-- core/settings/               앱 설정과 secure storage
-- core/sync/                   Google OAuth, Google Drive v2 sync
-- features/calendar/           주간/월간/일간 달력 UI
-- features/events/             일정 도메인, drift 저장소, 입력/수정 흐름
-- features/onboarding/         첫 실행과 Google 연결
-- features/search/             일정 검색
-- features/settings/           설정, 동기화 상태, 계정/데이터 관리
+```bash
+./tool/flutter.sh devices
+./tool/flutter.sh run -d <simulator-device-id>
 ```
 
-## 개발 명령
+Windows에서는 `tool/flutter.ps1`을 사용합니다.
 
 ```powershell
 .\tool\flutter.ps1 pub get
-.\tool\flutter.ps1 analyze
-.\tool\flutter.ps1 test
+.\tool\flutter.ps1 run -d windows
 ```
 
-Android debug:
+Google OAuth 및 Apple 서명 값은 저장소에 포함하지 않습니다. 로컬 설정 방법은
+[Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)과
+[Apple 빌드 설정](docs/APPLE_BUILD_SETUP.md)을 확인하세요.
 
-```powershell
-.\tool\flutter.ps1 build apk --debug
+## 품질 확인
+
+```bash
+./tool/flutter.sh analyze --no-pub
+./tool/flutter.sh test --no-pub
 ```
 
-Android release:
+3.1.0 기준 검증 결과:
 
-```powershell
-.\tool\flutter.ps1 build apk --release
-.\tool\flutter.ps1 build appbundle --release
-```
-
-Windows debug:
-
-```powershell
-.\tool\flutter.ps1 build windows --debug
-```
-
-Windows release:
-
-```powershell
-.\tool\flutter.ps1 build windows --release
-```
-
-`tool/flutter.ps1`은 프로젝트 상위 폴더의 `flutter-sdk`, `PubCache`, `GradleCache`, `AndroidSdk`, `Temp`를 우선 사용합니다.
-
-## 검증 상태
-
-3.1.0 Apple 제출 후보 기준 확인한 항목:
-
-- `./tool/flutter.sh analyze --no-pub`: 통과
-- `./tool/flutter.sh test --no-pub`: 전체 165개 통과
-- App Store iOS IPA와 macOS PKG의 앱/위젯 버전 및 빌드 `3.1.0`: 확인
-- iOS와 macOS App Store 배포 서명 및 macOS Installer 서명: 확인
-- iPhone 17 시뮬레이터 설치 확인
-- Apple 로그인 후 Google Drive 자동 연결/복원 흐름 회귀 테스트 통과
-- Google 로그인 후 Apple 연결 표시 보존 회귀 테스트 통과
-- 설정 통합 로그아웃 정책 회귀 테스트 통과
-
-macOS, Android, Windows는 같은 공유 Flutter 계정/동기화 정책을 따라야 합니다.
-다음 각 플랫폼 작업자는 실제 기기 또는 해당 OS에서 아래 항목을 다시 확인해야 합니다.
-
-- fresh install 후 Apple/Google/local 시작 흐름
-- Apple 로그인 후 Google Drive 자동 복원 또는 Apple/local 모드 진입
-- Google 로그인 후 기존 Apple 연결 표시 유지
-- 일반 로그아웃 후 재로그인 시 저장된 계정 연결 자동 복원
-- 계정 삭제 후 로컬 데이터, 계정 표시, Drive 백업 삭제
-- 일정 생성/수정/삭제 v2 AppData 동기화
-
-## 스토어 배포 상태
-
-`DailyCalendar` iOS 앱은 App Store에서 무료 앱으로 배포 중입니다. iOS와 macOS
-`3.1.0 (3.1.0)` Transporter 제출용 iOS IPA와 macOS PKG는 생성 및 서명 검증을
-완료했습니다. App Store Connect 업로드와 빌드 처리는 다음 단계입니다.
-
-App Store Connect에서 확인 또는 수정할 항목:
-
-- App Review Notes:
-  - Apple과 Google 로그인이 모두 제공됨
-  - Google Drive 권한은 Google Drive AppData의 Daily 전용 백업/동기화에만 사용됨
-  - 일반 Google Drive 파일은 읽거나 수정하지 않음
-  - 광고, IDFA, 앱/웹사이트 간 사용자 추적, 데이터 브로커 공유 없음
-- App Privacy:
-  - 추적 목적 데이터 수집으로 표시하지 않기
-  - 실제 사용하는 데이터 유형만 표시
-  - Google Drive AppData 동기화와 Apple/Google 로그인은 앱 기능 목적
-- Encryption:
-  - 별도 독자 암호화 알고리즘을 구현하지 않았다면 해당 없음으로 답변
-- Build:
-  - iOS와 macOS에서 각각 `3.1.0 (3.1.0)` 빌드를 선택
-  - 수출 규정 질문을 확인한 뒤 두 플랫폼을 같은 심사 제출에 추가
-
-Android Play Store와 Microsoft Store 배포는 보류 상태입니다. 다음 플랫폼 릴리스
-전에는 Android와 Windows 체크리스트 검증을 완료해야 합니다.
-
-## 보안과 로컬 비밀값
-
-다음 파일과 값은 Git에 커밋하지 않습니다.
-
-- Android upload keystore: `android/app/upload-keystore.jks`
-- Android signing config: `android/key.properties`
-- GitHub Actions Android signing secrets: `ANDROID_KEYSTORE_BASE64`,
-  `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
-- Desktop OAuth client secret
-- Apple signing identity와 provisioning profile
-- GitHub/Google API token
-
-Android keystore는 이후 Play Store 업데이트에 필요하므로 별도 안전한 위치에 백업해야 합니다.
+- Flutter 정적 분석 통과
+- 전체 자동화 테스트 165개 통과
+- iOS App Store IPA 배포 서명 검증
+- macOS App Store PKG 앱·설치 프로그램 서명 검증
+- iOS/macOS 앱과 위젯 버전 `3.1.0 (3.1.0)` 확인
 
 ## 문서
 
+- [3.1.0 릴리스 노트](docs/RELEASE_NOTES_3.1.0.md)
+- [기능 로드맵](docs/FEATURE_ROADMAP.md)
+- [프로젝트 분석](PROJECT_ANALYSIS.md)
 - [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)
-- [릴리스 노트 3.1.0](docs/RELEASE_NOTES_3.1.0.md)
-- [App Store 업그레이드 사항 3.1.0](docs/APP_STORE_WHATS_NEW_3.1.0.md)
-- [릴리스 노트 3.0.1](docs/RELEASE_NOTES_3.0.1.md)
-- [App Review 메모 3.0.1](docs/APP_REVIEW_NOTES_3.0.1.md)
-- [릴리스 노트 2.6.0](docs/RELEASE_NOTES_2.6.0.md)
-- [릴리스 노트 2.0.4](docs/RELEASE_NOTES_2.0.4.md)
-- [릴리스 노트 2.5.17](docs/RELEASE_NOTES_2.5.17.md)
-- [릴리스 노트 2.0.0](docs/RELEASE_NOTES_2.0.0.md)
-- [현재 진행상태](docs/PROGRESS_STATUS.md)
-- [릴리스 체크리스트](docs/RELEASE_CHECKLIST.md)
 - [Apple 빌드 설정](docs/APPLE_BUILD_SETUP.md)
-- [후속 기능 로드맵](docs/FEATURE_ROADMAP.md)
-- [상세 요구사항](DAILY_REQUIREMENTS.md)
+- [개인정보 처리방침](docs/PRIVACY_POLICY.md)
+- [릴리스 체크리스트](docs/RELEASE_CHECKLIST.md)
 
-## 남은 작업
+## 문의와 이슈
 
-- Play Console 배포와 심사 정보 작성
-- Microsoft Store Partner Center identity 확보 후 Store용 MSIX 생성
-- fresh Google 계정으로 Android/Windows/iOS/macOS 간 v2 동기화 재검증
-- Android 실제 기기 알림 검증
-- App Store Connect에 iOS/macOS 3.1.0 업로드 및 최종 심사 제출
-- macOS App Store 승인 후 실제 설치·업데이트 검증
-- Google Drive AppData v2 파일 암호화 검토
-- 동시 수정 충돌을 사용자에게 보여주는 conflict UX 추가
+버그 제보와 기능 제안은 [GitHub Issues](https://github.com/littlebit0/Daily/issues)를
+이용해 주세요. 개인정보 및 지원 문의는 `kimhee8953@naver.com`으로 받을 수
+있습니다.
