@@ -1,4 +1,6 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 
 struct IconTarget {
     let path: String
@@ -62,83 +64,23 @@ func roundedPath(_ rect: CGRect, _ radius: CGFloat) -> NSBezierPath {
 
 func drawIcon(size: Int) -> NSImage {
     let side = CGFloat(size)
-    let image = NSImage(size: NSSize(width: side, height: side))
-
-    image.lockFocus()
-    guard let context = NSGraphicsContext.current?.cgContext else {
-        image.unlockFocus()
-        return image
+    let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("artwork/daily-app-icon-source.png")
+    guard let source = NSImage(contentsOf: sourceURL) else {
+        fatalError("Unable to load approved app icon artwork at \(sourceURL.path)")
     }
 
-    context.setAllowsAntialiasing(true)
-    context.setShouldAntialias(true)
-
-    let bounds = CGRect(x: 0, y: 0, width: side, height: side)
-    let bg = NSGradient(
-        starting: color(0xFFFFFF),
-        ending: color(0xEEF3FA)
-    )!
-    bg.draw(in: NSBezierPath(rect: bounds), angle: -55)
-
-    let inset = side * 0.13
-    let card = CGRect(x: inset, y: side * 0.14, width: side - inset * 2, height: side * 0.73)
-    let radius = side * 0.13
-
-    context.saveGState()
-    context.setShadow(offset: CGSize(width: 0, height: -side * 0.018), blur: side * 0.05, color: NSColor.black.withAlphaComponent(0.14).cgColor)
-    color(0xFFFFFF).setFill()
-    roundedPath(card, radius).fill()
-    context.restoreGState()
-
-    color(0xE1E7F0).setStroke()
-    let border = roundedPath(card.insetBy(dx: side * 0.006, dy: side * 0.006), radius)
-    border.lineWidth = max(1, side * 0.006)
-    border.stroke()
-
-    let header = CGRect(x: card.minX, y: card.maxY - card.height * 0.26, width: card.width, height: card.height * 0.26)
-    let headerPath = roundedPath(header, radius)
-    context.saveGState()
-    roundedPath(card, radius).addClip()
-    let headerGradient = NSGradient(starting: color(0x2867F0), ending: color(0x4A8CFF))!
-    headerGradient.draw(in: headerPath, angle: 0)
-    context.restoreGState()
-
-    color(0xEEF4FF).setFill()
-    let ringY = card.maxY - card.height * 0.13
-    for x in [card.minX + card.width * 0.28, card.maxX - card.width * 0.28] {
-        let ring = CGRect(x: x - side * 0.027, y: ringY - side * 0.027, width: side * 0.054, height: side * 0.054)
-        NSBezierPath(ovalIn: ring).fill()
-    }
-
-    let textSize = side * 0.37
-    let paragraph = NSMutableParagraphStyle()
-    paragraph.alignment = .center
-    let attrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: textSize, weight: .medium),
-        .foregroundColor: color(0x242936),
-        .paragraphStyle: paragraph,
-    ]
-    let textRect = CGRect(
-        x: card.minX,
-        y: card.minY + card.height * 0.20,
-        width: card.width,
-        height: card.height * 0.42
+    let output = NSImage(size: NSSize(width: side, height: side))
+    output.lockFocus()
+    NSGraphicsContext.current?.imageInterpolation = .high
+    source.draw(
+        in: CGRect(x: 0, y: 0, width: side, height: side),
+        from: .zero,
+        operation: .copy,
+        fraction: 1
     )
-    NSString(string: "24").draw(in: textRect, withAttributes: attrs)
-
-    let markerWidth = side * 0.085
-    let markerHeight = max(1, side * 0.016)
-    let marker = CGRect(
-        x: card.midX - markerWidth / 2,
-        y: card.minY + card.height * 0.12,
-        width: markerWidth,
-        height: markerHeight
-    )
-    color(0xFF624F).setFill()
-    roundedPath(marker, markerHeight / 2).fill()
-
-    image.unlockFocus()
-    return image
+    output.unlockFocus()
+    return output
 }
 
 func drawLaunchImage(width: Int, height: Int) -> NSImage {
@@ -172,31 +114,54 @@ func drawLaunchImage(width: Int, height: Int) -> NSImage {
 }
 
 func writePNG(_ image: NSImage, path: String, width: Int, height: Int) throws {
-    guard
-        let tiff = image.tiffRepresentation,
-        let bitmap = NSBitmapImageRep(data: tiff),
-        let data = bitmap.representation(using: .png, properties: [:])
-    else {
-        throw NSError(domain: "DailyIconGeneration", code: 1)
-    }
-
     let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appendingPathComponent(path)
     try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(),
         withIntermediateDirectories: true
     )
-    try data.write(to: url, options: .atomic)
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
-    process.arguments = ["-z", "\(height)", "\(width)", url.path]
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-    try process.run()
-    process.waitUntilExit()
-    if process.terminationStatus != 0 {
-        throw NSError(domain: "DailyIconGeneration", code: Int(process.terminationStatus))
+    guard let context = CGContext(
+        data: nil,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: width * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+    ) else {
+        throw NSError(domain: "DailyIconGeneration", code: 1)
+    }
+
+    NSGraphicsContext.saveGraphicsState()
+    let graphics = NSGraphicsContext(cgContext: context, flipped: false)
+    NSGraphicsContext.current = graphics
+    graphics.imageInterpolation = .high
+    color(0xFFFFFF).setFill()
+    NSBezierPath(rect: CGRect(x: 0, y: 0, width: width, height: height)).fill()
+    image.draw(
+        in: CGRect(x: 0, y: 0, width: width, height: height),
+        from: .zero,
+        operation: .sourceOver,
+        fraction: 1
+    )
+    graphics.flushGraphics()
+    NSGraphicsContext.restoreGraphicsState()
+
+    guard
+        let output = context.makeImage(),
+        let destination = CGImageDestinationCreateWithURL(
+            url as CFURL,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        )
+    else {
+        throw NSError(domain: "DailyIconGeneration", code: 1)
+    }
+    CGImageDestinationAddImage(destination, output, nil)
+    guard CGImageDestinationFinalize(destination) else {
+        throw NSError(domain: "DailyIconGeneration", code: 1)
     }
 }
 

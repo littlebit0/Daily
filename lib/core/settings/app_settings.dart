@@ -96,6 +96,93 @@ enum WeekDayLayoutMode {
   }
 }
 
+enum CalendarEventTitleAlignment {
+  leading,
+  center;
+
+  static CalendarEventTitleAlignment fromName(String? name) {
+    return CalendarEventTitleAlignment.values.firstWhere(
+      (alignment) => alignment.name == name,
+      orElse: () => CalendarEventTitleAlignment.leading,
+    );
+  }
+}
+
+enum CalendarEventSortPriority {
+  category,
+  time;
+
+  static CalendarEventSortPriority fromName(String? name) {
+    return CalendarEventSortPriority.values.firstWhere(
+      (priority) => priority.name == name,
+      orElse: () => CalendarEventSortPriority.time,
+    );
+  }
+}
+
+class CalendarManualEventOrder {
+  const CalendarManualEventOrder({
+    required this.eventKeys,
+    required this.updatedAt,
+    required this.deviceId,
+  });
+
+  final List<String> eventKeys;
+  final DateTime updatedAt;
+  final String deviceId;
+
+  Map<String, Object?> toJson() => {
+    'eventKeys': eventKeys,
+    'updatedAt': updatedAt.toUtc().toIso8601String(),
+    'deviceId': deviceId,
+  };
+
+  static CalendarManualEventOrder? fromJson(Object? value) {
+    if (value is! Map) {
+      return null;
+    }
+    final json = Map<String, Object?>.from(value);
+    final updatedAt = DateTime.tryParse(json['updatedAt'] as String? ?? '');
+    if (updatedAt == null) {
+      return null;
+    }
+    return CalendarManualEventOrder(
+      eventKeys: (json['eventKeys'] as List? ?? const <Object?>[])
+          .whereType<String>()
+          .where((key) => key.trim().isNotEmpty)
+          .toSet()
+          .toList(growable: false),
+      updatedAt: updatedAt.toLocal(),
+      deviceId: json['deviceId'] as String? ?? '',
+    );
+  }
+}
+
+Map<String, CalendarManualEventOrder> mergeCalendarManualEventOrders(
+  Map<String, CalendarManualEventOrder> local,
+  Map<String, CalendarManualEventOrder> remote,
+) {
+  final merged = <String, CalendarManualEventOrder>{...local};
+  for (final entry in remote.entries) {
+    final current = merged[entry.key];
+    if (current == null || _isNewerManualEventOrder(entry.value, current)) {
+      merged[entry.key] = entry.value;
+    }
+  }
+  return merged;
+}
+
+bool _isNewerManualEventOrder(
+  CalendarManualEventOrder candidate,
+  CalendarManualEventOrder current,
+) {
+  final timeComparison = candidate.updatedAt.compareTo(current.updatedAt);
+  if (timeComparison != 0) {
+    return timeComparison > 0;
+  }
+  return candidate.deviceId.compareTo(current.deviceId) > 0;
+}
+
 enum AppLockMethod {
   noPin('PIN 없이 잠금'),
   appPin('PIN 잠금'),
@@ -138,8 +225,12 @@ class AppSettings {
     this.appTextSize = AppTextSize.basic,
     this.defaultCalendarView = CalendarViewMode.week,
     this.weekDayLayoutMode = WeekDayLayoutMode.list,
+    this.calendarEventTitleAlignment = CalendarEventTitleAlignment.leading,
+    this.calendarEventSortPriority = CalendarEventSortPriority.time,
+    this.calendarManualEventOrders = const <String, CalendarManualEventOrder>{},
     this.hiddenCategoryIds = const <String>[],
     this.calendarShowHolidays = true,
+    this.calendarHolidayBackgroundEnabled = true,
     this.calendarDdayOnly = false,
     this.appLockEnabled = false,
     this.appLockBiometricsEnabled = false,
@@ -181,8 +272,12 @@ class AppSettings {
   final AppTextSize appTextSize;
   final CalendarViewMode defaultCalendarView;
   final WeekDayLayoutMode weekDayLayoutMode;
+  final CalendarEventTitleAlignment calendarEventTitleAlignment;
+  final CalendarEventSortPriority calendarEventSortPriority;
+  final Map<String, CalendarManualEventOrder> calendarManualEventOrders;
   final List<String> hiddenCategoryIds;
   final bool calendarShowHolidays;
+  final bool calendarHolidayBackgroundEnabled;
   final bool calendarDdayOnly;
   final bool appLockEnabled;
   final bool appLockBiometricsEnabled;
@@ -212,8 +307,12 @@ class AppSettings {
     AppTextSize? appTextSize,
     CalendarViewMode? defaultCalendarView,
     WeekDayLayoutMode? weekDayLayoutMode,
+    CalendarEventTitleAlignment? calendarEventTitleAlignment,
+    CalendarEventSortPriority? calendarEventSortPriority,
+    Map<String, CalendarManualEventOrder>? calendarManualEventOrders,
     List<String>? hiddenCategoryIds,
     bool? calendarShowHolidays,
+    bool? calendarHolidayBackgroundEnabled,
     bool? calendarDdayOnly,
     bool? appLockEnabled,
     bool? appLockBiometricsEnabled,
@@ -250,8 +349,17 @@ class AppSettings {
       appTextSize: appTextSize ?? this.appTextSize,
       defaultCalendarView: defaultCalendarView ?? this.defaultCalendarView,
       weekDayLayoutMode: weekDayLayoutMode ?? this.weekDayLayoutMode,
+      calendarEventTitleAlignment:
+          calendarEventTitleAlignment ?? this.calendarEventTitleAlignment,
+      calendarEventSortPriority:
+          calendarEventSortPriority ?? this.calendarEventSortPriority,
+      calendarManualEventOrders:
+          calendarManualEventOrders ?? this.calendarManualEventOrders,
       hiddenCategoryIds: hiddenCategoryIds ?? this.hiddenCategoryIds,
       calendarShowHolidays: calendarShowHolidays ?? this.calendarShowHolidays,
+      calendarHolidayBackgroundEnabled:
+          calendarHolidayBackgroundEnabled ??
+          this.calendarHolidayBackgroundEnabled,
       calendarDdayOnly: calendarDdayOnly ?? this.calendarDdayOnly,
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
       appLockBiometricsEnabled:
@@ -263,4 +371,9 @@ class AppSettings {
       language: language ?? this.language,
     );
   }
+
+  EventCategory get holidayCategory => categories.firstWhere(
+    (category) => category.id == EventCategory.holiday.id,
+    orElse: () => EventCategory.holiday,
+  );
 }

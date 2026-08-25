@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:uuid/uuid.dart';
 
+import '../../../core/analytics/product_analytics.dart';
 import '../../../core/notifications/notification_service.dart';
 import '../../../core/alarms/alarm_service.dart';
 import '../../../core/settings/settings_repository.dart';
@@ -17,6 +20,7 @@ class EventCommandService {
     required NotificationService notificationService,
     AlarmService alarmService = const UnsupportedAlarmService(),
     required SyncService syncService,
+    ProductAnalytics analytics = const NoopProductAnalytics(),
     Future<void> Function()? onEventsChanged,
     KoreaTime? clock,
     Uuid? uuid,
@@ -25,6 +29,7 @@ class EventCommandService {
        _notificationService = notificationService,
        _alarmService = alarmService,
        _syncService = syncService,
+       _analytics = analytics,
        _onEventsChanged = onEventsChanged,
        _clock = clock ?? const KoreaTime(),
        _uuid = uuid ?? const Uuid();
@@ -34,6 +39,7 @@ class EventCommandService {
   final NotificationService _notificationService;
   final AlarmService _alarmService;
   final SyncService _syncService;
+  final ProductAnalytics _analytics;
   final Future<void> Function()? _onEventsChanged;
   final KoreaTime _clock;
   final Uuid _uuid;
@@ -51,24 +57,83 @@ class EventCommandService {
   }
 
   Future<void> save(CalendarEvent event) async {
+    final stopwatch = Stopwatch()..start();
     final updated = event
         .copyWith(updatedAt: _clock.now(), syncStatus: 'pending')
         .normalizeAllDayBounds();
-    final existing = await _repository.findById(updated.id);
-    await _repository.save(updated);
-    await _notificationService.cancelEventReminder(
-      updated.id,
-      reminderMinutesBeforeList: _combinedReminderMinutes(existing, updated),
+    CalendarEvent? existing;
+    try {
+      existing = await _repository.findById(updated.id);
+      await _repository.save(updated);
+      await _notificationService.cancelEventReminder(
+        updated.id,
+        reminderMinutesBeforeList: _combinedReminderMinutes(existing, updated),
+      );
+      await _notificationService.scheduleEventReminder(
+        updated,
+        allowImmediate: true,
+      );
+      await _alarmService.cancelEventAlarm(updated.id);
+      await _alarmService.scheduleEventAlarm(updated);
+      await _rescheduleMorningBriefingIfNeeded();
+      await _syncService.queueEventUpsert(updated);
+      await _refreshWidgets();
+    } on Object catch (error) {
+      _recordMutation(
+        existing == null
+            ? AnalyticsOperation.create
+            : AnalyticsOperation.update,
+        stopwatch,
+        error: error,
+      );
+      rethrow;
+    }
+    _recordMutation(
+      existing == null ? AnalyticsOperation.create : AnalyticsOperation.update,
+      stopwatch,
     );
-    await _notificationService.scheduleEventReminder(
-      updated,
-      allowImmediate: true,
+  }
+
+  Future<void> setCompleted(CalendarEvent event, bool completed) async {
+    if (event.readOnly || event.systemEvent || event.holiday) {
+      return;
+    }
+    final stopwatch = Stopwatch()..start();
+    try {
+      final source = await _repository.findById(event.id) ?? event;
+      if (source.completed == completed) {
+        return;
+      }
+      final updated = source.copyWith(
+        completed: completed,
+        updatedAt: _clock.now(),
+        syncStatus: 'pending',
+      );
+      await _repository.save(updated);
+      await _notificationService.cancelEventReminder(
+        updated.id,
+        reminderMinutesBeforeList: updated.reminderMinutesBeforeList,
+      );
+      await _alarmService.cancelEventAlarm(updated.id);
+      if (!completed) {
+        await _notificationService.scheduleEventReminder(updated);
+        await _alarmService.scheduleEventAlarm(updated);
+      }
+      await _rescheduleMorningBriefingIfNeeded();
+      await _syncService.queueEventUpsert(updated);
+      await _refreshWidgets();
+    } on Object catch (error) {
+      _recordMutation(
+        completed ? AnalyticsOperation.complete : AnalyticsOperation.uncomplete,
+        stopwatch,
+        error: error,
+      );
+      rethrow;
+    }
+    _recordMutation(
+      completed ? AnalyticsOperation.complete : AnalyticsOperation.uncomplete,
+      stopwatch,
     );
-    await _alarmService.cancelEventAlarm(updated.id);
-    await _alarmService.scheduleEventAlarm(updated);
-    await _rescheduleMorningBriefingIfNeeded();
-    await _syncService.queueEventUpsert(updated);
-    await _refreshWidgets();
   }
 
   Future<Set<String>> importBatch(Iterable<CalendarEvent> events) async {
@@ -109,17 +174,24 @@ class EventCommandService {
   }
 
   Future<void> delete(String eventId) async {
-    final existing = await _repository.findById(eventId);
-    await _repository.delete(eventId);
-    await _notificationService.cancelEventReminder(
-      eventId,
-      reminderMinutesBeforeList:
-          existing?.reminderMinutesBeforeList ?? const [],
-    );
-    await _alarmService.cancelEventAlarm(eventId);
-    await _rescheduleMorningBriefingIfNeeded();
-    await _syncService.queueEventDelete(eventId);
-    await _refreshWidgets();
+    final stopwatch = Stopwatch()..start();
+    try {
+      final existing = await _repository.findById(eventId);
+      await _repository.delete(eventId);
+      await _notificationService.cancelEventReminder(
+        eventId,
+        reminderMinutesBeforeList:
+            existing?.reminderMinutesBeforeList ?? const [],
+      );
+      await _alarmService.cancelEventAlarm(eventId);
+      await _rescheduleMorningBriefingIfNeeded();
+      await _syncService.queueEventDelete(eventId);
+      await _refreshWidgets();
+    } on Object catch (error) {
+      _recordMutation(AnalyticsOperation.delete, stopwatch, error: error);
+      rethrow;
+    }
+    _recordMutation(AnalyticsOperation.delete, stopwatch);
   }
 
   Future<void> updateCategoryUsage({
@@ -181,6 +253,26 @@ class EventCommandService {
     await _notificationService.scheduleMorningBriefing(
       hour: settings.morningBriefingHour,
       minute: settings.morningBriefingMinute,
+    );
+  }
+
+  void _recordMutation(
+    AnalyticsOperation operation,
+    Stopwatch stopwatch, {
+    Object? error,
+  }) {
+    stopwatch.stop();
+    unawaited(
+      _analytics
+          .record(
+            AnalyticsRecord.eventSave(
+              operation,
+              succeeded: error == null,
+              durationMs: stopwatch.elapsedMilliseconds,
+              errorCode: error == null ? null : categorizeAnalyticsError(error),
+            ),
+          )
+          .catchError((_) {}),
     );
   }
 }

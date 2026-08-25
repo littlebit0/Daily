@@ -3,8 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/calendar/calendar_event_movement.dart';
+import '../../../core/calendar/calendar_event_ordering.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/settings/app_settings.dart';
+import '../../../core/theme/event_completion_style.dart';
 import '../../events/domain/calendar_event.dart';
+import 'calendar_event_drag_layer.dart';
 
 class ScheduleTimelineView extends StatefulWidget {
   const ScheduleTimelineView({
@@ -14,6 +19,13 @@ class ScheduleTimelineView extends StatefulWidget {
     required this.selectedDate,
     required this.use24HourTime,
     required this.showAllDayEvents,
+    required this.holidayBackgroundEnabled,
+    required this.holidayColorValue,
+    this.centerEventTitles = false,
+    this.eventSortPriority = CalendarEventSortPriority.time,
+    this.categoryOrder = const <String>[],
+    this.weekStartsOnMonday = false,
+    this.onEventDropped,
     required this.onShowAllDayEventsChanged,
     required this.onDateSelected,
   });
@@ -23,6 +35,13 @@ class ScheduleTimelineView extends StatefulWidget {
   final DateTime selectedDate;
   final bool use24HourTime;
   final bool showAllDayEvents;
+  final bool holidayBackgroundEnabled;
+  final int holidayColorValue;
+  final bool centerEventTitles;
+  final CalendarEventSortPriority eventSortPriority;
+  final List<String> categoryOrder;
+  final bool weekStartsOnMonday;
+  final CalendarEventDropCallback? onEventDropped;
   final ValueChanged<bool> onShowAllDayEventsChanged;
   final ValueChanged<DateTime> onDateSelected;
 
@@ -35,6 +54,7 @@ class _ScheduleTimelineViewState extends State<ScheduleTimelineView> {
   static const _initialHour = 7;
 
   late final ScrollController _scrollController;
+  CalendarEvent? _draggingEvent;
 
   @override
   void initState() {
@@ -55,19 +75,34 @@ class _ScheduleTimelineViewState extends State<ScheduleTimelineView> {
     final allDayEvents = widget.events.where((event) => event.allDay).toList();
     final showAllDayArea = widget.showAllDayEvents && allDayEvents.isNotEmpty;
     final scheme = Theme.of(context).colorScheme;
+    final holidayEvents = widget.events
+        .where((event) => event.holiday)
+        .toList();
+    final holidayDates = {
+      for (final day in widget.days)
+        if (holidayEvents.any((event) => _eventOccursOnDate(event, day)))
+          DateTime(day.year, day.month, day.day),
+    };
 
-    return Column(
+    final timeline = Column(
       key: const ValueKey('schedule-timeline'),
       children: [
         _ScheduleDayHeader(
           days: widget.days,
           selectedDate: widget.selectedDate,
+          holidayDates: holidayDates,
+          onEventDropped: widget.onEventDropped,
           onDateSelected: widget.onDateSelected,
         ),
         if (showAllDayArea)
           _AllDayEventStrip(
             days: widget.days,
             events: allDayEvents,
+            centerEventTitles: widget.centerEventTitles,
+            eventSortPriority: widget.eventSortPriority,
+            categoryOrder: widget.categoryOrder,
+            onEventDropped: widget.onEventDropped,
+            onEventDragStateChanged: _setDraggingEvent,
             onDateSelected: widget.onDateSelected,
           ),
         Divider(height: 1, color: scheme.outlineVariant),
@@ -86,6 +121,11 @@ class _ScheduleTimelineViewState extends State<ScheduleTimelineView> {
                         .where((event) => !event.allDay)
                         .toList(),
                     use24HourTime: widget.use24HourTime,
+                    centerEventTitles: widget.centerEventTitles,
+                    eventSortPriority: widget.eventSortPriority,
+                    categoryOrder: widget.categoryOrder,
+                    onEventDropped: widget.onEventDropped,
+                    onEventDragStateChanged: _setDraggingEvent,
                     onDateSelected: widget.onDateSelected,
                   ),
                 ),
@@ -123,6 +163,29 @@ class _ScheduleTimelineViewState extends State<ScheduleTimelineView> {
         ),
       ],
     );
+    if (widget.days.length != 1 ||
+        _draggingEvent == null ||
+        widget.onEventDropped == null) {
+      return timeline;
+    }
+    return Stack(
+      children: [
+        timeline,
+        Positioned.fill(
+          child: CalendarEventMonthDropOverlay(
+            focusDate: widget.days.single,
+            weekStartsOnMonday: widget.weekStartsOnMonday,
+            onEventDropped: widget.onEventDropped!,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _setDraggingEvent(CalendarEvent? event) {
+    if (mounted && _draggingEvent != event) {
+      setState(() => _draggingEvent = event);
+    }
   }
 }
 
@@ -130,11 +193,15 @@ class _ScheduleDayHeader extends StatelessWidget {
   const _ScheduleDayHeader({
     required this.days,
     required this.selectedDate,
+    required this.holidayDates,
+    required this.onEventDropped,
     required this.onDateSelected,
   });
 
   final List<DateTime> days;
   final DateTime selectedDate;
+  final Set<DateTime> holidayDates;
+  final CalendarEventDropCallback? onEventDropped;
   final ValueChanged<DateTime> onDateSelected;
 
   @override
@@ -149,33 +216,42 @@ class _ScheduleDayHeader extends StatelessWidget {
           SizedBox(width: compact ? 42 : 54),
           for (final day in days)
             Expanded(
-              child: InkWell(
-                onTap: () => onDateSelected(day),
-                child: Center(
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: compact ? 3 : 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _isSameDay(day, selectedDate)
-                          ? scheme.primaryContainer
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      compact
-                          ? '${DateFormat.E(locale).format(day)}\n${day.day}'
-                          : DateFormat.MMMEd(locale).format(day),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              child: CalendarEventDateDropTarget(
+                date: day,
+                onEventDropped: onEventDropped,
+                child: InkWell(
+                  onTap: () => onDateSelected(day),
+                  child: Center(
+                    child: Container(
+                      key: ValueKey(
+                        'schedule-day-background-${day.year}-${day.month}-${day.day}',
+                      ),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 3 : 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
                         color: _isSameDay(day, selectedDate)
-                            ? scheme.onPrimaryContainer
-                            : scheme.onSurface,
-                        fontWeight: _isSameDay(day, DateTime.now())
-                            ? FontWeight.w700
-                            : FontWeight.w500,
+                            ? scheme.primaryContainer
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        key: ValueKey(
+                          'schedule-day-header-${day.year}-${day.month}-${day.day}',
+                        ),
+                        compact
+                            ? '${DateFormat.E(locale).format(day)}\n${day.day}'
+                            : DateFormat.MMMEd(locale).format(day),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: _dayColor(day, scheme),
+                              fontWeight: _isSameDay(day, DateTime.now())
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
                       ),
                     ),
                   ),
@@ -186,25 +262,79 @@ class _ScheduleDayHeader extends StatelessWidget {
       ),
     );
   }
+
+  Color _dayColor(DateTime day, ColorScheme scheme) {
+    if (_isSameDay(day, selectedDate)) {
+      return scheme.onPrimaryContainer;
+    }
+    if (_isHoliday(day) || day.weekday == DateTime.sunday) {
+      return const Color(0xffef4444);
+    }
+    if (day.weekday == DateTime.saturday) {
+      return const Color(0xff2563eb);
+    }
+    return scheme.onSurface;
+  }
+
+  bool _isHoliday(DateTime day) {
+    return holidayDates.contains(DateTime(day.year, day.month, day.day));
+  }
 }
 
 class _AllDayEventStrip extends StatelessWidget {
   const _AllDayEventStrip({
     required this.days,
     required this.events,
+    required this.centerEventTitles,
+    required this.eventSortPriority,
+    required this.categoryOrder,
+    required this.onEventDropped,
+    required this.onEventDragStateChanged,
     required this.onDateSelected,
   });
 
   final List<DateTime> days;
   final List<CalendarEvent> events;
+  final bool centerEventTitles;
+  final CalendarEventSortPriority eventSortPriority;
+  final List<String> categoryOrder;
+  final CalendarEventDropCallback? onEventDropped;
+  final ValueChanged<CalendarEvent?> onEventDragStateChanged;
   final ValueChanged<DateTime> onDateSelected;
 
   @override
   Widget build(BuildContext context) {
     final compact = days.length > 1;
-    return ConstrainedBox(
+    final eventComparator = calendarEventComparator(
+      priority: eventSortPriority,
+      categoryOrder: categoryOrder,
+    );
+    final eventsByDay = <DateTime, List<CalendarEvent>>{
+      for (final day in days)
+        DateTime(day.year, day.month, day.day): _eventsForDate(
+          events,
+          day,
+          eventComparator,
+        ),
+    };
+    final rowCount = eventsByDay.values.fold<int>(
+      0,
+      (current, events) => math.max(current, events.length),
+    );
+    final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.3);
+    final chipHeight = 24.0 * textScale;
+    const rowGap = 2.0;
+    const verticalPadding = 7.0;
+    const maximumVisibleRows = 4;
+    final visibleRows = math.min(rowCount, maximumVisibleRows);
+    final stripHeight = math.max(
+      34.0,
+      verticalPadding + visibleRows * chipHeight + (visibleRows - 1) * rowGap,
+    );
+
+    return SizedBox(
       key: const ValueKey('schedule-all-day-area'),
-      constraints: const BoxConstraints(minHeight: 34, maxHeight: 76),
+      height: stripHeight,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -220,29 +350,58 @@ class _AllDayEventStrip extends StatelessWidget {
               ),
             ),
           ),
-          for (final day in days)
-            Expanded(
-              child: InkWell(
-                onTap: () => onDateSelected(day),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 3, 2, 4),
-                  child: Column(
-                    children: [
-                      for (final event in _eventsForDate(events, day).take(2))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 2),
-                          child: _AllDayEventChip(event: event),
+          Expanded(
+            child: SingleChildScrollView(
+              key: const ValueKey('schedule-all-day-scroll'),
+              primary: false,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final day in days)
+                    Expanded(
+                      child: CalendarEventDateDropTarget(
+                        date: day,
+                        onEventDropped: onEventDropped,
+                        child: InkWell(
+                          onTap: () => onDateSelected(day),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(2, 3, 2, 4),
+                            child: Column(
+                              children: [
+                                for (final event
+                                    in eventsByDay[DateTime(
+                                      day.year,
+                                      day.month,
+                                      day.day,
+                                    )]!)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: rowGap,
+                                    ),
+                                    child: CalendarEventDraggable(
+                                      event: event,
+                                      enabled: onEventDropped != null,
+                                      onDragStateChanged: (dragging) =>
+                                          onEventDragStateChanged(
+                                            dragging ? event : null,
+                                          ),
+                                      child: _AllDayEventChip(
+                                        event: event,
+                                        centerTitle: centerEventTitles,
+                                        height: chipHeight,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
-                      if (_eventsForDate(events, day).length > 2)
-                        Text(
-                          '+${_eventsForDate(events, day).length - 2}',
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                    ],
-                  ),
-                ),
+                      ),
+                    ),
+                ],
               ),
             ),
+          ),
         ],
       ),
     );
@@ -250,27 +409,49 @@ class _AllDayEventStrip extends StatelessWidget {
 }
 
 class _AllDayEventChip extends StatelessWidget {
-  const _AllDayEventChip({required this.event});
+  const _AllDayEventChip({
+    required this.event,
+    required this.centerTitle,
+    required this.height,
+  });
 
   final CalendarEvent event;
+  final bool centerTitle;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(event.colorValue);
+    final categoryColor = Color(event.colorValue);
+    final color = calendarEventAccentColor(
+      context,
+      categoryColor,
+      completed: event.completed,
+    );
+    final backgroundColor = calendarEventBackgroundColor(
+      context,
+      categoryColor,
+      completed: event.completed,
+      categoryAlpha: 0.17,
+    );
     return Container(
-      height: 24,
+      height: height,
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.17),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(5),
         border: BorderDirectional(start: BorderSide(color: color, width: 3)),
       ),
       child: Text(
         context.l10n.eventTitle(event.title, holiday: event.holiday),
+        textAlign: centerTitle ? TextAlign.center : TextAlign.start,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+        style: calendarEventCompletionStyle(
+          context,
+          Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+          completed: event.completed,
+        ),
       ),
     );
   }
@@ -281,6 +462,11 @@ class _ScheduleTimeGrid extends StatelessWidget {
     required this.days,
     required this.events,
     required this.use24HourTime,
+    required this.centerEventTitles,
+    required this.eventSortPriority,
+    required this.categoryOrder,
+    required this.onEventDropped,
+    required this.onEventDragStateChanged,
     required this.onDateSelected,
   });
 
@@ -289,6 +475,11 @@ class _ScheduleTimeGrid extends StatelessWidget {
   final List<DateTime> days;
   final List<CalendarEvent> events;
   final bool use24HourTime;
+  final bool centerEventTitles;
+  final CalendarEventSortPriority eventSortPriority;
+  final List<String> categoryOrder;
+  final CalendarEventDropCallback? onEventDropped;
+  final ValueChanged<CalendarEvent?> onEventDragStateChanged;
   final ValueChanged<DateTime> onDateSelected;
 
   @override
@@ -296,9 +487,16 @@ class _ScheduleTimeGrid extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final compact = days.length > 1;
     final gutterWidth = compact ? 42.0 : 54.0;
+    final eventComparator = calendarEventComparator(
+      priority: eventSortPriority,
+      categoryOrder: categoryOrder,
+    );
     final layouts = <int, List<_TimelineSegmentLayout>>{
       for (var index = 0; index < days.length; index++)
-        index: _layoutSegments(_segmentsForDate(events, days[index])),
+        index: _layoutSegments(
+          _segmentsForDate(events, days[index], eventComparator),
+          eventComparator,
+        ),
     };
 
     return LayoutBuilder(
@@ -348,9 +546,14 @@ class _ScheduleTimeGrid extends StatelessWidget {
                   top: 0,
                   width: dayWidth,
                   height: 24 * _hourHeight,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: () => onDateSelected(days[dayIndex]),
+                  child: CalendarEventDateDropTarget(
+                    date: days[dayIndex],
+                    onEventDropped: onEventDropped,
+                    borderRadius: BorderRadius.zero,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () => onDateSelected(days[dayIndex]),
+                    ),
                   ),
                 ),
               for (final entry in layouts.entries)
@@ -391,7 +594,18 @@ class _ScheduleTimeGrid extends StatelessWidget {
       24.0,
       (layout.endMinute - layout.startMinute) / 60 * _hourHeight - 2,
     );
-    final color = Color(layout.event.colorValue);
+    final categoryColor = Color(layout.event.colorValue);
+    final color = calendarEventAccentColor(
+      context,
+      categoryColor,
+      completed: layout.event.completed,
+    );
+    final backgroundColor = calendarEventBackgroundColor(
+      context,
+      categoryColor,
+      completed: layout.event.completed,
+      categoryAlpha: 0.18,
+    );
     final locale = Localizations.localeOf(context).toLanguageTag();
     final start = layout.event.startAt;
     final time = use24HourTime
@@ -405,37 +619,50 @@ class _ScheduleTimeGrid extends StatelessWidget {
       top: top,
       width: math.max(1, laneWidth - gap),
       height: height,
-      child: Material(
-        color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(5),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => onDateSelected(day),
-          child: Container(
-            padding: const EdgeInsetsDirectional.fromSTEB(5, 3, 3, 2),
-            decoration: BoxDecoration(
-              border: BorderDirectional(
-                start: BorderSide(color: color, width: 3),
+      child: CalendarEventDraggable(
+        event: layout.event,
+        enabled: onEventDropped != null,
+        onDragStateChanged: (dragging) =>
+            onEventDragStateChanged(dragging ? layout.event : null),
+        child: Material(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(5),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => onDateSelected(day),
+            child: Container(
+              padding: const EdgeInsetsDirectional.fromSTEB(5, 3, 3, 2),
+              decoration: BoxDecoration(
+                border: BorderDirectional(
+                  start: BorderSide(color: color, width: 3),
+                ),
               ),
-            ),
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: context.l10n.eventTitle(
-                      layout.event.title,
-                      holiday: layout.event.holiday,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: context.l10n.eventTitle(
+                        layout.event.title,
+                        holiday: layout.event.holiday,
+                      ),
+                      style: calendarEventCompletionStyle(
+                        context,
+                        const TextStyle(fontWeight: FontWeight.w600),
+                        completed: layout.event.completed,
+                      ),
                     ),
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  TextSpan(text: '\n$time'),
-                ],
+                    TextSpan(text: '\n$time'),
+                  ],
+                ),
+                maxLines: height >= 42 ? 3 : 1,
+                textAlign: centerEventTitles
+                    ? TextAlign.center
+                    : TextAlign.start,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: color, height: 1.15),
               ),
-              maxLines: height >= 42 ? 3 : 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: color, height: 1.15),
             ),
           ),
         ),
@@ -518,6 +745,7 @@ class _TimelineSegmentLayout {
 List<_TimelineSegment> _segmentsForDate(
   List<CalendarEvent> events,
   DateTime date,
+  Comparator<CalendarEvent> eventComparator,
 ) {
   final dayStart = DateTime(date.year, date.month, date.day);
   final dayEnd = dayStart.add(const Duration(days: 1));
@@ -543,12 +771,15 @@ List<_TimelineSegment> _segmentsForDate(
   segments.sort((a, b) {
     final byStart = a.startMinute.compareTo(b.startMinute);
     if (byStart != 0) return byStart;
-    return b.endMinute.compareTo(a.endMinute);
+    return eventComparator(a.event, b.event);
   });
   return segments;
 }
 
-List<_TimelineSegmentLayout> _layoutSegments(List<_TimelineSegment> segments) {
+List<_TimelineSegmentLayout> _layoutSegments(
+  List<_TimelineSegment> segments,
+  Comparator<CalendarEvent> eventComparator,
+) {
   final layouts = <_TimelineSegmentLayout>[];
   var offset = 0;
   while (offset < segments.length) {
@@ -558,18 +789,19 @@ List<_TimelineSegmentLayout> _layoutSegments(List<_TimelineSegment> segments) {
       groupEnd = math.max(groupEnd, segments[end].endMinute);
       end++;
     }
-    final laneEnds = <int>[];
+    final group = segments.sublist(offset, end)
+      ..sort((a, b) => eventComparator(a.event, b.event));
+    final lanes = <List<_TimelineSegment>>[];
     final assigned = <({_TimelineSegment segment, int lane})>[];
-    for (final segment in segments.sublist(offset, end)) {
-      var lane = laneEnds.indexWhere(
-        (laneEnd) => laneEnd <= segment.startMinute,
+    for (final segment in group) {
+      var lane = lanes.indexWhere(
+        (items) => items.every((item) => !_segmentsOverlap(item, segment)),
       );
       if (lane == -1) {
-        lane = laneEnds.length;
-        laneEnds.add(segment.endMinute);
-      } else {
-        laneEnds[lane] = segment.endMinute;
+        lane = lanes.length;
+        lanes.add(<_TimelineSegment>[]);
       }
+      lanes[lane].add(segment);
       assigned.add((segment: segment, lane: lane));
     }
     for (final item in assigned) {
@@ -579,7 +811,7 @@ List<_TimelineSegmentLayout> _layoutSegments(List<_TimelineSegment> segments) {
           startMinute: item.segment.startMinute,
           endMinute: item.segment.endMinute,
           lane: item.lane,
-          laneCount: laneEnds.length,
+          laneCount: lanes.length,
         ),
       );
     }
@@ -588,7 +820,16 @@ List<_TimelineSegmentLayout> _layoutSegments(List<_TimelineSegment> segments) {
   return layouts;
 }
 
-List<CalendarEvent> _eventsForDate(List<CalendarEvent> events, DateTime date) {
+bool _segmentsOverlap(_TimelineSegment first, _TimelineSegment second) {
+  return first.startMinute < second.endMinute &&
+      first.endMinute > second.startMinute;
+}
+
+List<CalendarEvent> _eventsForDate(
+  List<CalendarEvent> events,
+  DateTime date,
+  Comparator<CalendarEvent> eventComparator,
+) {
   final start = DateTime(date.year, date.month, date.day);
   final end = start.add(const Duration(days: 1));
   return events
@@ -596,10 +837,16 @@ List<CalendarEvent> _eventsForDate(List<CalendarEvent> events, DateTime date) {
         (event) => event.startAt.isBefore(end) && event.endAt.isAfter(start),
       )
       .toList()
-    ..sort((a, b) => a.startAt.compareTo(b.startAt));
+    ..sort(eventComparator);
 }
 
 bool _isSameDay(DateTime first, DateTime second) =>
     first.year == second.year &&
     first.month == second.month &&
     first.day == second.day;
+
+bool _eventOccursOnDate(CalendarEvent event, DateTime date) {
+  final start = DateTime(date.year, date.month, date.day);
+  final end = start.add(const Duration(days: 1));
+  return event.startAt.isBefore(end) && event.endAt.isAfter(start);
+}

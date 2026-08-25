@@ -36,6 +36,7 @@ class NativeAlarmService implements AlarmService {
   Future<void> scheduleEventAlarm(CalendarEvent event) async {
     if (!_isSupportedPlatform ||
         !event.alarmEnabled ||
+        event.completed ||
         event.isRecurring ||
         event.isDeleted ||
         event.systemEvent ||

@@ -36,6 +36,7 @@ class EventRecords extends Table {
   TextColumn get deviceId => text().withDefault(const Constant(''))();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();
   BoolColumn get showDday => boolean().withDefault(const Constant(false))();
+  BoolColumn get completed => boolean().withDefault(const Constant(false))();
   BoolColumn get alarmEnabled => boolean().withDefault(const Constant(false))();
   IntColumn get allDayAlarmMinutes =>
       integer().withDefault(const Constant(9 * 60))();
@@ -46,12 +47,14 @@ class EventRecords extends Table {
 
 @DriftDatabase(tables: [EventRecords])
 class AppDatabase extends _$AppDatabase {
+  static const currentSchemaVersion = 7;
+
   AppDatabase() : super(_openConnection());
 
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => currentSchemaVersion;
 
   @override
   MigrationStrategy get migration {
@@ -93,6 +96,9 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 6) {
           await migrator.alterTable(TableMigration(eventRecords));
+        }
+        if (from < 7 && !await _eventRecordsHasColumn('completed')) {
+          await migrator.addColumn(eventRecords, eventRecords.completed);
         }
       },
     );

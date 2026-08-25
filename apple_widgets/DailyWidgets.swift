@@ -1,8 +1,12 @@
 import SwiftUI
 import WidgetKit
+import AppIntents
 #if os(iOS)
+import UIKit
 import ActivityKit
 import AlarmKit
+#elseif os(macOS)
+import AppKit
 #endif
 
 #if os(macOS)
@@ -11,15 +15,28 @@ private let appGroup = "A6Y73X2ZLS.com.littlebit0.daily.widgets"
 private let appGroup = "group.com.littlebit0.daily.widgets"
 #endif
 private let snapshotFileName = "daily-widget-snapshot.json"
+private let todoActionsFileName = "daily-widget-todo-actions.json"
+private let todoActionsChangedNotification = "com.littlebit0.daily.widgetTodoActionsChanged"
+private enum DailyWidgetKind {
+  static let today = "DailyTodayWidget"
+  static let calendar = "DailyMonthWidget"
+  static let dday = "DailyDdayWidget"
+}
+
+private func reloadDailyWidgetTimelines() {
+  WidgetCenter.shared.reloadAllTimelines()
+}
 
 struct DailyWidgetEvent: Codable, Identifiable {
   let id: String
+  let eventId: String?
   let title: String
   let timeLabel: String
   let color: Int
   let startAt: Int64?
   let endAt: Int64?
   let allDay: Bool?
+  let completed: Bool?
 
   var startDate: Date? { startAt.map { Date(timeIntervalSince1970: Double($0) / 1000) } }
   var endDate: Date? { endAt.map { Date(timeIntervalSince1970: Double($0) / 1000) } }
@@ -27,8 +44,121 @@ struct DailyWidgetEvent: Codable, Identifiable {
 
 struct DailyWidgetMonthEvent: Codable, Identifiable {
   let id: String
+  let eventId: String?
   let title: String
   let color: Int
+  let completed: Bool?
+}
+
+private enum DailyWidgetTodoActionStore {
+  static func append(eventId: String, completed: Bool) throws {
+    guard let containerURL = FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: appGroup
+    ) else {
+      throw NSError(
+        domain: "DailyWidgets",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "위젯 공유 저장소를 열 수 없습니다."]
+      )
+    }
+    let actionsURL = containerURL.appendingPathComponent(todoActionsFileName)
+    var actions: [[String: Any]] = []
+    if let data = try? Data(contentsOf: actionsURL),
+       let decoded = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+      actions = decoded
+    }
+    actions.append([
+      "token": UUID().uuidString,
+      "eventId": eventId,
+      "completed": completed,
+    ])
+    let data = try JSONSerialization.data(withJSONObject: actions)
+    try data.write(to: actionsURL, options: .atomic)
+    try updateSnapshot(
+      at: containerURL.appendingPathComponent(snapshotFileName),
+      eventId: eventId,
+      completed: completed
+    )
+    notifyApp()
+  }
+
+  private static func updateSnapshot(at url: URL, eventId: String, completed: Bool) throws {
+    guard let data = try? Data(contentsOf: url),
+          var snapshot = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return
+    }
+    for key in ["todayEvents", "scheduleEvents", "ddays"] {
+      guard var events = snapshot[key] as? [[String: Any]] else { continue }
+      update(&events, eventId: eventId, completed: completed)
+      snapshot[key] = events
+    }
+    if var days = snapshot["monthDays"] as? [[String: Any]] {
+      for index in days.indices {
+        guard var events = days[index]["events"] as? [[String: Any]] else { continue }
+        update(&events, eventId: eventId, completed: completed)
+        days[index]["events"] = events
+      }
+      snapshot["monthDays"] = days
+    }
+    snapshot["generatedAt"] = Int64(Date().timeIntervalSince1970 * 1000)
+    let updated = try JSONSerialization.data(withJSONObject: snapshot)
+    try updated.write(to: url, options: .atomic)
+  }
+
+  private static func update(
+    _ events: inout [[String: Any]],
+    eventId: String,
+    completed: Bool
+  ) {
+    for index in events.indices where
+      (events[index]["eventId"] as? String ?? events[index]["id"] as? String) == eventId {
+      events[index]["completed"] = completed
+    }
+  }
+
+  private static func notifyApp() {
+    #if os(macOS)
+    DistributedNotificationCenter.default().postNotificationName(
+      Notification.Name(todoActionsChangedNotification),
+      object: nil,
+      deliverImmediately: true
+    )
+    #else
+    CFNotificationCenterPostNotification(
+      CFNotificationCenterGetDarwinNotifyCenter(),
+      CFNotificationName(todoActionsChangedNotification as CFString),
+      nil,
+      nil,
+      true
+    )
+    #endif
+  }
+}
+
+@available(iOS 17.0, macOS 14.0, *)
+struct DailyToggleTodoIntent: AppIntent {
+  static var title: LocalizedStringResource = "일정 완료 상태 변경"
+  static var description = IntentDescription("Daily 일정의 완료 상태를 변경합니다.")
+  static var openAppWhenRun = false
+
+  @Parameter(title: "일정 ID") var eventId: String
+  @Parameter(title: "완료") var targetCompleted: Bool
+
+  init() {}
+
+  init(eventId: String, targetCompleted: Bool) {
+    self.eventId = eventId
+    self.targetCompleted = targetCompleted
+  }
+
+  func perform() async throws -> some IntentResult {
+    try DailyWidgetTodoActionStore.append(
+      eventId: eventId,
+      completed: targetCompleted
+    )
+    reloadDailyWidgetTimelines()
+    return .result()
+  }
 }
 
 struct DailyWidgetDay: Codable, Identifiable {
@@ -149,7 +279,7 @@ private struct DailyWidgetEventLabel: View {
   var body: some View {
     Text(event.title)
       .font(.system(size: fontSize, weight: .medium))
-      .foregroundStyle(Color.dailyText)
+      .dailyTodoCompletion(event.completed == true)
       .lineLimit(1)
       .minimumScaleFactor(0.7)
       .padding(.horizontal, 2)
@@ -159,12 +289,39 @@ private struct DailyWidgetEventLabel: View {
   }
 }
 
+private struct DailyTodoToggle: View {
+  let event: DailyWidgetEvent
+
+  @ViewBuilder
+  var body: some View {
+    if #available(iOS 17.0, macOS 14.0, *) {
+      Button(
+        intent: DailyToggleTodoIntent(
+          eventId: event.eventId ?? event.id,
+          targetCompleted: event.completed != true
+        )
+      ) {
+        Image(systemName: event.completed == true ? "checkmark.circle.fill" : "circle")
+          .font(.system(size: 16, weight: .medium))
+          .foregroundStyle(event.completed == true ? Color.blue : Color.dailySecondary)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(event.completed == true ? "미완료로 변경" : "완료로 변경")
+    } else {
+      Image(systemName: event.completed == true ? "checkmark.circle.fill" : "circle")
+        .font(.system(size: 16, weight: .medium))
+        .foregroundStyle(event.completed == true ? Color.blue : Color.dailySecondary)
+    }
+  }
+}
+
 struct DailyWidgetDday: Codable, Identifiable {
   let id: String
   let title: String
   let dateLabel: String
   let daysRemaining: Int
   let color: Int
+  let completed: Bool?
 
   var counter: String {
     if daysRemaining == 0 { return "D-day" }
@@ -174,6 +331,7 @@ struct DailyWidgetDday: Codable, Identifiable {
 
 struct DailyWidgetSnapshot: Codable {
   let generatedAt: Int64
+  let themeMode: String?
   let monthTitle: String
   let weekTitle: String?
   let weekStartsOnMonday: Bool
@@ -217,6 +375,7 @@ struct DailyWidgetSnapshot: Codable {
 
   static let empty = DailyWidgetSnapshot(
     generatedAt: 0,
+    themeMode: nil,
     monthTitle: "Daily",
     weekTitle: nil,
     weekStartsOnMonday: false,
@@ -297,6 +456,7 @@ struct DailyTodayWidgetView: View {
       } else {
         ForEach(entry.snapshot.todayEvents.prefix(visibleCount)) { event in
           HStack(spacing: 7) {
+            DailyTodoToggle(event: event)
             Capsule()
               .fill(Color.daily(argb: event.color))
               .frame(width: 3, height: 20)
@@ -306,7 +466,7 @@ struct DailyTodayWidgetView: View {
               .frame(width: 38, alignment: .leading)
             Text(event.title)
               .font(.subheadline)
-              .foregroundStyle(Color.dailyText)
+              .dailyTodoCompletion(event.completed == true)
               .lineLimit(1)
             Spacer(minLength: 0)
           }
@@ -323,7 +483,7 @@ struct DailyTodayWidgetView: View {
         Spacer(minLength: 0)
       }
     }
-    .dailyWidgetBackground()
+    .dailyWidgetBackground(themeMode: entry.snapshot.themeMode)
   }
 }
 
@@ -354,6 +514,7 @@ struct DailyLockScreenTodayView: View {
           Image(systemName: "calendar")
           Text(timeLabel(for: next))
           Text(next.title)
+            .dailyTodoCompletion(next.completed == true)
             .privacySensitive()
         }
       } else {
@@ -383,11 +544,13 @@ struct DailyLockScreenTodayView: View {
         } else {
           ForEach(events.prefix(2)) { event in
             HStack(spacing: 4) {
+              DailyTodoToggle(event: event)
               Text(timeLabel(for: event))
                 .font(.caption2)
                 .frame(width: 36, alignment: .leading)
               Text(event.title)
                 .font(.caption)
+                .dailyTodoCompletion(event.completed == true)
                 .lineLimit(1)
                 .privacySensitive()
             }
@@ -472,7 +635,7 @@ struct DailyMonthWidgetView: View {
         }
       }
     }
-    .dailyWidgetBackground()
+    .dailyWidgetBackground(themeMode: entry.snapshot.themeMode)
   }
 }
 
@@ -574,7 +737,7 @@ struct DailyWeekWidgetView: View {
         }
       }
     }
-    .dailyWidgetBackground()
+    .dailyWidgetBackground(themeMode: entry.snapshot.themeMode)
   }
 }
 
@@ -614,7 +777,7 @@ struct DailyDdayWidgetView: View {
             VStack(alignment: .leading, spacing: 1) {
               Text(item.title)
                 .font(.subheadline)
-                .foregroundStyle(Color.dailyText)
+                .dailyTodoCompletion(item.completed == true)
                 .lineLimit(1)
               Text(item.dateLabel)
                 .font(.caption2)
@@ -629,19 +792,66 @@ struct DailyDdayWidgetView: View {
         Spacer(minLength: 0)
       }
     }
-    .dailyWidgetBackground()
+    .dailyWidgetBackground(themeMode: entry.snapshot.themeMode)
+  }
+}
+
+private struct DailyWidgetBackgroundModifier: ViewModifier {
+  @Environment(\.colorScheme) private var systemColorScheme
+  let themeMode: String?
+
+  private var resolvedColorScheme: ColorScheme {
+    switch themeMode {
+    case "light":
+      return .light
+    case "dark":
+      return .dark
+    default:
+      return systemColorScheme
+    }
+  }
+
+  private var themeIdentity: String {
+    resolvedColorScheme == .dark ? "daily-widget-dark" : "daily-widget-light"
+  }
+
+  func body(content: Content) -> some View {
+    let colorScheme = resolvedColorScheme
+    let background = colorScheme == .dark ? Color.black : Color.white
+    content
+      .environment(\.colorScheme, colorScheme)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .containerBackground(background, for: .widget)
+      .id(themeIdentity)
   }
 }
 
 private extension View {
-  func dailyWidgetBackground() -> some View {
-    containerBackground(Color(red: 0.98, green: 0.985, blue: 1.0), for: .widget)
+  @ViewBuilder
+  func dailyTodoCompletion(_ completed: Bool) -> some View {
+    if completed {
+      self
+        .foregroundStyle(Color.dailySecondary)
+        .overlay(alignment: .center) {
+          VStack(spacing: 1.5) {
+            Rectangle().frame(height: 0.9)
+            Rectangle().frame(height: 0.9)
+          }
+          .foregroundStyle(Color.primary.opacity(0.78))
+        }
+    } else {
+      self.foregroundStyle(Color.dailyText)
+    }
+  }
+
+  func dailyWidgetBackground(themeMode: String?) -> some View {
+    modifier(DailyWidgetBackgroundModifier(themeMode: themeMode))
   }
 }
 
 private extension Color {
-  static let dailyText = Color(red: 0.08, green: 0.09, blue: 0.11)
-  static let dailySecondary = Color(red: 0.40, green: 0.43, blue: 0.49)
+  static let dailyText = Color.primary
+  static let dailySecondary = Color.secondary
 
   static func daily(argb: Int) -> Color {
     let red = Double((argb >> 16) & 0xff) / 255.0
@@ -649,10 +859,11 @@ private extension Color {
     let blue = Double(argb & 0xff) / 255.0
     return Color(red: red, green: green, blue: blue)
   }
+
 }
 
 struct DailyTodayWidget: Widget {
-  let kind = "DailyTodayWidget"
+  let kind = DailyWidgetKind.today
 
   private var supportedFamilies: [WidgetFamily] {
     #if os(iOS)
@@ -679,7 +890,7 @@ struct DailyTodayWidget: Widget {
 }
 
 struct DailyMonthWidget: Widget {
-  let kind = "DailyMonthWidget"
+  let kind = DailyWidgetKind.calendar
 
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: kind, provider: DailyWidgetProvider()) { entry in
@@ -692,7 +903,7 @@ struct DailyMonthWidget: Widget {
 }
 
 struct DailyDdayWidget: Widget {
-  let kind = "DailyDdayWidget"
+  let kind = DailyWidgetKind.dday
 
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: kind, provider: DailyWidgetProvider()) { entry in

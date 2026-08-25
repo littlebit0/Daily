@@ -1,0 +1,235 @@
+import 'dart:io';
+
+import 'package:daily/core/migration/todo_database_migration_service.dart';
+import 'package:daily/features/events/data/app_database.dart';
+import 'package:daily/features/events/data/drift_event_repository.dart';
+import 'package:daily/features/events/domain/calendar_event.dart';
+import 'package:daily/features/events/domain/event_category.dart';
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+void main() {
+  late Directory directory;
+  late File databaseFile;
+
+  setUp(() async {
+    directory = await Directory.systemTemp.createTemp('daily-todo-migration-');
+    databaseFile = File('${directory.path}/daily.sqlite');
+  });
+
+  tearDown(() async {
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test(
+    'migrates existing events to incomplete Todo items with a snapshot',
+    () async {
+      await _createSchemaSixDatabase(databaseFile, [_event(id: 'local')]);
+      var backupCalls = 0;
+      final service = TodoDatabaseMigrationService(
+        databaseFile: () async => databaseFile,
+        hasLinkedGoogleAccount: () => false,
+        loadRemoteEvents: () async => null,
+        backupMigratedEvents: () async => backupCalls += 1,
+      );
+      addTearDown(service.dispose);
+
+      final result = await service.migrateIfNeeded();
+
+      expect(result.migrated, isTrue);
+      expect(result.backupPending, isFalse);
+      expect(result.snapshotPath, isNotNull);
+      expect(await File(result.snapshotPath!).exists(), isTrue);
+      expect(backupCalls, 0);
+      final raw = sqlite3.open(databaseFile.path);
+      addTearDown(raw.close);
+      expect(_userVersion(raw), AppDatabase.currentSchemaVersion);
+      expect(_hasColumn(raw, 'completed'), isTrue);
+      final row = raw.select(
+        'SELECT completed, sync_status FROM event_records WHERE id = ?',
+        ['local'],
+      ).single;
+      expect(row['completed'], 0);
+      expect(row['sync_status'], 'pending');
+    },
+  );
+
+  test(
+    'merges a newer remote event before migration and backs it up',
+    () async {
+      final local = _event(id: 'shared', syncStatus: 'synced');
+      await _createSchemaSixDatabase(databaseFile, [local]);
+      var backupCalls = 0;
+      final remote = local.copyWith(
+        title: '원격 최신 일정',
+        updatedAt: local.updatedAt.add(const Duration(hours: 1)),
+        completed: true,
+        syncStatus: 'synced',
+      );
+      final service = TodoDatabaseMigrationService(
+        databaseFile: () async => databaseFile,
+        hasLinkedGoogleAccount: () => true,
+        loadRemoteEvents: () async => [remote],
+        backupMigratedEvents: () async => backupCalls += 1,
+      );
+      addTearDown(service.dispose);
+
+      final result = await service.migrateIfNeeded();
+
+      expect(result.backupPending, isFalse);
+      expect(backupCalls, 1);
+      final raw = sqlite3.open(databaseFile.path);
+      addTearDown(raw.close);
+      final row = raw.select(
+        'SELECT title, completed, sync_status FROM event_records WHERE id = ?',
+        ['shared'],
+      ).single;
+      expect(row['title'], '원격 최신 일정');
+      expect(row['completed'], 1);
+      expect(row['sync_status'], 'pending');
+    },
+  );
+
+  test('never replaces a pending local event with a remote snapshot', () async {
+    final local = _event(id: 'pending-local', syncStatus: 'pending');
+    await _createSchemaSixDatabase(databaseFile, [local]);
+    final remote = local.copyWith(
+      title: '원격 일정',
+      updatedAt: local.updatedAt.add(const Duration(days: 1)),
+      completed: true,
+      syncStatus: 'synced',
+    );
+    final service = TodoDatabaseMigrationService(
+      databaseFile: () async => databaseFile,
+      hasLinkedGoogleAccount: () => true,
+      loadRemoteEvents: () async => [remote],
+      backupMigratedEvents: () async {},
+    );
+    addTearDown(service.dispose);
+
+    await service.migrateIfNeeded();
+
+    final raw = sqlite3.open(databaseFile.path);
+    addTearDown(raw.close);
+    final row = raw.select(
+      'SELECT title, completed FROM event_records WHERE id = ?',
+      ['pending-local'],
+    ).single;
+    expect(row['title'], local.title);
+    expect(row['completed'], 0);
+  });
+
+  test(
+    'blocks startup and preserves the original when remote restore fails',
+    () async {
+      await _createSchemaSixDatabase(databaseFile, [_event(id: 'preserved')]);
+      final service = TodoDatabaseMigrationService(
+        databaseFile: () async => databaseFile,
+        hasLinkedGoogleAccount: () => true,
+        loadRemoteEvents: () async => null,
+        backupMigratedEvents: () async {},
+      );
+      addTearDown(service.dispose);
+
+      await expectLater(
+        service.migrateIfNeeded(),
+        throwsA(
+          isA<TodoMigrationException>().having(
+            (error) => error.stage,
+            'stage',
+            TodoMigrationStage.restoring,
+          ),
+        ),
+      );
+
+      final raw = sqlite3.open(databaseFile.path);
+      addTearDown(raw.close);
+      expect(_userVersion(raw), 6);
+      expect(_hasColumn(raw, 'completed'), isFalse);
+      expect(
+        raw.select('SELECT title FROM event_records WHERE id = ?', [
+          'preserved',
+        ]).single['title'],
+        '기존 일정',
+      );
+    },
+  );
+
+  test(
+    'keeps migrated rows pending when immediate cloud backup fails',
+    () async {
+      await _createSchemaSixDatabase(databaseFile, [
+        _event(id: 'backup-retry', syncStatus: 'synced'),
+      ]);
+      final service = TodoDatabaseMigrationService(
+        databaseFile: () async => databaseFile,
+        hasLinkedGoogleAccount: () => true,
+        loadRemoteEvents: () async => const [],
+        backupMigratedEvents: () async => throw StateError('offline'),
+      );
+      addTearDown(service.dispose);
+
+      final result = await service.migrateIfNeeded();
+
+      expect(result.migrated, isTrue);
+      expect(result.backupPending, isTrue);
+      final raw = sqlite3.open(databaseFile.path);
+      addTearDown(raw.close);
+      expect(
+        raw.select('SELECT sync_status FROM event_records WHERE id = ?', [
+          'backup-retry',
+        ]).single['sync_status'],
+        'pending',
+      );
+    },
+  );
+}
+
+Future<void> _createSchemaSixDatabase(
+  File file,
+  List<CalendarEvent> events,
+) async {
+  final database = AppDatabase.forTesting(NativeDatabase(file));
+  final repository = DriftEventRepository(database);
+  for (final event in events) {
+    await repository.save(event);
+  }
+  await database.close();
+
+  final raw = sqlite3.open(file.path);
+  try {
+    raw.execute('ALTER TABLE event_records DROP COLUMN completed');
+    raw.execute('PRAGMA user_version = 6');
+  } finally {
+    raw.close();
+  }
+}
+
+CalendarEvent _event({required String id, String syncStatus = 'synced'}) {
+  final now = DateTime(2026, 8, 21, 9);
+  return CalendarEvent(
+    id: id,
+    title: '기존 일정',
+    startAt: now,
+    endAt: now.add(const Duration(hours: 1)),
+    allDay: false,
+    category: EventCategory.basic,
+    colorValue: EventCategory.basic.colorValue,
+    createdAt: now,
+    updatedAt: now,
+    syncStatus: syncStatus,
+  );
+}
+
+int _userVersion(Database database) {
+  return database.select('PRAGMA user_version').single.values.single as int;
+}
+
+bool _hasColumn(Database database, String column) {
+  return database
+      .select('PRAGMA table_info(event_records)')
+      .any((row) => row['name'] == column);
+}

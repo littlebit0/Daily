@@ -107,6 +107,10 @@ DailyCalendar는 월간, 주간, 일간 및 연간 보기로 일정을 관리하
 자세한 내용은 [개인정보 처리방침](docs/PRIVACY_POLICY.md)과
 [개인정보 및 보안 설계](docs/PRIVACY_AND_SECURITY.md)를 확인하세요.
 
+익명 사용성 분석은 기본적으로 꺼져 있으며 사용자가 설정에서 명시적으로
+허용한 경우에만 작동합니다. 일정 내용, 검색어, 계정 정보, 광고 식별자 및
+지속적인 기기 식별자는 분석 데이터에 포함하지 않습니다.
+
 ## 동기화 방식
 
 DailyCalendar는 Google Drive AppData에 일정별 파일과 설정 파일을 분리해

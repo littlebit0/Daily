@@ -22,6 +22,43 @@ before public distribution.
 - Gemini API key, if used later, is stored through platform secure storage.
   The AI UI is currently disabled and marked as in development.
 
+## Anonymous Usage Analytics
+
+- Default state: disabled. Consent is a device-local setting and is not synced
+  through Google Drive.
+- Allowed data: screen/feature enum, success state, categorized error code,
+  bounded duration and slow-frame count, app version, platform, OS major.
+- Forbidden data: calendar content, search/free text, account metadata, tokens,
+  precise location, advertising IDs, persistent user or device IDs.
+- Identity boundary: the session UUID is memory-only. Queued event UUIDs exist
+  only for delivery deduplication and are removed after transmission.
+- Local retention: maximum 200 events and seven days. Disabling collection or
+  selecting delete removes the queue immediately.
+- Network isolation: analytics errors are swallowed outside the calendar and
+  Drive synchronization paths. Analytics never changes an event or sync result.
+- Server boundary: the receiver repeats strict schema validation, stores daily
+  aggregate groups for 90 days, and never persists request bodies, session IDs,
+  event IDs, accounts, or network addresses. Dedupe hashes expire after seven
+  days.
+- Transport: production builds must set an HTTPS `DAILY_ANALYTICS_ENDPOINT`.
+  HTTP is accepted only for localhost debug tests.
+
+See [Anonymous Analytics Deployment](ANALYTICS_DEPLOYMENT.md) for server and
+release configuration.
+
+## App Store Connect Update For Analytics
+
+Before distributing a build with a configured analytics endpoint:
+
+- Set `Data Used to Track You` to No. Daily does not combine this data across
+  apps or websites and does not use advertising identifiers.
+- Declare `Usage Data > Product Interaction` as collected for `Analytics`.
+- Mark it as not linked to the user's identity.
+- Do not select advertising, marketing, personalization, or third-party
+  tracking purposes.
+- Keep the privacy-policy URL pointing to the policy that contains the optional
+  analytics section above.
+
 ## Google Drive Sync
 
 - Sync uses the Google Drive `appDataFolder` scope:

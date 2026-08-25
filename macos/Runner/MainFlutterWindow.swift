@@ -8,44 +8,112 @@ private final class DailyAppleWidgets {
   static let channelName = "daily/apple_widgets"
   static let appGroup = "A6Y73X2ZLS.com.littlebit0.daily.widgets"
   static let snapshotFileName = "daily-widget-snapshot.json"
+  static let todoActionsFileName = "daily-widget-todo-actions.json"
+  static let todoActionsChangedNotification = Notification.Name(
+    "com.littlebit0.daily.widgetTodoActionsChanged"
+  )
+  private static var channel: FlutterMethodChannel?
+  private static var todoActionsObserver: NSObjectProtocol?
 
   static func register(with flutterViewController: FlutterViewController) {
-    let channel = FlutterMethodChannel(
+    channel = FlutterMethodChannel(
       name: channelName,
       binaryMessenger: flutterViewController.engine.binaryMessenger
     )
-    channel.setMethodCallHandler { call, result in
-      guard call.method == "updateSnapshot",
-            let snapshot = call.arguments as? [String: Any],
-            JSONSerialization.isValidJSONObject(snapshot) else {
-        result(FlutterMethodNotImplemented)
-        return
-      }
-      do {
-        let data = try JSONSerialization.data(withJSONObject: snapshot)
-        guard let containerURL = FileManager.default.containerURL(
-          forSecurityApplicationGroupIdentifier: appGroup
-        ) else {
-          NSLog("[DailyWidgets] App Group container is unavailable")
-          result(FlutterError(code: "app_group_unavailable", message: "위젯 공유 저장소를 열 수 없습니다.", details: nil))
+    channel?.setMethodCallHandler { call, result in
+      switch call.method {
+      case "updateSnapshot":
+        guard let snapshot = call.arguments as? [String: Any],
+              JSONSerialization.isValidJSONObject(snapshot) else {
+          result(FlutterError(code: "invalid_widget_snapshot", message: "위젯 데이터 형식이 올바르지 않습니다.", details: nil))
           return
         }
-        try data.write(
-          to: containerURL.appendingPathComponent(snapshotFileName),
-          options: .atomic
-        )
-        if #available(macOS 11.0, *) {
-          WidgetCenter.shared.reloadAllTimelines()
+        do {
+          try writeSnapshot(snapshot)
+          if #available(macOS 11.0, *) {
+            reloadTimelines()
+          }
+          if #available(macOS 15.0, *) {
+            DailySiriSearchIndexer.scheduleRefresh()
+          }
+          result(nil)
+        } catch {
+          NSLog("[DailyWidgets] Snapshot update failed: \(error.localizedDescription)")
+          result(FlutterError(code: "widget_snapshot_failed", message: error.localizedDescription, details: nil))
         }
-        if #available(macOS 15.0, *) {
-          DailySiriSearchIndexer.scheduleRefresh()
+      case "pendingTodoActions":
+        do {
+          result(try loadTodoActions())
+        } catch {
+          result(FlutterError(code: "widget_todo_read_failed", message: error.localizedDescription, details: nil))
         }
-        result(nil)
-      } catch {
-        NSLog("[DailyWidgets] Snapshot update failed: \(error.localizedDescription)")
-        result(FlutterError(code: "widget_snapshot_failed", message: error.localizedDescription, details: nil))
+      case "acknowledgeTodoActions":
+        let arguments = call.arguments as? [String: Any]
+        let tokens = Set(arguments?["tokens"] as? [String] ?? [])
+        do {
+          let remaining = try loadTodoActions().filter {
+            guard let token = $0["token"] as? String else { return false }
+            return !tokens.contains(token)
+          }
+          try writeTodoActions(remaining)
+          result(nil)
+        } catch {
+          result(FlutterError(code: "widget_todo_ack_failed", message: error.localizedDescription, details: nil))
+        }
+      default:
+        result(FlutterMethodNotImplemented)
       }
     }
+    if todoActionsObserver == nil {
+      todoActionsObserver = DistributedNotificationCenter.default().addObserver(
+        forName: todoActionsChangedNotification,
+        object: nil,
+        queue: .main
+      ) { _ in
+        DailyAppleWidgets.channel?.invokeMethod("todoActionsChanged", arguments: nil)
+      }
+    }
+  }
+
+  @available(macOS 11.0, *)
+  private static func reloadTimelines() {
+    WidgetCenter.shared.reloadAllTimelines()
+  }
+
+  private static func containerURL() throws -> URL {
+    guard let url = FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: appGroup
+    ) else {
+      throw NSError(
+        domain: "DailyWidgets",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "위젯 공유 저장소를 열 수 없습니다."]
+      )
+    }
+    return url
+  }
+
+  private static func writeSnapshot(_ snapshot: [String: Any]) throws {
+    let data = try JSONSerialization.data(withJSONObject: snapshot)
+    try data.write(
+      to: try containerURL().appendingPathComponent(snapshotFileName),
+      options: .atomic
+    )
+  }
+
+  private static func loadTodoActions() throws -> [[String: Any]] {
+    let url = try containerURL().appendingPathComponent(todoActionsFileName)
+    guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+    let data = try Data(contentsOf: url)
+    return try JSONSerialization.jsonObject(with: data) as? [[String: Any]] ?? []
+  }
+
+  private static func writeTodoActions(_ actions: [[String: Any]]) throws {
+    let data = try JSONSerialization.data(withJSONObject: actions)
+    try data.write(
+      to: try containerURL().appendingPathComponent(todoActionsFileName),
+      options: .atomic
+    )
   }
 }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:daily/core/analytics/product_analytics.dart';
 import 'package:daily/core/notifications/notification_service.dart';
 import 'package:daily/core/settings/app_settings.dart';
 import 'package:daily/core/settings/settings_repository.dart';
@@ -99,6 +100,250 @@ void main() {
   });
 
   test(
+    'manual restore defers a scheduled backup until restore completes',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final pending = _event(
+        id: 'pending-before-restore',
+        title: '복원 전 로컬 변경',
+        startAt: DateTime.utc(2026, 8, 21, 9),
+        endAt: DateTime.utc(2026, 8, 21, 10),
+        updatedAt: DateTime.utc(2026, 8, 21, 8),
+        syncStatus: 'pending',
+      );
+      await repository.save(pending);
+
+      final restoreStarted = Completer<void>();
+      final releaseRestore = Completer<void>();
+      final uploadRequests = <http.Request>[];
+      final httpClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-settings.json')) {
+            if (!restoreStarted.isCompleted) {
+              restoreStarted.complete();
+              await releaseRestore.future;
+            }
+            return _driveFiles([]);
+          }
+          if (query.contains('daily-sync-v2-event-')) {
+            return _driveFiles([]);
+          }
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/upload/drive/v3/files') {
+          uploadRequests.add(request);
+          return _jsonResponse({'id': 'pending-before-restore-file'});
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+        changeSyncDelay: const Duration(milliseconds: 50),
+      );
+      addTearDown(service.dispose);
+
+      await service.queueEventUpsert(pending);
+      final restore = service.restoreNow();
+      await restoreStarted.future;
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(uploadRequests, isEmpty);
+
+      releaseRestore.complete();
+      await restore;
+      await Future<void>.delayed(Duration.zero);
+      expect(uploadRequests, isEmpty);
+
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(uploadRequests, hasLength(1));
+    },
+  );
+
+  test(
+    'manual restore leaves local settings and events unchanged on partial download failure',
+    () async {
+      SharedPreferences.setMockInitialValues({'weekStartsOnMonday': false});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final local = _event(
+        id: 'local-before-failure',
+        title: '로컬 보존 일정',
+        startAt: DateTime.utc(2026, 8, 21, 9),
+        endAt: DateTime.utc(2026, 8, 21, 10),
+        updatedAt: DateTime.utc(2026, 8, 21, 8),
+        syncStatus: 'pending',
+      );
+      await repository.save(local);
+      final requests = <http.Request>[];
+      final httpClient = MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-settings.json')) {
+            return _driveFiles([
+              {'id': 'settings-file', 'name': 'daily-sync-v2-settings.json'},
+            ]);
+          }
+          if (query.contains('daily-sync-v2-event-')) {
+            return _driveFiles([
+              {
+                'id': 'valid-event-file',
+                'name': 'daily-sync-v2-event-valid-event.json',
+              },
+              {
+                'id': 'broken-event-file',
+                'name': 'daily-sync-v2-event-broken-event.json',
+              },
+            ]);
+          }
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/settings-file') {
+          return _jsonResponse({
+            'schemaVersion': 2,
+            'type': 'settings',
+            'settings': {'weekStartsOnMonday': true},
+          });
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/valid-event-file') {
+          return _jsonResponse(
+            _eventFileJson(
+              id: 'valid-event',
+              title: '원격 일정',
+              startAt: '2026-08-22T09:00:00.000Z',
+              endAt: '2026-08-22T10:00:00.000Z',
+            ),
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/broken-event-file') {
+          return http.Response('server unavailable', 500);
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+      final service = _service(
+        repository: repository,
+        notificationService: _FakeNotificationService(),
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      await expectLater(
+        service.restoreNow(),
+        throwsA(isA<GoogleDriveSyncException>()),
+      );
+
+      expect(
+        SettingsRepository(preferences: preferences).load().weekStartsOnMonday,
+        isFalse,
+      );
+      expect(repository.events, hasLength(1));
+      final preserved = await repository.findById(local.id);
+      expect(preserved?.title, local.title);
+      expect(preserved?.updatedAt, local.updatedAt);
+      expect(preserved?.syncStatus, local.syncStatus);
+      expect(await repository.findById('valid-event'), isNull);
+      expect(requests.where((request) => request.method != 'GET'), isEmpty);
+      expect(service.statusNotifier.value.message, '동기화 실패');
+    },
+  );
+
+  test(
+    'manual restore rolls settings back when atomic event merge fails',
+    () async {
+      SharedPreferences.setMockInitialValues({'weekStartsOnMonday': false});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository()..failAtomicRestore = true;
+      final local = _event(
+        id: 'local-before-transaction-failure',
+        title: '트랜잭션 전 일정',
+        startAt: DateTime.utc(2026, 8, 21, 9),
+        endAt: DateTime.utc(2026, 8, 21, 10),
+        updatedAt: DateTime.utc(2026, 8, 21, 8),
+      );
+      await repository.save(local);
+      final requests = <http.Request>[];
+      final httpClient = MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-settings.json')) {
+            return _driveFiles([
+              {'id': 'settings-file', 'name': 'daily-sync-v2-settings.json'},
+            ]);
+          }
+          if (query.contains('daily-sync-v2-event-')) {
+            return _driveFiles([
+              {
+                'id': 'remote-event-file',
+                'name': 'daily-sync-v2-event-remote-event.json',
+              },
+            ]);
+          }
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/settings-file') {
+          return _jsonResponse({
+            'schemaVersion': 2,
+            'type': 'settings',
+            'settings': {'weekStartsOnMonday': true},
+          });
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/remote-event-file') {
+          return _jsonResponse(
+            _eventFileJson(
+              id: 'remote-event',
+              title: '원격 일정',
+              startAt: '2026-08-22T09:00:00.000Z',
+              endAt: '2026-08-22T10:00:00.000Z',
+            ),
+          );
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+      final service = _service(
+        repository: repository,
+        notificationService: _FakeNotificationService(),
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      await expectLater(service.restoreNow(), throwsA(isA<StateError>()));
+
+      expect(
+        SettingsRepository(preferences: preferences).load().weekStartsOnMonday,
+        isFalse,
+      );
+      expect(repository.events, hasLength(1));
+      final preserved = await repository.findById(local.id);
+      expect(preserved?.title, local.title);
+      expect(preserved?.updatedAt, local.updatedAt);
+      expect(service.settingsRevisionNotifier.value, 0);
+      expect(requests.where((request) => request.method != 'GET'), isEmpty);
+    },
+  );
+
+  test(
     'backup-only event sync uploads only the changed v2 event file',
     () async {
       SharedPreferences.setMockInitialValues({});
@@ -112,7 +357,7 @@ void main() {
         endAt: DateTime(2026, 6, 22),
         updatedAt: DateTime(2026, 5, 30, 18),
         syncStatus: 'pending',
-      );
+      ).copyWith(completed: true);
       await repository.save(changed);
 
       final uploadedEventBodies = <Map<String, Object?>>[];
@@ -178,6 +423,7 @@ void main() {
       expect(event['startDate'], '2026-06-20');
       expect(event['endDate'], '2026-06-22');
       expect(event['title'], '6.20~21 캠핑 약속');
+      expect(event['completed'], isTrue);
       expect((await repository.findById('queued-event'))!.syncStatus, 'synced');
       expect(
         requests.any(
@@ -185,6 +431,109 @@ void main() {
         ),
         isFalse,
       );
+    },
+  );
+
+  test(
+    'migration download reads Todo completion without mutating local data',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _MemoryEventRepository();
+      final notificationService = _FakeNotificationService();
+      final httpClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          return _driveFiles([
+            {
+              'id': 'migration-event-file',
+              'name': 'daily-sync-v2-event-migration-event.json',
+            },
+          ]);
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/drive/v3/files/migration-event-file') {
+          return _jsonResponse(
+            _eventFileJson(
+              id: 'migration-event',
+              title: '완료한 일정',
+              startAt: '2026-08-21T09:00:00.000Z',
+              endAt: '2026-08-21T10:00:00.000Z',
+              completed: true,
+            ),
+          );
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+      final service = _service(
+        repository: repository,
+        notificationService: notificationService,
+        preferences: preferences,
+        httpClient: httpClient,
+      );
+      addTearDown(service.dispose);
+
+      final events = await service.downloadEventsForMigration();
+
+      expect(events, hasLength(1));
+      expect(events!.single.completed, isTrue);
+      expect(await repository.allEventsForSync(), isEmpty);
+    },
+  );
+
+  test(
+    'queued settings change uploads the settings file without an event',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      await settingsRepository.save(
+        settingsRepository.load().copyWith(
+          calendarManualEventOrders: {
+            '2026-08-21': CalendarManualEventOrder(
+              eventKeys: const ['second', 'first'],
+              updatedAt: DateTime.utc(2026, 8, 21, 3),
+              deviceId: 'local-device',
+            ),
+          },
+        ),
+      );
+      final uploaded = <String>[];
+      final httpClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.path == '/drive/v3/files') {
+          final query = request.url.queryParameters['q'] ?? '';
+          if (query.contains('daily-sync-v2-settings.json')) {
+            return _driveFiles([]);
+          }
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/upload/drive/v3/files') {
+          uploaded.add(request.body);
+          return _jsonResponse({'id': 'settings-file'});
+        }
+        return http.Response(
+          'unexpected ${request.method} ${request.url}',
+          500,
+        );
+      });
+      final service = _service(
+        repository: _MemoryEventRepository(),
+        notificationService: _FakeNotificationService(),
+        preferences: preferences,
+        httpClient: httpClient,
+        changeSyncDelay: const Duration(milliseconds: 20),
+      );
+      addTearDown(service.dispose);
+
+      await service.syncPendingChangesNow();
+
+      expect(uploaded, hasLength(1));
+      expect(uploaded.single, contains('calendarManualEventOrders'));
+      expect(uploaded.single, contains('2026-08-21'));
+      expect(uploaded.single, contains('second'));
+      expect(settingsRepository.hasPendingSettingsSync, isFalse);
     },
   );
 
@@ -933,10 +1282,15 @@ void main() {
                 {
                   'id': 'holiday',
                   'label': '공휴일',
-                  'colorValue': EventCategory.holiday.colorValue,
+                  'colorValue': 0xffa855f7,
                   'locked': true,
                 },
               ],
+              'calendarHolidayBackgroundEnabled': false,
+              'calendarEventTitleAlignment':
+                  CalendarEventTitleAlignment.center.name,
+              'calendarEventSortPriority':
+                  CalendarEventSortPriority.category.name,
             },
           });
         }
@@ -961,7 +1315,21 @@ void main() {
       final work = restored.categories.singleWhere(
         (category) => category.id == 'custom-work',
       );
+      final holiday = restored.categories.singleWhere(
+        (category) => category.id == EventCategory.holiday.id,
+      );
       expect(work.colorValue, 0xff10b981);
+      expect(holiday.colorValue, 0xffa855f7);
+      expect(holiday.locked, isTrue);
+      expect(restored.calendarHolidayBackgroundEnabled, isFalse);
+      expect(
+        restored.calendarEventTitleAlignment,
+        CalendarEventTitleAlignment.center,
+      );
+      expect(
+        restored.calendarEventSortPriority,
+        CalendarEventSortPriority.category,
+      );
       expect(restored.defaultReminderMinutesList, [0, 10, 60]);
       expect(restored.appTextSize, AppTextSize.large);
       expect(restored.weekDayLayoutMode, WeekDayLayoutMode.schedule);
@@ -973,6 +1341,9 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'appTextSize': AppTextSize.large.name,
       'weekDayLayoutMode': WeekDayLayoutMode.list.name,
+      'calendarHolidayBackgroundEnabled': false,
+      'calendarEventTitleAlignment': CalendarEventTitleAlignment.center.name,
+      'calendarEventSortPriority': CalendarEventSortPriority.category.name,
     });
     final preferences = await SharedPreferences.getInstance();
     final repository = _MemoryEventRepository();
@@ -1013,13 +1384,17 @@ void main() {
 
     await service.restoreNow();
 
+    final restored = SettingsRepository(preferences: preferences).load();
+    expect(restored.appTextSize, AppTextSize.basic);
+    expect(restored.weekDayLayoutMode, WeekDayLayoutMode.schedule);
+    expect(restored.calendarHolidayBackgroundEnabled, isFalse);
     expect(
-      SettingsRepository(preferences: preferences).load().appTextSize,
-      AppTextSize.basic,
+      restored.calendarEventTitleAlignment,
+      CalendarEventTitleAlignment.center,
     );
     expect(
-      SettingsRepository(preferences: preferences).load().weekDayLayoutMode,
-      WeekDayLayoutMode.schedule,
+      restored.calendarEventSortPriority,
+      CalendarEventSortPriority.category,
     );
   });
 
@@ -1124,8 +1499,8 @@ void main() {
         updatedAt: DateTime(2026, 7, 29, 9, 2),
         syncStatus: 'pending',
       );
-      repository.onFindById = (id) async {
-        repository.onFindById = null;
+      repository.beforeAtomicRestore = () async {
+        repository.beforeAtomicRestore = null;
         await repository.save(latest);
       };
 
@@ -1908,6 +2283,39 @@ void main() {
     expect((await repository.findById(pending.id))?.syncStatus, 'pending');
     expect(service.statusNotifier.value.message, '동기화 실패');
   });
+
+  test(
+    'sync analytics records categorized failure without changing the error',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final analytics = _RecordingAnalytics();
+      final service = _service(
+        authService: _MissingHeaderGoogleDriveAuthService(),
+        repository: _MemoryEventRepository(),
+        notificationService: _FakeNotificationService(),
+        preferences: preferences,
+        httpClient: MockClient((request) async => http.Response('', 500)),
+        analytics: analytics,
+      );
+      addTearDown(service.dispose);
+
+      await expectLater(
+        service.restoreNow(),
+        throwsA(isA<GoogleDriveAuthException>()),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(analytics.records.map((record) => record.name), [
+        AnalyticsEventName.syncStarted,
+        AnalyticsEventName.syncFailed,
+      ]);
+      expect(
+        analytics.records.last.attributes['errorCode'],
+        AnalyticsErrorCode.authenticationRequired.name,
+      );
+    },
+  );
 }
 
 GoogleDriveSyncService _service({
@@ -1919,6 +2327,7 @@ GoogleDriveSyncService _service({
   Duration backupRestoreDelay = Duration.zero,
   Duration changeSyncDelay = Duration.zero,
   List<Duration> automaticRetryDelays = const [],
+  ProductAnalytics analytics = const NoopProductAnalytics(),
 }) {
   return GoogleDriveSyncService(
     authService: authService ?? _FakeGoogleDriveAuthService(),
@@ -1929,6 +2338,7 @@ GoogleDriveSyncService _service({
     backupRestoreDelay: backupRestoreDelay,
     changeSyncDelay: changeSyncDelay,
     automaticRetryDelays: automaticRetryDelays,
+    analytics: analytics,
   );
 }
 
@@ -1952,6 +2362,7 @@ Map<String, Object?> _eventFileJson({
   String updatedAt = '2026-05-29T00:00:00.000Z',
   String? deletedAt,
   String? sourceDeviceId,
+  bool completed = false,
 }) {
   return {
     'schemaVersion': 2,
@@ -1968,6 +2379,7 @@ Map<String, Object?> _eventFileJson({
       'createdAt': '2026-05-29T00:00:00.000Z',
       'updatedAt': updatedAt,
       'deletedAt': ?deletedAt,
+      'completed': completed,
     },
   };
 }
@@ -2013,6 +2425,13 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
   }) async {
     return const {'Authorization': 'Bearer test-token'};
   }
+}
+
+class _RecordingAnalytics extends NoopProductAnalytics {
+  final records = <AnalyticsRecord>[];
+
+  @override
+  Future<void> record(AnalyticsRecord record) async => records.add(record);
 }
 
 class _MissingHeaderGoogleDriveAuthService extends _FakeGoogleDriveAuthService {
@@ -2069,6 +2488,8 @@ class _FakeNotificationService implements NotificationService {
 class _MemoryEventRepository implements EventRepository {
   final _events = <String, CalendarEvent>{};
   Future<void> Function(String id)? onFindById;
+  Future<void> Function()? beforeAtomicRestore;
+  bool failAtomicRestore = false;
 
   List<CalendarEvent> get events => _events.values.toList();
 
@@ -2148,6 +2569,37 @@ class _MemoryEventRepository implements EventRepository {
     if (event != null) {
       _events[eventId] = event.copyWith(syncStatus: 'synced');
     }
+  }
+
+  @override
+  Future<List<EventRestoreMutation>> mergeRestoredEventsAtomically(
+    Iterable<CalendarEvent> remoteEvents, {
+    required RestoredEventResolver resolve,
+  }) async {
+    await beforeAtomicRestore?.call();
+    if (failAtomicRestore) {
+      throw StateError('atomic restore failed');
+    }
+    final workingCopy = Map<String, CalendarEvent>.from(_events);
+    final mutations = <EventRestoreMutation>[];
+    for (final remote in remoteEvents) {
+      final normalizedRemote = remote.normalizeAllDayBounds();
+      final previous = workingCopy[normalizedRemote.id];
+      final current = resolve(
+        previous,
+        normalizedRemote,
+      ).normalizeAllDayBounds();
+      if (!identical(previous, current)) {
+        workingCopy[current.id] = current;
+        mutations.add(
+          EventRestoreMutation(previous: previous, current: current),
+        );
+      }
+    }
+    _events
+      ..clear()
+      ..addAll(workingCopy);
+    return mutations;
   }
 
   @override

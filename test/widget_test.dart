@@ -5,6 +5,7 @@ import 'package:daily/app/daily_theme.dart';
 import 'package:daily/core/auth/apple_sign_in_service.dart';
 import 'package:daily/core/auth/apple_account.dart';
 import 'package:daily/core/auth/google_account.dart';
+import 'package:daily/core/analytics/product_analytics.dart';
 import 'package:daily/core/di/app_providers.dart';
 import 'package:daily/core/notifications/notification_service.dart';
 import 'package:daily/core/settings/app_settings.dart';
@@ -18,6 +19,7 @@ import 'package:daily/features/events/domain/event_repository.dart';
 import 'package:daily/features/events/presentation/event_details_panel.dart';
 import 'package:daily/features/events/presentation/event_editor_dialog.dart';
 import 'package:daily/features/calendar/widgets/calendar_month_grid.dart';
+import 'package:daily/features/calendar/presentation/month_calendar_page.dart';
 import 'package:daily/features/settings/presentation/settings_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -47,6 +49,14 @@ void main() {
   tearDown(() {
     TestWidgetsFlutterBinding.instance.platformDispatcher
         .clearLocalesTestValue();
+  });
+
+  test('quick Todo columns stay two on iOS and respond to macOS width', () {
+    expect(quickTodoColumnCountForPlatform(TargetPlatform.iOS, 320), 2);
+    expect(quickTodoColumnCountForPlatform(TargetPlatform.iOS, 1024), 2);
+    expect(quickTodoColumnCountForPlatform(TargetPlatform.macOS, 560), 1);
+    expect(quickTodoColumnCountForPlatform(TargetPlatform.macOS, 700), 2);
+    expect(quickTodoColumnCountForPlatform(TargetPlatform.macOS, 1000), 3);
   });
 
   test(
@@ -1303,9 +1313,8 @@ void main() {
             'cancelListening' || 'speak' => null,
             'runSignal'
                 when (call.arguments as Map<Object?, Object?>)['confirmed'] ==
-                    false => throw PlatformException(
-              code: 'signal_confirmation_required',
-            ),
+                    false =>
+              throw PlatformException(code: 'signal_confirmation_required'),
             'runSignal' => <String, Object?>{
               'message': '일정을 추가했습니다.',
               'success': true,
@@ -1381,6 +1390,8 @@ void main() {
   testWidgets('macOS uses its header toolbar without the iOS bottom bar', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
@@ -1419,9 +1430,9 @@ void main() {
       tester.element(find.byType(DailyApp)),
     );
     final startDate = container.read(selectedDateProvider);
-    final weekController = tester
-        .widget<PageView>(find.byType(PageView))
-        .controller!;
+    final weekPageView = tester.widget<PageView>(find.byType(PageView));
+    expect(weekPageView.physics, isA<NeverScrollableScrollPhysics>());
+    final weekController = weekPageView.controller!;
 
     await tester.tap(find.byTooltip('이전'));
     await tester.pump();
@@ -1441,14 +1452,27 @@ void main() {
     );
     final weekListener = tester.widget<Listener>(weekNavigation);
     weekListener.onPointerSignal!(
-      const PointerScrollEvent(scrollDelta: Offset(30, 0)),
+      const PointerScrollEvent(
+        kind: PointerDeviceKind.trackpad,
+        scrollDelta: Offset(30, 0),
+      ),
     );
     await tester.pumpAndSettle();
     expect(container.read(selectedDateProvider), startDate);
 
     weekListener.onPointerSignal!(
-      const PointerScrollEvent(scrollDelta: Offset(0, 30)),
+      const PointerScrollEvent(
+        kind: PointerDeviceKind.mouse,
+        scrollDelta: Offset(0, 30),
+      ),
     );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(selectedDateProvider),
+      DateTime(startDate.year, startDate.month, startDate.day + 7),
+    );
+
+    await tester.tap(find.byTooltip('이전'));
     await tester.pumpAndSettle();
     expect(container.read(selectedDateProvider), startDate);
 
@@ -1496,14 +1520,76 @@ void main() {
     final dayListener = tester.widget<Listener>(
       find.byKey(const ValueKey('day-pointer-navigation')),
     );
+    expect(
+      tester.widget<PageView>(find.byType(PageView)).physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
     dayListener.onPointerSignal!(
-      const PointerScrollEvent(scrollDelta: Offset(30, 0)),
+      const PointerScrollEvent(
+        kind: PointerDeviceKind.trackpad,
+        scrollDelta: Offset(30, 0),
+      ),
     );
     await tester.pumpAndSettle();
     expect(
       container.read(selectedDateProvider),
       DateTime(startDate.year, startDate.month, startDate.day + 1),
     );
+
+    dayListener.onPointerSignal!(
+      const PointerScrollEvent(
+        kind: PointerDeviceKind.mouse,
+        scrollDelta: Offset(0, 30),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final listDateAfterVerticalWheel = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day + 2,
+    );
+    expect(container.read(selectedDateProvider), listDateAfterVerticalWheel);
+
+    container.read(appSettingsProvider.notifier).state = container
+        .read(appSettingsProvider)
+        .copyWith(weekDayLayoutMode: WeekDayLayoutMode.schedule);
+    await tester.pumpAndSettle();
+    final scheduleDayListener = tester.widget<Listener>(
+      find.byKey(const ValueKey('day-pointer-navigation')),
+    );
+    scheduleDayListener.onPointerSignal!(
+      const PointerScrollEvent(
+        kind: PointerDeviceKind.mouse,
+        scrollDelta: Offset(0, 30),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(selectedDateProvider), listDateAfterVerticalWheel);
+
+    final scheduleTimeScroll = find
+        .byKey(const ValueKey('schedule-time-scroll'))
+        .first;
+    final scheduleScrollable = tester.widget<SingleChildScrollView>(
+      scheduleTimeScroll,
+    );
+    final scheduleOffsetBeforeWheel = scheduleScrollable.controller!.offset;
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        kind: PointerDeviceKind.mouse,
+        position: tester.getCenter(scheduleTimeScroll),
+        scrollDelta: const Offset(0, 120),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(selectedDateProvider), listDateAfterVerticalWheel);
+    expect(
+      scheduleScrollable.controller!.offset,
+      greaterThan(scheduleOffsetBeforeWheel),
+    );
+    container.read(appSettingsProvider.notifier).state = container
+        .read(appSettingsProvider)
+        .copyWith(weekDayLayoutMode: WeekDayLayoutMode.list);
+    await tester.pumpAndSettle();
 
     container.read(calendarViewModeProvider.notifier).state =
         CalendarViewMode.month;
@@ -1512,14 +1598,47 @@ void main() {
     final monthListener = tester.widget<Listener>(
       find.byKey(const ValueKey('month-pointer-navigation')),
     );
-    monthListener.onPointerSignal!(
-      const PointerScrollEvent(scrollDelta: Offset(0, 30)),
+    expect(
+      tester
+          .widget<PageView>(
+            find.descendant(
+              of: find.byKey(const ValueKey('month-pointer-navigation')),
+              matching: find.byType(PageView),
+            ),
+          )
+          .physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        kind: PointerDeviceKind.mouse,
+        position: tester.getCenter(
+          find.byKey(const ValueKey('month-pointer-navigation')),
+        ),
+        scrollDelta: const Offset(0, 1),
+      ),
     );
     await tester.pumpAndSettle();
     expect(
       container.read(visibleMonthProvider),
       DateTime(monthBeforeScroll.year, monthBeforeScroll.month + 1),
     );
+
+    for (var index = 0; index < 4; index++) {
+      monthListener.onPointerSignal!(
+        const PointerScrollEvent(
+          kind: PointerDeviceKind.mouse,
+          scrollDelta: Offset(1, 0),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    await tester.pump(const Duration(milliseconds: 260));
+    expect(
+      container.read(visibleMonthProvider),
+      DateTime(monthBeforeScroll.year, monthBeforeScroll.month + 5),
+    );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('빠른 보기'));
     await tester.pump();
@@ -2002,6 +2121,158 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('settings rows keep icons and layout at large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    FlutterSecureStorage.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final authService = _FakeGoogleDriveAuthService(account: null);
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: authService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(authService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+        ],
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(1.3)),
+            child: child!,
+          ),
+          home: const SettingsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    void expectVisibleRowsHaveIcons() {
+      for (final tile in tester.widgetList<ListTile>(find.byType(ListTile))) {
+        expect(tile.leading, isNotNull);
+      }
+      for (final tile in tester.widgetList<SwitchListTile>(
+        find.byType(SwitchListTile),
+      )) {
+        expect(tile.secondary, isNotNull);
+      }
+      expect(tester.takeException(), isNull);
+    }
+
+    expectVisibleRowsHaveIcons();
+    expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.account_circle_outlined), findsOneWidget);
+    expect(find.byKey(const ValueKey('siri-shortcut-setup')), findsOneWidget);
+    expect(find.text('시그널 단축어를 추가하고 Siri에서 Daily 명령을 사용합니다.'), findsOneWidget);
+
+    final mainList = find.byType(ListView);
+    for (var index = 0; index < 8; index++) {
+      await tester.drag(mainList, const Offset(0, -560));
+      await tester.pumpAndSettle();
+      expectVisibleRowsHaveIcons();
+    }
+    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+
+    await tester.dragUntilVisible(
+      find.widgetWithText(ListTile, '알림'),
+      mainList,
+      const Offset(0, 560),
+    );
+    await tester.tap(find.widgetWithText(ListTile, '알림'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.notifications_active_outlined), findsOneWidget);
+    expectVisibleRowsHaveIcons();
+    final notificationList = find.byType(ListView);
+    for (var index = 0; index < 4; index++) {
+      await tester.drag(notificationList, const Offset(0, -520));
+      await tester.pumpAndSettle();
+      expectVisibleRowsHaveIcons();
+    }
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('account-settings-navigation')));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.person_outline), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_done_outlined), findsOneWidget);
+    expectVisibleRowsHaveIcons();
+
+    debugDefaultTargetPlatformOverride = null;
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('privacy settings opt in and delete queued analytics', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 2600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    FlutterSecureStorage.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final authService = _FakeGoogleDriveAuthService(account: null);
+    final notificationService = _FakeNotification();
+    final eventRepository = _FakeEventRepository();
+    final analytics = _FakeProductAnalytics();
+    final driveSyncService = _FakeGoogleDriveSyncService(
+      authService: authService,
+      eventRepository: eventRepository,
+      notificationService: notificationService,
+      settingsRepository: settingsRepository,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          productAnalyticsProvider.overrideWithValue(analytics),
+          notificationServiceProvider.overrideWithValue(notificationService),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(authService),
+          googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+        ],
+        child: const MaterialApp(home: SettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('anonymous-analytics-toggle')));
+    await tester.pump();
+    expect(analytics.enabled, isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('delete-analytics-data')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '삭제'));
+    await tester.pumpAndSettle();
+    expect(analytics.deleteCalls, 1);
+    expect(find.text('전송 대기 분석 데이터를 삭제했습니다.'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('PIN setup reveals dots only as digits are entered', (
     tester,
   ) async {
@@ -2091,6 +2362,30 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('category-reorder-list')), findsOneWidget);
+    expect(find.byIcon(Icons.drag_indicator), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey('event-sort-priority-slider')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('길게 눌러 순서 변경'), findsNWidgets(2));
+    final reorderable = tester.widget<ReorderableListView>(
+      find.byKey(const ValueKey('category-reorder-list')),
+    );
+    reorderable.onReorderItem!(0, 1);
+    await tester.pumpAndSettle();
+    expect(
+      settingsRepository.load().categories.map((category) => category.id),
+      [EventCategory.holiday.id, EventCategory.basic.id],
+    );
+
+    await tester.tap(find.text('분류 우선'));
+    await tester.pumpAndSettle();
+    expect(
+      settingsRepository.load().calendarEventSortPriority,
+      CalendarEventSortPriority.category,
+    );
+
     await tester.tap(find.byTooltip('분류 수정').first);
     await tester.pumpAndSettle();
 
@@ -2467,8 +2762,13 @@ void main() {
     );
     final month = container.read(visibleMonthProvider);
     final dayCell = find
-        .byKey(ValueKey('day-cell-${month.year}-${month.month}-15'))
-        .hitTestable();
+        .byWidgetPredicate((widget) {
+          final key = widget.key;
+          return key is ValueKey<String> &&
+              key.value.startsWith('day-cell-${month.year}-${month.month}-');
+        })
+        .hitTestable()
+        .first;
     expect(dayCell, findsOneWidget);
 
     await tester.tap(dayCell);
@@ -2799,6 +3099,88 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('iOS quick view shows two categorized Todo cards per row', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    const work = EventCategory(id: 'work', label: '업무', colorValue: 0xff7c3aed);
+    await settingsRepository.save(
+      settingsRepository.load().copyWith(
+        categories: const [EventCategory.basic, work],
+        calendarEventTitleAlignment: CalendarEventTitleAlignment.center,
+      ),
+    );
+    final now = DateTime.now();
+    CalendarEvent event(String id, String title, EventCategory category) {
+      final start = DateTime(now.year, now.month, 12, 9);
+      return CalendarEvent(
+        id: id,
+        title: title,
+        startAt: start,
+        endAt: start.add(const Duration(hours: 1)),
+        allDay: false,
+        category: category,
+        colorValue: category.colorValue,
+        createdAt: start,
+        updatedAt: start,
+      );
+    }
+
+    final eventRepository = _StreamingEventRepository([
+      event('basic-todo', '개인 일정', EventCategory.basic),
+      event('work-todo', '업무 일정', work).copyWith(completed: true),
+    ]);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          notificationServiceProvider.overrideWithValue(_FakeNotification()),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(eventRepository),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(),
+          ),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('빠른 보기'));
+    await tester.pumpAndSettle();
+
+    final basicCard = find.byKey(const ValueKey('quick-todo-category-basic'));
+    final workCard = find.byKey(const ValueKey('quick-todo-category-work'));
+    expect(basicCard, findsOneWidget);
+    expect(workCard, findsOneWidget);
+    expect(tester.getTopLeft(basicCard).dy, tester.getTopLeft(workCard).dy);
+    expect(find.byType(Checkbox), findsNWidgets(2));
+    expect(
+      tester.widget<Text>(find.text('업무 일정')).style?.decorationStyle,
+      TextDecorationStyle.double,
+    );
+    expect(
+      tester.widget<Text>(find.text('업무 일정')).style?.decorationThickness,
+      greaterThanOrEqualTo(2),
+    );
+    expect(tester.widget<Text>(find.text('업무 일정')).textAlign, TextAlign.start);
+
+    await tester.tap(find.byKey(const ValueKey('quick-todo-open-work-todo')));
+    await tester.pumpAndSettle();
+    expect(find.text('추가 상세정보가 없습니다.'), findsOneWidget);
+
+    debugDefaultTargetPlatformOverride = null;
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
 
 Future<void> _openAccountSettings(WidgetTester tester) async {
@@ -2993,6 +3375,9 @@ class _FakeNotification implements NotificationService {
 }
 
 class _FakeSync implements SyncService {
+  @override
+  Future<void> queueSettingsBackup() async {}
+
   var startCalls = 0;
 
   @override
@@ -3004,6 +3389,49 @@ class _FakeSync implements SyncService {
   @override
   Future<void> start() async {
     startCalls += 1;
+  }
+}
+
+class _FakeProductAnalytics implements ProductAnalytics {
+  final ValueNotifier<bool> _enabled = ValueNotifier<bool>(false);
+  final records = <AnalyticsRecord>[];
+  var deleteCalls = 0;
+
+  @override
+  bool get enabled => _enabled.value;
+
+  @override
+  ValueListenable<bool> get enabledListenable => _enabled;
+
+  @override
+  int get pendingEventCount => records.length;
+
+  @override
+  Future<void> deletePendingData() async {
+    deleteCalls += 1;
+    records.clear();
+  }
+
+  @override
+  void dispose() {
+    _enabled.dispose();
+  }
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> record(AnalyticsRecord record) async {
+    if (enabled) records.add(record);
+  }
+
+  @override
+  Future<void> setEnabled(bool enabled) async {
+    _enabled.value = enabled;
+    if (!enabled) await deletePendingData();
   }
 }
 
@@ -3076,6 +3504,12 @@ class _FakeEventRepository implements EventRepository {
   Future<void> markSynced(String eventId) async {}
 
   @override
+  Future<List<EventRestoreMutation>> mergeRestoredEventsAtomically(
+    Iterable<CalendarEvent> remoteEvents, {
+    required RestoredEventResolver resolve,
+  }) async => const [];
+
+  @override
   Stream<List<CalendarEvent>> watchEventsInRange(
     DateTime rangeStart,
     DateTime rangeEnd,
@@ -3089,6 +3523,35 @@ class _FakeEventRepository implements EventRepository {
   @override
   Future<void> clearAll() async {
     clearAllCalls += 1;
+  }
+}
+
+class _StreamingEventRepository extends _FakeEventRepository {
+  _StreamingEventRepository(List<CalendarEvent> events) : super(events: events);
+
+  @override
+  Future<CalendarEvent?> findById(String id) async {
+    for (final event in _events) {
+      if (event.id == id) return event;
+    }
+    return null;
+  }
+
+  @override
+  Stream<List<CalendarEvent>> watchEventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) {
+    return Stream.value(
+      _events
+          .where(
+            (event) =>
+                event.deletedAt == null &&
+                event.startAt.isBefore(rangeEnd) &&
+                event.endAt.isAfter(rangeStart),
+          )
+          .toList(),
+    );
   }
 }
 

@@ -127,45 +127,37 @@ class DriftEventRepository implements EventRepository {
     final normalized = event.normalizeAllDayBounds();
     return _database
         .into(_database.eventRecords)
-        .insertOnConflictUpdate(
-          EventRecordsCompanion(
-            id: Value(normalized.id),
-            title: Value(normalized.title),
-            memo: Value(normalized.memo),
-            location: Value(normalized.location),
-            url: Value(normalized.url),
-            weather: Value(normalized.weather),
-            startAt: Value(normalized.startAt),
-            endAt: Value(normalized.endAt),
-            allDay: Value(normalized.allDay),
-            category: Value(_storedCategoryValue(normalized)),
-            colorValue: Value(normalized.colorValue),
-            reminderMinutesBefore: Value(normalized.reminderMinutesBefore),
-            reminderMinutesBeforeList: Value(
-              jsonEncode(normalized.reminderMinutesBeforeList),
-            ),
-            recurrenceFrequency: Value(normalized.recurrence.frequency.name),
-            recurrenceInterval: Value(normalized.recurrence.interval),
-            recurrenceUntil: Value(normalized.recurrence.until),
-            recurrenceCount: Value(normalized.recurrence.count),
-            recurrenceExcludedDates: Value(
-              jsonEncode(
-                normalized.recurrence.excludedDates
-                    .map((date) => DateTime(date.year, date.month, date.day))
-                    .map((date) => date.toIso8601String())
-                    .toList(),
-              ),
-            ),
-            createdAt: Value(normalized.createdAt),
-            updatedAt: Value(normalized.updatedAt),
-            deletedAt: Value(normalized.deletedAt),
-            deviceId: Value(normalized.deviceId),
-            syncStatus: Value(normalized.syncStatus),
-            showDday: Value(normalized.showDday),
-            alarmEnabled: Value(normalized.alarmEnabled),
-            allDayAlarmMinutes: Value(normalized.allDayAlarmMinutes),
-          ),
-        );
+        .insertOnConflictUpdate(_companion(normalized));
+  }
+
+  @override
+  Future<List<EventRestoreMutation>> mergeRestoredEventsAtomically(
+    Iterable<CalendarEvent> remoteEvents, {
+    required RestoredEventResolver resolve,
+  }) {
+    return _database.transaction(() async {
+      final rows = await _database.select(_database.eventRecords).get();
+      final localById = {for (final row in rows) row.id: row.toDomain()};
+      final mutations = <EventRestoreMutation>[];
+      for (final remote in remoteEvents) {
+        final normalizedRemote = remote.normalizeAllDayBounds();
+        final previous = localById[normalizedRemote.id];
+        final current = resolve(
+          previous,
+          normalizedRemote,
+        ).normalizeAllDayBounds();
+        if (!identical(previous, current)) {
+          await _database
+              .into(_database.eventRecords)
+              .insertOnConflictUpdate(_companion(current));
+          localById[current.id] = current;
+          mutations.add(
+            EventRestoreMutation(previous: previous, current: current),
+          );
+        }
+      }
+      return mutations;
+    });
   }
 
   @override
@@ -260,5 +252,46 @@ class DriftEventRepository implements EventRepository {
       return event.category.id;
     }
     return event.category.label;
+  }
+
+  EventRecordsCompanion _companion(CalendarEvent event) {
+    return EventRecordsCompanion(
+      id: Value(event.id),
+      title: Value(event.title),
+      memo: Value(event.memo),
+      location: Value(event.location),
+      url: Value(event.url),
+      weather: Value(event.weather),
+      startAt: Value(event.startAt),
+      endAt: Value(event.endAt),
+      allDay: Value(event.allDay),
+      category: Value(_storedCategoryValue(event)),
+      colorValue: Value(event.colorValue),
+      reminderMinutesBefore: Value(event.reminderMinutesBefore),
+      reminderMinutesBeforeList: Value(
+        jsonEncode(event.reminderMinutesBeforeList),
+      ),
+      recurrenceFrequency: Value(event.recurrence.frequency.name),
+      recurrenceInterval: Value(event.recurrence.interval),
+      recurrenceUntil: Value(event.recurrence.until),
+      recurrenceCount: Value(event.recurrence.count),
+      recurrenceExcludedDates: Value(
+        jsonEncode(
+          event.recurrence.excludedDates
+              .map((date) => DateTime(date.year, date.month, date.day))
+              .map((date) => date.toIso8601String())
+              .toList(),
+        ),
+      ),
+      createdAt: Value(event.createdAt),
+      updatedAt: Value(event.updatedAt),
+      deletedAt: Value(event.deletedAt),
+      deviceId: Value(event.deviceId),
+      syncStatus: Value(event.syncStatus),
+      showDday: Value(event.showDday),
+      completed: Value(event.completed),
+      alarmEnabled: Value(event.alarmEnabled),
+      allDayAlarmMinutes: Value(event.allDayAlarmMinutes),
+    );
   }
 }

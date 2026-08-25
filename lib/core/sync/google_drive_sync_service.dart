@@ -9,6 +9,7 @@ import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_category.dart';
 import '../../features/events/domain/event_repository.dart';
 import '../../features/events/domain/recurrence_rule.dart';
+import '../analytics/product_analytics.dart';
 import '../notifications/notification_service.dart';
 import '../alarms/alarm_service.dart';
 import '../settings/app_settings.dart';
@@ -27,6 +28,7 @@ class GoogleDriveSyncService implements SyncService {
     Duration backupRestoreDelay = _defaultBackupRestoreDelay,
     Duration changeSyncDelay = _defaultChangeSyncDelay,
     List<Duration> automaticRetryDelays = _automaticRetryDelays,
+    ProductAnalytics analytics = const NoopProductAnalytics(),
     Future<void> Function()? onEventsChanged,
   }) : _authService = authService,
        _eventRepository = eventRepository,
@@ -38,6 +40,7 @@ class GoogleDriveSyncService implements SyncService {
        _backupRestoreDelay = backupRestoreDelay,
        _changeSyncDelay = changeSyncDelay,
        _retryDelays = automaticRetryDelays,
+       _analytics = analytics,
        _onEventsChanged = onEventsChanged;
 
   static const _legacySyncFileName = 'daily-sync-v1.json';
@@ -66,6 +69,7 @@ class GoogleDriveSyncService implements SyncService {
   final Duration _backupRestoreDelay;
   final Duration _changeSyncDelay;
   final List<Duration> _retryDelays;
+  final ProductAnalytics _analytics;
   final Future<void> Function()? _onEventsChanged;
   Future<void>? _syncInFlight;
   StreamSubscription<GoogleDriveAccount?>? _accountSubscription;
@@ -76,6 +80,7 @@ class GoogleDriveSyncService implements SyncService {
   final _queuedEventIds = <String>{};
   var _started = false;
   var _automaticRetryIndex = 0;
+  var _manualRestoreDepth = 0;
 
   final statusNotifier = ValueNotifier<GoogleDriveSyncStatus>(
     const GoogleDriveSyncStatus(),
@@ -137,6 +142,12 @@ class GoogleDriveSyncService implements SyncService {
     return Future.value();
   }
 
+  @override
+  Future<void> queueSettingsBackup() {
+    _queueChangeSync();
+    return Future.value();
+  }
+
   Future<void> syncNow({bool promptIfNecessary = false}) async {
     final eventIds = await _takePendingEventIds();
     await _enqueueSync(
@@ -186,11 +197,24 @@ class GoogleDriveSyncService implements SyncService {
     );
   }
 
-  Future<void> restoreNow({bool promptIfNecessary = false}) {
-    return _enqueueSync(
-      _SyncRequestKind.restoreOnly,
-      promptIfNecessary: promptIfNecessary,
-    );
+  Future<void> restoreNow({bool promptIfNecessary = false}) async {
+    _manualRestoreDepth += 1;
+    _changeSyncTimer?.cancel();
+    _changeSyncTimer = null;
+    var succeeded = false;
+    try {
+      await _enqueueSync(
+        _SyncRequestKind.restoreOnly,
+        promptIfNecessary: promptIfNecessary,
+        prioritize: true,
+      );
+      succeeded = true;
+    } finally {
+      _manualRestoreDepth -= 1;
+      if (succeeded && _manualRestoreDepth == 0 && _queuedEventIds.isNotEmpty) {
+        _queueChangeSync();
+      }
+    }
   }
 
   Future<void> syncPendingChangesNow({
@@ -214,6 +238,33 @@ class GoogleDriveSyncService implements SyncService {
         includeSettings: includeSettings,
       );
     }
+  }
+
+  /// Downloads the current v2 event snapshots without writing to the local
+  /// repository. Startup schema migration uses this before Drift opens the
+  /// database so it can merge remote changes into a validated working copy.
+  Future<List<CalendarEvent>?> downloadEventsForMigration() async {
+    final headers = await _authService.authorizationHeaders(
+      promptIfNecessary: false,
+    );
+    if (headers == null) {
+      return null;
+    }
+
+    final remoteFiles = await _listEventFiles(headers);
+    final downloaded = await _mapInBatches(remoteFiles.values, (file) async {
+      return _downloadEventFile(headers, file.id);
+    });
+    final eventsById = <String, CalendarEvent>{};
+    for (final item in downloaded.whereType<_DownloadedEvent>()) {
+      final event = item.event;
+      final existing = eventsById[event.id];
+      if (existing == null ||
+          _effectiveUpdatedAt(event).isAfter(_effectiveUpdatedAt(existing))) {
+        eventsById[event.id] = event;
+      }
+    }
+    return eventsById.values.toList(growable: false);
   }
 
   Future<Set<String>> _takePendingEventIds() async {
@@ -299,6 +350,7 @@ class GoogleDriveSyncService implements SyncService {
     Set<String>? eventIds,
     bool includeSettings = false,
     bool initializeChangeToken = false,
+    bool prioritize = false,
   }) {
     final completer = Completer<void>();
     for (final pending in _pendingSyncRequests.reversed) {
@@ -322,7 +374,11 @@ class GoogleDriveSyncService implements SyncService {
       initializeChangeToken: initializeChangeToken,
       completers: [completer],
     );
-    _pendingSyncRequests.add(request);
+    if (prioritize) {
+      _pendingSyncRequests.insert(0, request);
+    } else {
+      _pendingSyncRequests.add(request);
+    }
 
     if (_syncInFlight == null) {
       _startSyncDrain();
@@ -362,6 +418,10 @@ class GoogleDriveSyncService implements SyncService {
 
   void _queueChangeSync() {
     _changeSyncTimer?.cancel();
+    if (_manualRestoreDepth > 0) {
+      _changeSyncTimer = null;
+      return;
+    }
     _changeSyncTimer = Timer(_changeSyncDelay, _requestQueuedEventBackup);
   }
 
@@ -372,13 +432,28 @@ class GoogleDriveSyncService implements SyncService {
   void _requestQueuedEventBackup() {
     final eventIds = Set<String>.from(_queuedEventIds);
     _queuedEventIds.clear();
-    if (eventIds.isEmpty) {
+    final includeSettings = _settingsRepository.hasPendingSettingsSync;
+    if (eventIds.isEmpty && !includeSettings) {
       return;
     }
-    unawaited(backupNow(eventIds: eventIds).catchError((_) {}));
+    unawaited(
+      backupNow(
+        eventIds: eventIds,
+        includeSettings: includeSettings,
+      ).catchError((_) {}),
+    );
   }
 
   Future<void> _runSyncRequest(_PendingSyncRequest request) async {
+    final stopwatch = Stopwatch()..start();
+    final analyticsOperation = _analyticsOperation(request.kind);
+    final analyticsTrigger = _analyticsTrigger(request);
+    _recordAnalytics(
+      AnalyticsRecord.syncStarted(
+        analyticsOperation,
+        trigger: analyticsTrigger,
+      ),
+    );
     final message = switch (request.kind) {
       _SyncRequestKind.backupOnly => '백업 중',
       _SyncRequestKind.restoreOnly => '복원 중',
@@ -468,6 +543,14 @@ class GoogleDriveSyncService implements SyncService {
         message: completionMessage,
         clearError: true,
       );
+      _recordAnalytics(
+        AnalyticsRecord.sync(
+          analyticsOperation,
+          trigger: analyticsTrigger,
+          outcome: AnalyticsOutcome.succeeded,
+          durationMs: stopwatch.elapsedMilliseconds,
+        ),
+      );
     } on Object catch (error) {
       _scheduleAutomaticRetry(request, error);
       statusNotifier.value = statusNotifier.value.copyWith(
@@ -475,8 +558,50 @@ class GoogleDriveSyncService implements SyncService {
         message: '동기화 실패',
         error: _syncErrorMessage(error),
       );
+      _recordAnalytics(
+        AnalyticsRecord.sync(
+          analyticsOperation,
+          trigger: analyticsTrigger,
+          outcome:
+              categorizeAnalyticsError(error) == AnalyticsErrorCode.canceled
+              ? AnalyticsOutcome.canceled
+              : AnalyticsOutcome.failed,
+          durationMs: stopwatch.elapsedMilliseconds,
+          errorCode: categorizeAnalyticsError(error),
+        ),
+      );
       rethrow;
     }
+  }
+
+  AnalyticsSyncOperation _analyticsOperation(_SyncRequestKind kind) {
+    return switch (kind) {
+      _SyncRequestKind.backupOnly => AnalyticsSyncOperation.backup,
+      _SyncRequestKind.restoreOnly => AnalyticsSyncOperation.restore,
+      _SyncRequestKind.backupThenRestore =>
+        AnalyticsSyncOperation.backupThenRestore,
+      _SyncRequestKind.detectRemoteChanges =>
+        AnalyticsSyncOperation.detectRemoteChanges,
+      _SyncRequestKind.backupThenDetectRemoteChanges =>
+        AnalyticsSyncOperation.backupThenDetectRemoteChanges,
+    };
+  }
+
+  AnalyticsTrigger _analyticsTrigger(_PendingSyncRequest request) {
+    if (request.promptIfNecessary) return AnalyticsTrigger.manual;
+    return switch (request.kind) {
+      _SyncRequestKind.backupOnly => AnalyticsTrigger.localChange,
+      _SyncRequestKind.backupThenDetectRemoteChanges => AnalyticsTrigger.resume,
+      _SyncRequestKind.detectRemoteChanges =>
+        request.initializeChangeToken
+            ? AnalyticsTrigger.startup
+            : AnalyticsTrigger.automatic,
+      _ => AnalyticsTrigger.automatic,
+    };
+  }
+
+  void _recordAnalytics(AnalyticsRecord record) {
+    unawaited(_analytics.record(record).catchError((_) {}));
   }
 
   void _resetAutomaticRetry(_SyncRequestKind completedKind) {
@@ -570,8 +695,60 @@ class GoogleDriveSyncService implements SyncService {
   }
 
   Future<void> _restore(Map<String, String> authHeaders) async {
-    await _restoreSettings(authHeaders, _settingsRepository.load());
-    await _restoreAllEvents(authHeaders);
+    final localSettings = _settingsRepository.load();
+    final localSettingsRevision = _settingsRepository.settingsSyncRevision;
+    final remoteSettings = await _downloadRestorableSettings(authHeaders);
+    final remoteEvents = await _downloadAllEvents(authHeaders);
+    final canApplySettings =
+        remoteSettings != null &&
+        !_settingsRepository.hasPendingSettingsSync &&
+        _settingsRepository.settingsSyncRevision == localSettingsRevision;
+    final restoredSettings = canApplySettings
+        ? _restoredSettingsTarget(remoteSettings, localSettings)
+        : null;
+    final shouldWriteSettings =
+        restoredSettings != null &&
+        !_sameSettingsSnapshot(restoredSettings, localSettings);
+    var settingsWritten = false;
+    final keptLocalEventIds = <String>{};
+    late final List<EventRestoreMutation> mutations;
+    try {
+      if (shouldWriteSettings) {
+        await _settingsRepository.save(
+          restoredSettings,
+          markSyncPending: false,
+        );
+        settingsWritten = true;
+      }
+      mutations = await _eventRepository.mergeRestoredEventsAtomically(
+        remoteEvents,
+        resolve: (local, remote) {
+          if (local != null && _shouldKeepLocalEvent(local, remote)) {
+            keptLocalEventIds.add(local.id);
+            return local;
+          }
+          if (local != null && _sameEventSnapshot(local, remote)) {
+            return local.syncStatus == 'synced'
+                ? local
+                : local.copyWith(syncStatus: 'synced');
+          }
+          return remote.copyWith(syncStatus: 'synced');
+        },
+      );
+    } on Object {
+      if (settingsWritten) {
+        await _settingsRepository.save(localSettings, markSyncPending: false);
+      }
+      rethrow;
+    }
+    if (settingsWritten) {
+      settingsRevisionNotifier.value += 1;
+    }
+    if (keptLocalEventIds.isNotEmpty) {
+      _queuedEventIds.addAll(keptLocalEventIds);
+      _queueChangeSync();
+    }
+    await _applyRestoredEventSideEffects(mutations);
     await _refreshWidgets();
   }
 
@@ -768,28 +945,17 @@ class GoogleDriveSyncService implements SyncService {
     }
   }
 
-  Future<void> _restoreSettings(
+  Future<_DownloadedSettings?> _downloadRestorableSettings(
     Map<String, String> authHeaders,
-    AppSettings localSettings,
   ) async {
-    final localRevision = _settingsRepository.settingsSyncRevision;
     if (_settingsRepository.hasPendingSettingsSync) {
-      return;
+      return null;
     }
     final settingsFile = await _findFileByName(authHeaders, _settingsFileName);
-    if (settingsFile != null) {
-      final remoteSettings = await _downloadSettingsFile(
-        authHeaders,
-        settingsFile.id,
-      );
-      if (remoteSettings != null) {
-        await _applyDownloadedSettings(
-          remoteSettings,
-          localSettings: localSettings,
-          expectedLocalRevision: localRevision,
-        );
-      }
+    if (settingsFile == null) {
+      return null;
     }
+    return _downloadSettingsFile(authHeaders, settingsFile.id);
   }
 
   Future<bool> _applyDownloadedSettings(
@@ -801,27 +967,50 @@ class GoogleDriveSyncService implements SyncService {
         _settingsRepository.settingsSyncRevision != expectedLocalRevision) {
       return false;
     }
-    await _settingsRepository.save(
-      remoteSettings.settings.copyWith(
-        onboardingCompleted: localSettings.onboardingCompleted,
-        appLockEnabled: localSettings.appLockEnabled,
-        appLockBiometricsEnabled: localSettings.appLockBiometricsEnabled,
-        appLockMethod: localSettings.appLockMethod,
-        language: localSettings.language,
-        appTextSize: remoteSettings.hasAppTextSize
-            ? remoteSettings.settings.appTextSize
-            : localSettings.appTextSize,
-        weekDayLayoutMode: remoteSettings.hasWeekDayLayoutMode
-            ? remoteSettings.settings.weekDayLayoutMode
-            : localSettings.weekDayLayoutMode,
-      ),
-      markSyncPending: false,
-    );
+    final restored = _restoredSettingsTarget(remoteSettings, localSettings);
+    await _settingsRepository.save(restored, markSyncPending: false);
     settingsRevisionNotifier.value += 1;
     return true;
   }
 
-  Future<void> _restoreAllEvents(Map<String, String> authHeaders) async {
+  AppSettings _restoredSettingsTarget(
+    _DownloadedSettings remoteSettings,
+    AppSettings localSettings,
+  ) {
+    return remoteSettings.settings.copyWith(
+      onboardingCompleted: localSettings.onboardingCompleted,
+      appLockEnabled: localSettings.appLockEnabled,
+      appLockBiometricsEnabled: localSettings.appLockBiometricsEnabled,
+      appLockMethod: localSettings.appLockMethod,
+      language: localSettings.language,
+      appTextSize: remoteSettings.hasAppTextSize
+          ? remoteSettings.settings.appTextSize
+          : localSettings.appTextSize,
+      weekDayLayoutMode: remoteSettings.hasWeekDayLayoutMode
+          ? remoteSettings.settings.weekDayLayoutMode
+          : localSettings.weekDayLayoutMode,
+      calendarEventTitleAlignment: remoteSettings.hasCalendarEventTitleAlignment
+          ? remoteSettings.settings.calendarEventTitleAlignment
+          : localSettings.calendarEventTitleAlignment,
+      calendarEventSortPriority: remoteSettings.hasCalendarEventSortPriority
+          ? remoteSettings.settings.calendarEventSortPriority
+          : localSettings.calendarEventSortPriority,
+      calendarManualEventOrders: remoteSettings.hasCalendarManualEventOrders
+          ? mergeCalendarManualEventOrders(
+              localSettings.calendarManualEventOrders,
+              remoteSettings.settings.calendarManualEventOrders,
+            )
+          : localSettings.calendarManualEventOrders,
+      calendarHolidayBackgroundEnabled:
+          remoteSettings.hasCalendarHolidayBackgroundEnabled
+          ? remoteSettings.settings.calendarHolidayBackgroundEnabled
+          : localSettings.calendarHolidayBackgroundEnabled,
+    );
+  }
+
+  Future<List<CalendarEvent>> _downloadAllEvents(
+    Map<String, String> authHeaders,
+  ) async {
     final remoteFiles = await _listEventFiles(authHeaders);
     final remoteById = <String, CalendarEvent>{};
 
@@ -857,8 +1046,37 @@ class GoogleDriveSyncService implements SyncService {
 
     final remoteEvents = remoteById.values.toList()
       ..sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
-    for (final event in remoteEvents) {
-      await _saveRestoredEvent(event.copyWith(syncStatus: 'synced'));
+    return remoteEvents;
+  }
+
+  Future<void> _applyRestoredEventSideEffects(
+    Iterable<EventRestoreMutation> mutations,
+  ) async {
+    for (final mutation in mutations) {
+      final previous = mutation.previous;
+      final current = mutation.current;
+      if (previous != null && _sameEventSnapshot(previous, current)) {
+        continue;
+      }
+      try {
+        await _notificationService.cancelEventReminder(
+          current.id,
+          reminderMinutesBeforeList: _combinedReminderMinutes(
+            previous,
+            current,
+          ),
+        );
+        if (current.deletedAt == null) {
+          await _notificationService.scheduleEventReminder(current);
+        }
+        await _alarmService.cancelEventAlarm(current.id);
+        if (current.deletedAt == null) {
+          await _alarmService.scheduleEventAlarm(current);
+        }
+      } on Object {
+        // Restored calendar data remains authoritative. Notification and alarm
+        // reconciliation is retried when the app next initializes.
+      }
     }
   }
 
@@ -1134,7 +1352,7 @@ class GoogleDriveSyncService implements SyncService {
       event is Map ? Map<String, Object?>.from(event) : decoded,
     );
     if (parsedEvent == null) {
-      return null;
+      throw const GoogleDriveSyncException('Google Drive 일정 백업 데이터가 손상되었습니다.');
     }
     return _DownloadedEvent(
       event: parsedEvent,
@@ -1157,7 +1375,7 @@ class GoogleDriveSyncService implements SyncService {
     final decoded = jsonDecode(response.body) as Map<String, Object?>;
     final settings = decoded['settings'];
     if (settings is! Map) {
-      return null;
+      throw const GoogleDriveSyncException('Google Drive 설정 백업 데이터가 손상되었습니다.');
     }
     final settingsJson = Map<String, Object?>.from(settings);
     return _DownloadedSettings(
@@ -1167,6 +1385,18 @@ class GoogleDriveSyncService implements SyncService {
           settingsJson.containsKey('appTextSize') ||
           settingsJson.containsKey('calendarEventTextSize'),
       hasWeekDayLayoutMode: settingsJson.containsKey('weekDayLayoutMode'),
+      hasCalendarEventTitleAlignment: settingsJson.containsKey(
+        'calendarEventTitleAlignment',
+      ),
+      hasCalendarEventSortPriority: settingsJson.containsKey(
+        'calendarEventSortPriority',
+      ),
+      hasCalendarManualEventOrders: settingsJson.containsKey(
+        'calendarManualEventOrders',
+      ),
+      hasCalendarHolidayBackgroundEnabled: settingsJson.containsKey(
+        'calendarHolidayBackgroundEnabled',
+      ),
     );
   }
 
@@ -1349,6 +1579,7 @@ class GoogleDriveSyncService implements SyncService {
       'deletedAt': normalized.deletedAt?.toUtc().toIso8601String(),
       'deviceId': normalized.deviceId,
       'showDday': normalized.showDday,
+      'completed': normalized.completed,
       'alarmEnabled': normalized.alarmEnabled,
       'allDayAlarmMinutes': normalized.allDayAlarmMinutes,
     };
@@ -1403,6 +1634,7 @@ class GoogleDriveSyncService implements SyncService {
       deviceId: json['deviceId'] as String? ?? '',
       syncStatus: 'synced',
       showDday: json['showDday'] as bool? ?? false,
+      completed: json['completed'] as bool? ?? false,
       alarmEnabled: json['alarmEnabled'] as bool? ?? false,
       allDayAlarmMinutes: json['allDayAlarmMinutes'] as int? ?? 9 * 60,
     ).normalizeAllDayBounds();
@@ -1500,8 +1732,15 @@ class GoogleDriveSyncService implements SyncService {
       'appTextSize': settings.appTextSize.name,
       'defaultCalendarView': settings.defaultCalendarView.name,
       'weekDayLayoutMode': settings.weekDayLayoutMode.name,
+      'calendarEventTitleAlignment': settings.calendarEventTitleAlignment.name,
+      'calendarEventSortPriority': settings.calendarEventSortPriority.name,
+      'calendarManualEventOrders': settings.calendarManualEventOrders.map(
+        (date, order) => MapEntry(date, order.toJson()),
+      ),
       'hiddenCategoryIds': settings.hiddenCategoryIds,
       'calendarShowHolidays': settings.calendarShowHolidays,
+      'calendarHolidayBackgroundEnabled':
+          settings.calendarHolidayBackgroundEnabled,
       'calendarDdayOnly': settings.calendarDdayOnly,
       'use24HourTime': settings.use24HourTime,
       'themeMode': settings.themeMode.name,
@@ -1546,8 +1785,19 @@ class GoogleDriveSyncService implements SyncService {
       weekDayLayoutMode: WeekDayLayoutMode.fromName(
         json['weekDayLayoutMode'] as String?,
       ),
+      calendarEventTitleAlignment: CalendarEventTitleAlignment.fromName(
+        json['calendarEventTitleAlignment'] as String?,
+      ),
+      calendarEventSortPriority: CalendarEventSortPriority.fromName(
+        json['calendarEventSortPriority'] as String?,
+      ),
+      calendarManualEventOrders: _manualEventOrdersFromJson(
+        json['calendarManualEventOrders'],
+      ),
       hiddenCategoryIds: _stringListValue(json['hiddenCategoryIds']),
       calendarShowHolidays: json['calendarShowHolidays'] as bool? ?? true,
+      calendarHolidayBackgroundEnabled:
+          json['calendarHolidayBackgroundEnabled'] as bool? ?? true,
       calendarDdayOnly: json['calendarDdayOnly'] as bool? ?? false,
       use24HourTime: json['use24HourTime'] as bool? ?? true,
       themeMode: AppThemeMode.fromName(json['themeMode'] as String?),
@@ -1569,6 +1819,23 @@ class GoogleDriveSyncService implements SyncService {
       categories.add(EventCategory.holiday);
     }
     return categories;
+  }
+
+  Map<String, CalendarManualEventOrder> _manualEventOrdersFromJson(
+    Object? value,
+  ) {
+    if (value is! Map) {
+      return const <String, CalendarManualEventOrder>{};
+    }
+    final orders = <String, CalendarManualEventOrder>{};
+    for (final entry in value.entries) {
+      final date = entry.key?.toString() ?? '';
+      final order = CalendarManualEventOrder.fromJson(entry.value);
+      if (date.isNotEmpty && order != null) {
+        orders[date] = order;
+      }
+    }
+    return orders;
   }
 
   List<int> _intListValue(Object? value, List<int> fallback) {
@@ -1664,12 +1931,20 @@ class _DownloadedSettings {
     required this.settings,
     required this.hasAppTextSize,
     required this.hasWeekDayLayoutMode,
+    required this.hasCalendarEventTitleAlignment,
+    required this.hasCalendarEventSortPriority,
+    required this.hasCalendarManualEventOrders,
+    required this.hasCalendarHolidayBackgroundEnabled,
     required this.sourceDeviceId,
   });
 
   final AppSettings settings;
   final bool hasAppTextSize;
   final bool hasWeekDayLayoutMode;
+  final bool hasCalendarEventTitleAlignment;
+  final bool hasCalendarEventSortPriority;
+  final bool hasCalendarManualEventOrders;
+  final bool hasCalendarHolidayBackgroundEnabled;
   final String? sourceDeviceId;
 }
 

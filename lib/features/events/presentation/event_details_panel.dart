@@ -6,8 +6,14 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/app_providers.dart';
+import '../../../core/analytics/product_analytics.dart';
+import '../../../core/calendar/calendar_event_movement.dart';
+import '../../../core/calendar/calendar_event_ordering.dart';
 import '../../../core/maps/map_launcher.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/settings/app_settings.dart';
+import '../../../core/theme/event_completion_style.dart';
+import '../../calendar/widgets/calendar_event_drag_layer.dart';
 import '../domain/calendar_event.dart';
 import '../domain/event_category.dart';
 import '../domain/event_draft.dart';
@@ -22,21 +28,71 @@ class EventDetailsPanel extends ConsumerWidget {
     required this.date,
     required this.events,
     this.scrollController,
+    this.initialEvent,
+    this.holidayHeaderBackgroundEnabled = true,
+    this.onEventDropped,
+    this.onEventDragStateChanged,
   });
 
   final DateTime date;
   final List<CalendarEvent> events;
   final ScrollController? scrollController;
+  final CalendarEvent? initialEvent;
+  final bool holidayHeaderBackgroundEnabled;
+  final CalendarEventDropCallback? onEventDropped;
+  final ValueChanged<bool>? onEventDragStateChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
+    final selectedEvent = initialEvent;
+    if (selectedEvent != null) {
+      return _EventDetailSheet(
+        event: selectedEvent,
+        onEdit: selectedEvent.readOnly
+            ? null
+            : () => unawaited(
+                _editEvent(
+                  context,
+                  ref,
+                  selectedEvent,
+                  settings.categories,
+                  settings.defaultReminderMinutesList,
+                ),
+              ),
+        onDelete: selectedEvent.readOnly
+            ? null
+            : () => unawaited(_deleteEvent(context, ref, selectedEvent)),
+      );
+    }
     final dateLabel = _formatDateLabel(context, date);
     final liveEventsAsync = ref.watch(eventsInRangeProvider(_dayRange(date)));
     final dayEvents = liveEventsAsync.maybeWhen(
-      data: (items) => _eventsForDay(items, date),
-      orElse: () => events,
+      data: (items) => _eventsForDay(items, date, settings),
+      orElse: () => sortedCalendarEvents(
+        events,
+        priority: settings.calendarEventSortPriority,
+        categoryOrder: settings.categories
+            .map((category) => category.id)
+            .toList(),
+        manualOrder:
+            settings
+                .calendarManualEventOrders[calendarDateKey(date)]
+                ?.eventKeys ??
+            const <String>[],
+      ),
     );
+    final holiday = dayEvents.any((event) => event.holiday);
+    final holidayBackground =
+        holiday &&
+            holidayHeaderBackgroundEnabled &&
+            settings.calendarHolidayBackgroundEnabled
+        ? Color(settings.holidayCategory.colorValue).withValues(
+            alpha: Theme.of(context).brightness == Brightness.dark
+                ? 0.22
+                : 0.14,
+          )
+        : Colors.transparent;
 
     return Material(
       color: Theme.of(context).colorScheme.surface,
@@ -48,9 +104,25 @@ class EventDetailsPanel extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    dateLabel,
-                    style: Theme.of(context).textTheme.titleMedium,
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Container(
+                      key: ValueKey(
+                        'day-holiday-header-${date.year}-${date.month}-${date.day}',
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: holidayBackground,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        dateLabel,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
                   ),
                 ),
                 IconButton(
@@ -78,37 +150,34 @@ class EventDetailsPanel extends ConsumerWidget {
                         ),
                       ],
                     )
-                  : ListView.separated(
-                      controller: scrollController,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      itemBuilder: (context, index) {
-                        final event = dayEvents[index];
-                        return _EventTile(
-                          event: event,
-                          onOpen: () => _openEventDetails(
-                            context,
-                            ref,
-                            event,
-                            settings.categories,
-                            settings.defaultReminderMinutesList,
-                          ),
-                          onEdit: event.readOnly
-                              ? null
-                              : () => _editEvent(
-                                  context,
-                                  ref,
-                                  event,
-                                  settings.categories,
-                                  settings.defaultReminderMinutesList,
-                                ),
-                          onDelete: event.readOnly
-                              ? null
-                              : () => _deleteEvent(context, ref, event),
-                        );
-                      },
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 8),
-                      itemCount: dayEvents.length,
+                  : _DraggableEventList(
+                      date: date,
+                      events: dayEvents,
+                      scrollController: scrollController,
+                      onEventDropped: onEventDropped,
+                      onEventDragStateChanged: onEventDragStateChanged,
+                      itemBuilder: (context, event) => _EventTile(
+                        event: event,
+                        onOpen: () => _openEventDetails(
+                          context,
+                          ref,
+                          event,
+                          settings.categories,
+                          settings.defaultReminderMinutesList,
+                        ),
+                        onEdit: event.readOnly
+                            ? null
+                            : () => _editEvent(
+                                context,
+                                ref,
+                                event,
+                                settings.categories,
+                                settings.defaultReminderMinutesList,
+                              ),
+                        onDelete: event.readOnly
+                            ? null
+                            : () => _deleteEvent(context, ref, event),
+                      ),
                     ),
             ),
           ],
@@ -128,6 +197,12 @@ class EventDetailsPanel extends ConsumerWidget {
       return;
     }
 
+    unawaited(
+      ref
+          .read(productAnalyticsProvider)
+          .record(AnalyticsRecord.screenView(AnalyticsScreen.eventDetails))
+          .catchError((_) {}),
+    );
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -164,6 +239,18 @@ class EventDetailsPanel extends ConsumerWidget {
     List<EventCategory> categories,
     List<int> defaultReminderMinutesList,
   ) async {
+    final analytics = ref.read(productAnalyticsProvider);
+    final stopwatch = Stopwatch()..start();
+    unawaited(
+      analytics
+          .record(
+            AnalyticsRecord.eventEditorOpened(
+              AnalyticsEditorMode.create,
+              trigger: AnalyticsTrigger.manual,
+            ),
+          )
+          .catchError((_) {}),
+    );
     final draft = await showDialog<EventDraft>(
       context: context,
       builder: (_) => EventEditorDialog(
@@ -172,6 +259,19 @@ class EventDetailsPanel extends ConsumerWidget {
         defaultReminderMinutesList: defaultReminderMinutesList,
         alarmService: ref.read(alarmServiceProvider),
       ),
+    );
+    unawaited(
+      analytics
+          .record(
+            AnalyticsRecord.eventEditorCompleted(
+              AnalyticsEditorMode.create,
+              outcome: draft == null
+                  ? AnalyticsOutcome.canceled
+                  : AnalyticsOutcome.succeeded,
+              durationMs: stopwatch.elapsedMilliseconds,
+            ),
+          )
+          .catchError((_) {}),
     );
     if (draft != null) {
       await ref.read(eventCommandServiceProvider).create(draft);
@@ -186,6 +286,18 @@ class EventDetailsPanel extends ConsumerWidget {
     List<int> defaultReminderMinutesList,
   ) async {
     final commandService = ref.read(eventCommandServiceProvider);
+    final analytics = ref.read(productAnalyticsProvider);
+    final stopwatch = Stopwatch()..start();
+    unawaited(
+      analytics
+          .record(
+            AnalyticsRecord.eventEditorOpened(
+              AnalyticsEditorMode.edit,
+              trigger: AnalyticsTrigger.manual,
+            ),
+          )
+          .catchError((_) {}),
+    );
     final draft = await showDialog<EventDraft>(
       context: context,
       builder: (_) => EventEditorDialog(
@@ -195,6 +307,19 @@ class EventDetailsPanel extends ConsumerWidget {
         defaultReminderMinutesList: defaultReminderMinutesList,
         alarmService: ref.read(alarmServiceProvider),
       ),
+    );
+    unawaited(
+      analytics
+          .record(
+            AnalyticsRecord.eventEditorCompleted(
+              AnalyticsEditorMode.edit,
+              outcome: draft == null
+                  ? AnalyticsOutcome.canceled
+                  : AnalyticsOutcome.succeeded,
+              durationMs: stopwatch.elapsedMilliseconds,
+            ),
+          )
+          .catchError((_) {}),
     );
     if (draft == null) {
       return;
@@ -271,6 +396,7 @@ class EventDetailsPanel extends ConsumerWidget {
         context,
         title: context.tr('반복 일정 삭제'),
         actionLabel: context.tr('삭제'),
+        allScopeLabel: context.tr('전체 삭제'),
       );
       if (scope == null) {
         return;
@@ -348,6 +474,7 @@ class EventDetailsPanel extends ConsumerWidget {
     BuildContext context, {
     required String title,
     required String actionLabel,
+    String? allScopeLabel,
   }) {
     return showDialog<_RecurringChangeScope>(
       context: context,
@@ -377,7 +504,7 @@ class EventDetailsPanel extends ConsumerWidget {
           FilledButton(
             onPressed: () =>
                 Navigator.of(context).pop(_RecurringChangeScope.all),
-            child: Text(context.tr('전체 반복')),
+            child: Text(allScopeLabel ?? context.tr('전체 반복')),
           ),
         ],
       ),
@@ -388,6 +515,156 @@ class EventDetailsPanel extends ConsumerWidget {
     return DateFormat.yMMMMEEEEd(
       context.l10n.locale.toLanguageTag(),
     ).format(date);
+  }
+}
+
+class _DraggableEventList extends StatefulWidget {
+  const _DraggableEventList({
+    required this.date,
+    required this.events,
+    required this.scrollController,
+    required this.onEventDropped,
+    required this.onEventDragStateChanged,
+    required this.itemBuilder,
+  });
+
+  final DateTime date;
+  final List<CalendarEvent> events;
+  final ScrollController? scrollController;
+  final CalendarEventDropCallback? onEventDropped;
+  final ValueChanged<bool>? onEventDragStateChanged;
+  final Widget Function(BuildContext context, CalendarEvent event) itemBuilder;
+
+  @override
+  State<_DraggableEventList> createState() => _DraggableEventListState();
+}
+
+class _DraggableEventListState extends State<_DraggableEventList> {
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      controller: widget.scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemBuilder: (context, index) {
+        final event = widget.events[index];
+        return _EventOrderDropTarget(
+          key: ValueKey('event-order-drop-${event.occurrenceId ?? event.id}'),
+          date: widget.date,
+          events: widget.events,
+          itemIndex: index,
+          onEventDropped: widget.onEventDropped,
+          child: CalendarEventDraggable(
+            key: ValueKey('event-drag-${event.occurrenceId ?? event.id}'),
+            event: event,
+            enabled: widget.onEventDropped != null,
+            onDragStateChanged: widget.onEventDragStateChanged,
+            child: widget.itemBuilder(context, event),
+          ),
+        );
+      },
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemCount: widget.events.length,
+    );
+  }
+}
+
+class _EventOrderDropTarget extends StatefulWidget {
+  const _EventOrderDropTarget({
+    super.key,
+    required this.date,
+    required this.events,
+    required this.itemIndex,
+    required this.onEventDropped,
+    required this.child,
+  });
+
+  final DateTime date;
+  final List<CalendarEvent> events;
+  final int itemIndex;
+  final CalendarEventDropCallback? onEventDropped;
+  final Widget child;
+
+  @override
+  State<_EventOrderDropTarget> createState() => _EventOrderDropTargetState();
+}
+
+class _EventOrderDropTargetState extends State<_EventOrderDropTarget> {
+  var _hovering = false;
+  var _insertAfter = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final onEventDropped = widget.onEventDropped;
+    if (onEventDropped == null) {
+      return widget.child;
+    }
+    final colorScheme = Theme.of(context).colorScheme;
+    return DragTarget<CalendarEventDragPayload>(
+      onWillAcceptWithDetails: (details) {
+        if (!calendarEventCanMove(details.data.event)) return false;
+        _updateHover(details.offset);
+        return true;
+      },
+      onMove: (details) => _updateHover(details.offset),
+      onLeave: (_) {
+        if (_hovering) setState(() => _hovering = false);
+      },
+      onAcceptWithDetails: (details) {
+        final targetIndex = _resolvedTargetIndex(details.data.event);
+        if (_hovering) setState(() => _hovering = false);
+        unawaited(onEventDropped(details.data.event, widget.date, targetIndex));
+      },
+      builder: (context, candidateData, rejectedData) => AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: _hovering
+              ? Border(
+                  top: !_insertAfter
+                      ? BorderSide(color: colorScheme.primary, width: 2)
+                      : BorderSide.none,
+                  bottom: _insertAfter
+                      ? BorderSide(color: colorScheme.primary, width: 2)
+                      : BorderSide.none,
+                )
+              : null,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+
+  void _updateHover(Offset globalOffset) {
+    final renderObject = context.findRenderObject();
+    final nextInsertAfter = renderObject is RenderBox
+        ? renderObject.globalToLocal(globalOffset).dy >=
+              renderObject.size.height / 2
+        : false;
+    if (!_hovering || _insertAfter != nextInsertAfter) {
+      setState(() {
+        _hovering = true;
+        _insertAfter = nextInsertAfter;
+      });
+    }
+  }
+
+  int _resolvedTargetIndex(CalendarEvent draggedEvent) {
+    final draggedKey = calendarEventOrderKey(draggedEvent);
+    final targetEvent = widget.events[widget.itemIndex];
+    if (calendarEventOrderKey(targetEvent) == draggedKey ||
+        targetEvent.id == draggedEvent.id) {
+      return widget.itemIndex;
+    }
+    var targetIndex = widget.itemIndex + (_insertAfter ? 1 : 0);
+    final sourceIndex = widget.events.indexWhere(
+      (event) =>
+          calendarEventOrderKey(event) == draggedKey ||
+          event.id == draggedEvent.id,
+    );
+    if (sourceIndex >= 0 && sourceIndex < targetIndex) {
+      targetIndex -= 1;
+    }
+    return targetIndex.clamp(0, widget.events.length).toInt();
   }
 }
 
@@ -407,13 +684,24 @@ class _EventTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final timeLabel = _formatTimeLabel(context, event);
-    final color = Color(event.colorValue);
+    final categoryColor = Color(event.colorValue);
+    final color = calendarEventAccentColor(
+      context,
+      categoryColor,
+      completed: event.completed,
+    );
+    final backgroundColor = calendarEventBackgroundColor(
+      context,
+      categoryColor,
+      completed: event.completed,
+      categoryAlpha: event.holiday ? 0.07 : 0.08,
+    );
     final title = context.l10n.eventTitle(event.title, holiday: event.holiday);
     return Material(
-      color: color.withValues(alpha: event.holiday ? 0.07 : 0.08),
+      color: backgroundColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: color.withValues(alpha: 0.20)),
+        side: BorderSide(color: color.withValues(alpha: 0.28)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
@@ -449,9 +737,14 @@ class _EventTile extends StatelessWidget {
                                     Expanded(
                                       child: Text(
                                         title,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
+                                        textAlign: TextAlign.start,
+                                        style: calendarEventCompletionStyle(
+                                          context,
+                                          const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 14,
+                                          ),
+                                          completed: event.completed,
                                         ),
                                       ),
                                     ),
@@ -609,7 +902,7 @@ class _EventTile extends StatelessWidget {
   }
 }
 
-class _EventDetailSheet extends StatelessWidget {
+class _EventDetailSheet extends ConsumerStatefulWidget {
   const _EventDetailSheet({
     required this.event,
     required this.onEdit,
@@ -621,8 +914,37 @@ class _EventDetailSheet extends StatelessWidget {
   final VoidCallback? onDelete;
 
   @override
+  ConsumerState<_EventDetailSheet> createState() => _EventDetailSheetState();
+}
+
+class _EventDetailSheetState extends ConsumerState<_EventDetailSheet> {
+  late bool _completed;
+  var _updatingCompletion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _completed = widget.event.completed;
+  }
+
+  @override
+  void didUpdateWidget(covariant _EventDetailSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.event.id != widget.event.id ||
+        (!_updatingCompletion &&
+            oldWidget.event.completed != widget.event.completed)) {
+      _completed = widget.event.completed;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final event = widget.event.copyWith(completed: _completed);
+    final onEdit = widget.onEdit;
+    final onDelete = widget.onDelete;
     final color = Color(event.colorValue);
+    final canChangeCompletion =
+        !event.readOnly && !event.systemEvent && !event.holiday;
     return SafeArea(
       top: false,
       child: FractionallySizedBox(
@@ -653,8 +975,13 @@ class _EventDetailSheet extends StatelessWidget {
                             event.title,
                             holiday: event.holiday,
                           ),
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w800),
+                          style: calendarEventCompletionStyle(
+                            context,
+                            Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                            completed: event.completed,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -675,6 +1002,23 @@ class _EventDetailSheet extends StatelessWidget {
               Expanded(
                 child: ListView(
                   children: [
+                    CheckboxListTile(
+                      key: ValueKey(
+                        'event-detail-todo-${event.occurrenceId ?? event.id}',
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(context.tr('완료')),
+                      value: _completed,
+                      onChanged: !canChangeCompletion || _updatingCompletion
+                          ? null
+                          : (value) {
+                              if (value != null) {
+                                unawaited(_setCompleted(value));
+                              }
+                            },
+                    ),
+                    const Divider(height: 8),
                     _DetailRow(
                       icon: Icons.schedule_outlined,
                       label: context.tr('시간'),
@@ -769,6 +1113,35 @@ class _EventDetailSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _setCompleted(bool completed) async {
+    if (_updatingCompletion || completed == _completed) {
+      return;
+    }
+    final previous = _completed;
+    setState(() {
+      _completed = completed;
+      _updatingCompletion = true;
+    });
+    try {
+      await ref
+          .read(eventCommandServiceProvider)
+          .setCompleted(widget.event, completed);
+    } on Object {
+      if (mounted) {
+        setState(() => _completed = previous);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(context.tr('요청을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.')),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _updatingCompletion = false);
+      }
+    }
   }
 
   String _formatTimeLabel(BuildContext context, CalendarEvent event) {
@@ -929,13 +1302,21 @@ CalendarRange _dayRange(DateTime date) {
   return CalendarRange(start, start.add(const Duration(days: 1)));
 }
 
-List<CalendarEvent> _eventsForDay(List<CalendarEvent> events, DateTime date) {
+List<CalendarEvent> _eventsForDay(
+  List<CalendarEvent> events,
+  DateTime date,
+  AppSettings settings,
+) {
   final start = DateTime(date.year, date.month, date.day);
   final end = start.add(const Duration(days: 1));
-  return events
-      .where(
-        (event) => event.startAt.isBefore(end) && event.endAt.isAfter(start),
-      )
-      .toList()
-    ..sort((a, b) => a.startAt.compareTo(b.startAt));
+  return sortedCalendarEvents(
+    events.where(
+      (event) => event.startAt.isBefore(end) && event.endAt.isAfter(start),
+    ),
+    priority: settings.calendarEventSortPriority,
+    categoryOrder: settings.categories.map((category) => category.id).toList(),
+    manualOrder:
+        settings.calendarManualEventOrders[calendarDateKey(date)]?.eventKeys ??
+        const <String>[],
+  );
 }

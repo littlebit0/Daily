@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'app/daily_app.dart';
+import 'app/daily_bootstrap.dart';
+import 'core/analytics/privacy_analytics_service.dart';
 import 'core/di/app_providers.dart';
 import 'core/settings/settings_repository.dart';
 import 'core/update/app_update_service.dart';
@@ -20,13 +21,16 @@ Future<void> main() async {
   ]);
   final preferences = await SharedPreferences.getInstance();
   final settingsRepository = SettingsRepository(preferences: preferences);
+  final analytics = PrivacyAnalyticsService(preferences: preferences);
+  await analytics.initialize();
 
   runApp(
     ProviderScope(
       overrides: [
         settingsRepositoryProvider.overrideWithValue(settingsRepository),
+        productAnalyticsProvider.overrideWithValue(analytics),
       ],
-      child: const DailyApp(),
+      child: const DailyBootstrap(),
     ),
   );
   unawaited(AppUpdateService().checkAndInstallIfAvailable());

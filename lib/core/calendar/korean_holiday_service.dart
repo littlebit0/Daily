@@ -37,7 +37,11 @@ class KoreanHolidayService {
       ..sort((a, b) => a.date.compareTo(b.date));
   }
 
-  List<CalendarEvent> holidayEventsInRange(DateTime start, DateTime end) {
+  List<CalendarEvent> holidayEventsInRange(
+    DateTime start,
+    DateTime end, {
+    EventCategory category = EventCategory.holiday,
+  }) {
     return holidaysInRange(start, end)
         .map(
           (holiday) => CalendarEvent(
@@ -46,8 +50,8 @@ class KoreanHolidayService {
             startAt: holiday.date,
             endAt: holiday.date.add(const Duration(days: 1)),
             allDay: true,
-            category: EventCategory.holiday,
-            colorValue: EventCategory.holiday.colorValue,
+            category: category,
+            colorValue: category.colorValue,
             createdAt: holiday.date,
             updatedAt: holiday.date,
             syncStatus: 'synced',

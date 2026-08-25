@@ -6,4 +6,6 @@ abstract interface class SyncService {
   Future<void> queueEventUpsert(CalendarEvent event);
 
   Future<void> queueEventDelete(String eventId);
+
+  Future<void> queueSettingsBackup();
 }

@@ -70,7 +70,10 @@ class EventCategory {
   static EventCategory fromJson(Map<String, Object?> json) {
     final id = json['id'] as String? ?? '';
     if (id == holiday.id) {
-      return holiday;
+      return holiday.copyWith(
+        colorValue: json['colorValue'] as int? ?? holiday.colorValue,
+        locked: true,
+      );
     }
     if (id == basic.id) {
       return basic.copyWith(
@@ -98,7 +101,7 @@ class EventCategory {
       return basic;
     }
     if (normalized == holiday.id || normalized == holiday.label) {
-      return holiday;
+      return holiday.copyWith(colorValue: colorValue ?? holiday.colorValue);
     }
     if (normalized == basic.id || normalized == basic.label) {
       return basic;

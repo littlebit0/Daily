@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/auth/apple_account.dart';
+import '../../../core/analytics/product_analytics.dart';
 import '../../../core/auth/apple_sign_in_service.dart';
 import '../../../core/auth/daily_account.dart';
 import '../../../core/auth/google_account.dart';
@@ -27,6 +28,8 @@ import 'calendar_import_page.dart';
 import 'siri_activity_log_page.dart';
 
 const _fallbackAppVersion = '3.0.0';
+const _signalShortcutShareUrl =
+    'https://www.icloud.com/shortcuts/d38300f25eca434db08375c9924b4e18';
 
 enum _SettingsDestination { notifications, account }
 
@@ -84,6 +87,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    Future.microtask(() {
+      if (!mounted) return;
+      final screen = switch (widget._destination) {
+        _SettingsDestination.notifications =>
+          AnalyticsScreen.notificationSettings,
+        _SettingsDestination.account => AnalyticsScreen.accountSettings,
+        null => AnalyticsScreen.settings,
+      };
+      unawaited(
+        ref
+            .read(productAnalyticsProvider)
+            .record(AnalyticsRecord.screenView(screen))
+            .catchError((_) {}),
+      );
+    });
     _appVersionInfo = _loadAppVersionInfo();
     Future.microtask(() async {
       final key = await ref.read(settingsRepositoryProvider).geminiApiKey();
@@ -157,6 +175,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(appSettingsProvider);
+    final analytics = ref.watch(productAnalyticsProvider);
     final appleSignInService = ref.watch(appleSignInServiceProvider);
     final account = _dailyAccount;
     final appleAccount = account?.appleAccount ?? _appleAccount;
@@ -179,7 +198,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               children: [
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.notifications_outlined),
+                  leading: const _SettingsLeadingIcon(
+                    Icons.notifications_outlined,
+                  ),
                   title: Text(context.tr('알림')),
                   subtitle: Text(context.tr('일정 알림, 아침 브리핑, D-day 알림')),
                   trailing: const Icon(Icons.chevron_right),
@@ -195,7 +216,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ListTile(
                   key: const ValueKey('account-settings-navigation'),
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.account_circle_outlined),
+                  leading: const _SettingsLeadingIcon(
+                    Icons.account_circle_outlined,
+                  ),
                   title: Text(context.tr('계정')),
                   subtitle: Text(context.tr('Apple, Google, 동기화 및 계정 관리')),
                   trailing: const Icon(Icons.chevron_right),
@@ -211,9 +234,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     defaultTargetPlatform == TargetPlatform.macOS) ...[
                   const Divider(height: 1),
                   ListTile(
+                    key: const ValueKey('siri-shortcut-setup'),
+                    contentPadding: EdgeInsets.zero,
+                    leading: const _SettingsLeadingIcon(
+                      Icons.add_link_outlined,
+                    ),
+                    title: Text(context.tr('Siri 단축어 설정')),
+                    subtitle: Text(
+                      context.tr('시그널 단축어를 추가하고 Siri에서 Daily 명령을 사용합니다.'),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _showSiriShortcutSetup,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
                     key: const ValueKey('siri-activity-log-navigation'),
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.record_voice_over_outlined),
+                    leading: const _SettingsLeadingIcon(
+                      Icons.record_voice_over_outlined,
+                    ),
                     title: Text(context.tr('Siri 작업 기록')),
                     subtitle: Text(
                       context.tr('Siri와 자동화로 실행한 Daily 작업을 날짜별로 확인합니다.'),
@@ -279,6 +318,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 _TimeTile(
                   title: context.tr('종일 일정 알림 시간'),
                   subtitle: context.tr('종일 일정의 알림 기준 시간'),
+                  icon: Icons.event_outlined,
                   hour: settings.allDayReminderHour,
                   minute: settings.allDayReminderMinute,
                   use24HourTime: settings.use24HourTime,
@@ -298,6 +338,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const Divider(height: 1),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const _SettingsLeadingIcon(
+                    Icons.wb_sunny_outlined,
+                  ),
                   value: settings.morningBriefingEnabled,
                   title: Text(context.tr('아침 브리핑')),
                   subtitle: Text(context.tr('매일 지정한 시간에 오늘 일정을 알려줍니다.')),
@@ -324,6 +367,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   _TimeTile(
                     title: context.tr('아침 브리핑 시간'),
                     subtitle: context.tr('브리핑을 받을 시간'),
+                    icon: Icons.alarm_outlined,
                     hour: settings.morningBriefingHour,
                     minute: settings.morningBriefingMinute,
                     use24HourTime: settings.use24HourTime,
@@ -372,7 +416,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               children: [
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.language_outlined),
+                  leading: const _SettingsLeadingIcon(Icons.language_outlined),
                   title: Text(context.tr('언어')),
                   trailing: DropdownButtonHideUnderline(
                     child: DropdownButton<AppLanguage>(
@@ -399,6 +443,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Row(
                     children: [
+                      const _SettingsRowLeading(Icons.palette_outlined),
+                      const SizedBox(width: 16),
                       Expanded(
                         flex: 2,
                         child: Text(
@@ -431,7 +477,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     defaultTargetPlatform == TargetPlatform.android) ...[
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.move_to_inbox_outlined),
+                    leading: const _SettingsLeadingIcon(
+                      Icons.move_to_inbox_outlined,
+                    ),
                     title: Text(context.tr('캘린더 데이터 옮기기')),
                     subtitle: Text(
                       context.tr(
@@ -451,6 +499,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ],
                 ListTile(
                   contentPadding: EdgeInsets.zero,
+                  leading: const _SettingsLeadingIcon(
+                    Icons.calendar_view_week_outlined,
+                  ),
                   title: Text(context.tr('주 시작 요일')),
                   trailing: SizedBox(
                     width: 132,
@@ -468,6 +519,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const Divider(height: 1),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const _SettingsLeadingIcon(
+                    Icons.nightlight_outlined,
+                  ),
                   value: settings.showLunarDates,
                   title: Text(context.tr('음력 표시')),
                   subtitle: Text(context.tr('월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.')),
@@ -480,6 +534,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   const Divider(height: 1),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
+                    secondary: const _SettingsLeadingIcon(
+                      Icons.date_range_outlined,
+                    ),
                     value:
                         settings.monthNavigationMode ==
                             MonthNavigationMode.vertical
@@ -506,6 +563,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const Divider(height: 1),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
+                  leading: const _SettingsLeadingIcon(Icons.swipe_outlined),
                   title: Text(context.tr('월간 이동 방식')),
                   trailing: SizedBox(
                     width: 224,
@@ -529,6 +587,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const Divider(height: 1),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
+                  leading: const _SettingsLeadingIcon(
+                    Icons.calendar_view_month_outlined,
+                  ),
                   title: Text(context.tr('기본 보기')),
                   subtitle: Text(context.tr('앱을 열었을 때 먼저 보여줄 달력 보기')),
                   trailing: SizedBox(
@@ -549,6 +610,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const Divider(height: 1),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
+                  leading: const _SettingsLeadingIcon(
+                    Icons.view_agenda_outlined,
+                  ),
                   title: Text(context.tr('주간·일간 표시 방식')),
                   trailing: SizedBox(
                     width: 168,
@@ -565,6 +629,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                 ),
                 const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const _SettingsLeadingIcon(
+                    Icons.format_align_center_outlined,
+                  ),
+                  title: Text(context.tr('일정 제목 정렬')),
+                  trailing: SizedBox(
+                    width: 168,
+                    child: _ThreeWayCapsule<CalendarEventTitleAlignment>(
+                      key: const ValueKey('event-title-alignment-slider'),
+                      values: CalendarEventTitleAlignment.values,
+                      selected: settings.calendarEventTitleAlignment,
+                      labelFor: (alignment) => context.tr(
+                        alignment == CalendarEventTitleAlignment.leading
+                            ? '기본'
+                            : '가운데',
+                      ),
+                      onChanged: (value) => _save(
+                        settings.copyWith(calendarEventTitleAlignment: value),
+                      ),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
                 _AppTextSizeSlider(
                   textSize: settings.appTextSize,
                   onChanged: (value) =>
@@ -576,8 +664,41 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _SettingsSection(
               title: context.tr('개인정보'),
               children: [
+                ValueListenableBuilder<bool>(
+                  valueListenable: analytics.enabledListenable,
+                  builder: (context, enabled, _) => SwitchListTile(
+                    key: const ValueKey('anonymous-analytics-toggle'),
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const _SettingsLeadingIcon(
+                      Icons.insights_outlined,
+                    ),
+                    value: enabled,
+                    title: Text(context.tr('익명 사용성 분석 허용')),
+                    subtitle: Text(
+                      context.tr(
+                        '일정 내용, 검색어, 계정 정보 없이 화면과 기능 사용, 오류 범주, 성능 정보만 수집합니다.',
+                      ),
+                    ),
+                    onChanged: (value) => analytics.setEnabled(value),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  key: const ValueKey('delete-analytics-data'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const _SettingsLeadingIcon(
+                    Icons.delete_sweep_outlined,
+                  ),
+                  title: Text(context.tr('분석 데이터 삭제')),
+                  subtitle: Text(
+                    context.tr('이 기기에 전송 대기 중인 익명 분석 데이터를 삭제합니다.'),
+                  ),
+                  onTap: _deleteAnalyticsData,
+                ),
+                const Divider(height: 1),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  secondary: const _SettingsLeadingIcon(Icons.lock_outline),
                   value: settings.appLockEnabled,
                   title: Text(context.tr('앱 잠금')),
                   subtitle: Text(
@@ -602,6 +723,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     const Divider(height: 1),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
+                      secondary: const _SettingsLeadingIcon(Icons.fingerprint),
                       value: settings.appLockBiometricsEnabled,
                       title: Text(context.tr('생체인식 잠금 해제')),
                       subtitle: Text(
@@ -624,19 +746,71 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _SettingsSection(
               title: context.tr('분류'),
               children: [
-                for (final category in settings.categories)
-                  _CategoryTile(
-                    category: category,
-                    visible: !settings.hiddenCategoryIds.contains(category.id),
-                    onVisibilityChanged: (visible) =>
-                        _setCategoryVisible(settings, category, visible),
-                    onEdit: category.locked
-                        ? null
-                        : () => _editCategory(settings, category),
-                    onDelete: category.locked
-                        ? null
-                        : () => _deleteCategory(settings, category),
+                ReorderableListView.builder(
+                  key: const ValueKey('category-reorder-list'),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  itemCount: settings.categories.length,
+                  onReorderItem: (oldIndex, newIndex) =>
+                      _reorderCategories(settings, oldIndex, newIndex),
+                  itemBuilder: (context, index) {
+                    final category = settings.categories[index];
+                    return _CategoryTile(
+                      key: ValueKey('category-${category.id}'),
+                      reorderIndex: index,
+                      category: category,
+                      visible: !settings.hiddenCategoryIds.contains(
+                        category.id,
+                      ),
+                      onVisibilityChanged: (visible) =>
+                          _setCategoryVisible(settings, category, visible),
+                      onEdit:
+                          !category.locked ||
+                              category.id == EventCategory.holiday.id
+                          ? () => _editCategory(settings, category)
+                          : null,
+                      onDelete: category.locked
+                          ? null
+                          : () => _deleteCategory(settings, category),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const _SettingsLeadingIcon(Icons.sort_outlined),
+                  title: Text(context.tr('일정 정렬 우선순위')),
+                  trailing: SizedBox(
+                    width: 188,
+                    child: _ThreeWayCapsule<CalendarEventSortPriority>(
+                      key: const ValueKey('event-sort-priority-slider'),
+                      values: CalendarEventSortPriority.values,
+                      selected: settings.calendarEventSortPriority,
+                      labelFor: (priority) => context.tr(
+                        priority == CalendarEventSortPriority.category
+                            ? '분류 우선'
+                            : '시간 우선',
+                      ),
+                      onChanged: (value) => _save(
+                        settings.copyWith(calendarEventSortPriority: value),
+                      ),
+                    ),
                   ),
+                ),
+                SwitchListTile(
+                  key: const ValueKey('holiday-background-setting'),
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const _SettingsLeadingIcon(
+                    Icons.format_color_fill_outlined,
+                  ),
+                  value: settings.calendarHolidayBackgroundEnabled,
+                  title: Text(context.tr('공휴일 날짜 배경')),
+                  subtitle: Text(context.tr('공휴일 분류 색상을 날짜 배경에 표시합니다.')),
+                  onChanged: (value) => _save(
+                    settings.copyWith(calendarHolidayBackgroundEnabled: value),
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -659,18 +833,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       children: [
                         ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.auto_awesome_outlined),
+                          leading: const _SettingsLeadingIcon(
+                            Icons.auto_awesome_outlined,
+                          ),
                           title: Text(context.tr('AI 기능')),
                           subtitle: Text(context.tr('개발 중입니다.')),
                         ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
+                          secondary: const _SettingsLeadingIcon(
+                            Icons.psychology_outlined,
+                          ),
                           value: settings.aiEnabled,
                           title: Text(context.tr('Gemini 사용')),
                           onChanged: (_) {},
                         ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
+                          secondary: const _SettingsLeadingIcon(
+                            Icons.shield_outlined,
+                          ),
                           value: settings.blockSensitiveAi,
                           title: Text(context.tr('민감 문장 AI 차단')),
                           onChanged: (_) {},
@@ -679,6 +861,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           controller: _apiKeyController,
                           obscureText: true,
                           decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.key_outlined),
                             labelText: context.tr('Gemini API 키'),
                           ),
                         ),
@@ -744,7 +927,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const Divider(height: 1),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.bug_report_outlined),
+                  leading: const _SettingsLeadingIcon(
+                    Icons.bug_report_outlined,
+                  ),
                   title: Text(context.tr('버그 제보')),
                   subtitle: Text(context.tr('GitHub 제보 양식을 기본 브라우저에서 엽니다.')),
                   trailing: const Icon(Icons.open_in_new),
@@ -755,6 +940,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _showSiriShortcutSetup() async {
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse(_signalShortcutShareUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } on Object {
+      opened = false;
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('시그널 단축어 추가 화면을 열 수 없습니다.'))),
+      );
+    }
   }
 
   Future<_AppVersionInfo> _loadAppVersionInfo() async {
@@ -784,6 +986,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         SnackBar(content: Text(context.tr('GitHub Repository를 열 수 없습니다.'))),
       );
     }
+  }
+
+  Future<void> _deleteAnalyticsData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('분석 데이터 삭제')),
+        content: Text(
+          context.tr(
+            '이 기기에 전송 대기 중인 익명 분석 데이터를 삭제할까요? 이미 전송되어 집계된 데이터는 계정이나 기기와 연결되지 않아 특정 사용자를 식별하거나 되돌릴 수 없습니다.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(context.tr('취소')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(context.tr('삭제')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(productAnalyticsProvider).deletePendingData();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('전송 대기 분석 데이터를 삭제했습니다.'))),
+    );
   }
 
   Future<void> _reportBug() async {
@@ -1227,6 +1459,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await ref.read(appleWidgetServiceProvider).refresh();
   }
 
+  Future<void> _reorderCategories(
+    AppSettings settings,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    final categories = [...settings.categories];
+    final category = categories.removeAt(oldIndex);
+    categories.insert(newIndex, category);
+    await _save(settings.copyWith(categories: categories));
+  }
+
   Future<void> _editCategory(
     AppSettings settings,
     EventCategory category,
@@ -1318,10 +1561,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   List<EventCategory> _normalizeCategories(List<EventCategory> categories) {
-    final normalized = categories
-        .where((category) => category.id != EventCategory.holiday.id)
-        .toList();
-    normalized.add(EventCategory.holiday);
+    final normalized = <EventCategory>[
+      for (final category in categories)
+        category.id == EventCategory.holiday.id
+            ? category.copyWith(locked: true)
+            : category,
+    ];
+    if (!normalized.any(
+      (category) => category.id == EventCategory.holiday.id,
+    )) {
+      normalized.add(EventCategory.holiday);
+    }
     return normalized;
   }
 
@@ -1882,6 +2132,8 @@ class _AppTextSizeSlider extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
+          const _SettingsRowLeading(Icons.text_fields_outlined),
+          const SizedBox(width: 16),
           Expanded(
             flex: 3,
             child: Text(
@@ -1923,6 +2175,8 @@ class _AppLockMethodSlider extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 8),
       child: Row(
         children: [
+          const _SettingsRowLeading(Icons.admin_panel_settings_outlined),
+          const SizedBox(width: 16),
           Expanded(
             flex: 2,
             child: Text(
@@ -2134,6 +2388,34 @@ class _SettingsSection extends StatelessWidget {
   }
 }
 
+class _SettingsLeadingIcon extends StatelessWidget {
+  const _SettingsLeadingIcon(this.icon);
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(child: Icon(icon, size: 22));
+  }
+}
+
+class _SettingsRowLeading extends StatelessWidget {
+  const _SettingsRowLeading(this.icon);
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 40,
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: _SettingsLeadingIcon(icon),
+      ),
+    );
+  }
+}
+
 class _AppVersionInfo {
   const _AppVersionInfo({
     required this.version,
@@ -2169,7 +2451,7 @@ class _AppVersionTile extends StatelessWidget {
           onDoubleTap: onDoubleTap,
           child: ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.info_outline),
+            leading: const _SettingsLeadingIcon(Icons.info_outline),
             title: Text(context.tr('Daily 버전')),
             subtitle: Text(
               context.tr(
@@ -2211,36 +2493,50 @@ class _DefaultRemindersTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title),
-          const SizedBox(height: 4),
-          Text(summary, style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
             children: [
-              FilterChip(
-                label: Text(context.tr('없음')),
-                selected: values.isEmpty,
-                onSelected: (_) => onChanged(const <int>[]),
-              ),
-              for (final minutes in options)
-                FilterChip(
-                  label: Text(_minutesLabel(context, minutes)),
-                  selected: selected.contains(minutes),
-                  onSelected: (enabled) {
-                    final next = values.toSet();
-                    enabled ? next.add(minutes) : next.remove(minutes);
-                    onChanged(normalizeReminderMinutes(next));
-                  },
-                ),
-              IconButton.outlined(
-                tooltip: context.tr('기본 알림 직접 입력'),
-                onPressed: onCustom,
-                icon: const Icon(Icons.edit_outlined),
-              ),
+              const _SettingsRowLeading(Icons.add_alert_outlined),
+              const SizedBox(width: 16),
+              Expanded(child: Text(title)),
             ],
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 56),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(summary, style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilterChip(
+                      label: Text(context.tr('없음')),
+                      selected: values.isEmpty,
+                      onSelected: (_) => onChanged(const <int>[]),
+                    ),
+                    for (final minutes in options)
+                      FilterChip(
+                        label: Text(_minutesLabel(context, minutes)),
+                        selected: selected.contains(minutes),
+                        onSelected: (enabled) {
+                          final next = values.toSet();
+                          enabled ? next.add(minutes) : next.remove(minutes);
+                          onChanged(normalizeReminderMinutes(next));
+                        },
+                      ),
+                    IconButton.outlined(
+                      tooltip: context.tr('기본 알림 직접 입력'),
+                      onPressed: onCustom,
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -2256,6 +2552,7 @@ class _TimeTile extends StatelessWidget {
     required this.minute,
     required this.use24HourTime,
     required this.onChanged,
+    this.icon = Icons.schedule_outlined,
   });
 
   final String title;
@@ -2264,6 +2561,7 @@ class _TimeTile extends StatelessWidget {
   final int minute;
   final bool use24HourTime;
   final ValueChanged<TimeOfDay> onChanged;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -2271,6 +2569,7 @@ class _TimeTile extends StatelessWidget {
     final label = _timeLabel(hour, minute, use24HourTime: use24HourTime);
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      leading: _SettingsLeadingIcon(icon),
       title: Text(title),
       subtitle: Text('$subtitle · $label'),
       trailing: IconButton(
@@ -2310,6 +2609,8 @@ class _TimeFormatTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
+          const _SettingsRowLeading(Icons.access_time_outlined),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2359,33 +2660,50 @@ class _DdayOffsetsTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.tr('D-day 알림')),
-          const SizedBox(height: 4),
-          Text(
-            'D-day 표시가 켜진 일정에 적용합니다.',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
+          Row(
             children: [
-              for (final offset in presets)
-                FilterChip(
-                  label: Text(_ddayLabel(offset)),
-                  selected: selected.contains(offset),
-                  onSelected: (checked) {
-                    final next = {...selected};
-                    if (checked) {
-                      next.add(offset);
-                    } else {
-                      next.remove(offset);
-                    }
-                    onChanged(next.toList()..sort());
-                  },
-                ),
-              ActionChip(label: Text(context.tr('직접 입력')), onPressed: onCustom),
+              const _SettingsRowLeading(Icons.flag_outlined),
+              const SizedBox(width: 16),
+              Expanded(child: Text(context.tr('D-day 알림'))),
             ],
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 56),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'D-day 표시가 켜진 일정에 적용합니다.',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    for (final offset in presets)
+                      FilterChip(
+                        label: Text(_ddayLabel(offset)),
+                        selected: selected.contains(offset),
+                        onSelected: (checked) {
+                          final next = {...selected};
+                          if (checked) {
+                            next.add(offset);
+                          } else {
+                            next.remove(offset);
+                          }
+                          onChanged(next.toList()..sort());
+                        },
+                      ),
+                    ActionChip(
+                      label: Text(context.tr('직접 입력')),
+                      onPressed: onCustom,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -2424,6 +2742,9 @@ class _NotificationTestTile extends StatelessWidget {
         if (constraints.maxWidth >= 520) {
           return ListTile(
             contentPadding: EdgeInsets.zero,
+            leading: const _SettingsLeadingIcon(
+              Icons.notifications_active_outlined,
+            ),
             title: Text(context.tr('알림 테스트')),
             subtitle: Text(subtitle),
             trailing: button,
@@ -2432,17 +2753,29 @@ class _NotificationTestTile extends StatelessWidget {
 
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                context.tr('알림 테스트'),
-                style: Theme.of(context).textTheme.bodyLarge,
+              const _SettingsRowLeading(Icons.notifications_active_outlined),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      context.tr('알림 테스트'),
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Align(alignment: Alignment.centerRight, child: button),
+                  ],
+                ),
               ),
-              const SizedBox(height: 2),
-              Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 8),
-              Align(alignment: Alignment.centerRight, child: button),
             ],
           ),
         );
@@ -2453,6 +2786,8 @@ class _NotificationTestTile extends StatelessWidget {
 
 class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
+    super.key,
+    required this.reorderIndex,
     required this.category,
     required this.visible,
     required this.onVisibilityChanged,
@@ -2460,6 +2795,7 @@ class _CategoryTile extends StatelessWidget {
     required this.onDelete,
   });
 
+  final int reorderIndex;
   final EventCategory category;
   final bool visible;
   final ValueChanged<bool> onVisibilityChanged;
@@ -2473,6 +2809,14 @@ class _CategoryTile extends StatelessWidget {
       leading: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          ReorderableDelayedDragStartListener(
+            index: reorderIndex,
+            child: Tooltip(
+              message: context.tr('길게 눌러 순서 변경'),
+              child: const Icon(Icons.drag_indicator, size: 20),
+            ),
+          ),
+          const SizedBox(width: 2),
           Tooltip(
             message: '캘린더에 표시',
             child: Checkbox(
@@ -2498,7 +2842,7 @@ class _CategoryTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (category.locked)
+          if (onEdit == null && onDelete == null)
             Tooltip(
               message: '수정 불가',
               child: Icon(
@@ -2507,16 +2851,18 @@ class _CategoryTile extends StatelessWidget {
               ),
             )
           else ...[
-            IconButton(
-              tooltip: context.tr('분류 수정'),
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined),
-            ),
-            IconButton(
-              tooltip: context.tr('분류 삭제'),
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
-            ),
+            if (onEdit != null)
+              IconButton(
+                tooltip: context.tr('분류 수정'),
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            if (onDelete != null)
+              IconButton(
+                tooltip: context.tr('분류 삭제'),
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline),
+              ),
           ],
         ],
       ),
@@ -2562,7 +2908,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.account_circle_outlined),
+          leading: const _SettingsLeadingIcon(Icons.account_circle_outlined),
           title: Text(context.tr('Google 계정')),
           subtitle: Text(
             linked ? email! : context.tr('Google 로그인 시 Daily 계정에 연결됩니다.'),
@@ -2570,7 +2916,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.cloud_sync_outlined),
+          leading: const _SettingsLeadingIcon(Icons.cloud_sync_outlined),
           title: Text(context.tr('Google Drive 동기화')),
           subtitle: Text(
             sessionConnected
@@ -2696,7 +3042,7 @@ class _AppleSignInSettings extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.apple),
+          leading: const _SettingsLeadingIcon(Icons.apple),
           title: Text(title),
           subtitle: Text(subtitle),
         ),
@@ -2755,7 +3101,7 @@ class _DailyAccountStatus extends StatelessWidget {
     ];
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.person_outline),
+      leading: const _SettingsLeadingIcon(Icons.person_outline),
       title: Text(context.tr('Daily 계정')),
       subtitle: Text(
         providers.isEmpty
@@ -2816,7 +3162,9 @@ class _SyncStatusTile extends StatelessWidget {
         ].join('\n');
         return ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(syncing ? Icons.sync : Icons.cloud_done_outlined),
+          leading: _SettingsLeadingIcon(
+            syncing ? Icons.sync : Icons.cloud_done_outlined,
+          ),
           title: Text(context.tr('동기화 상태')),
           subtitle: Text(
             subtitle.isEmpty ? context.tr('아직 동기화 기록이 없습니다.') : subtitle,
@@ -2920,7 +3268,8 @@ class _CategoryDialogState extends State<_CategoryDialog> {
           children: [
             TextField(
               controller: _controller,
-              autofocus: true,
+              autofocus: widget.initialCategory?.locked != true,
+              enabled: widget.initialCategory?.locked != true,
               decoration: InputDecoration(labelText: context.tr('이름')),
             ),
             const SizedBox(height: 14),

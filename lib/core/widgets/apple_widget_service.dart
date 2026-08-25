@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -15,16 +16,77 @@ class AppleWidgetService {
     required EventRepository eventRepository,
     required SettingsRepository settingsRepository,
     MethodChannel channel = const MethodChannel('daily/apple_widgets'),
+    Duration themeRefreshDelay = const Duration(milliseconds: 400),
   }) : _eventRepository = eventRepository,
        _settingsRepository = settingsRepository,
-       _channel = channel;
+       _channel = channel,
+       _themeRefreshDelay = themeRefreshDelay {
+    _channel.setMethodCallHandler(_handleNativeCall);
+  }
 
   final EventRepository _eventRepository;
   final SettingsRepository _settingsRepository;
   final MethodChannel _channel;
+  final Duration _themeRefreshDelay;
+  final _todoActionChanges = StreamController<void>.broadcast(sync: true);
   Future<void>? _refreshInFlight;
   bool _refreshRequested = false;
   DateTime? _requestedNow;
+  int _themeRefreshGeneration = 0;
+  bool _disposed = false;
+
+  Stream<void> get todoActionChanges => _todoActionChanges.stream;
+
+  Future<Object?> _handleNativeCall(MethodCall call) async {
+    if (call.method == 'todoActionsChanged' && !_todoActionChanges.isClosed) {
+      _todoActionChanges.add(null);
+    }
+    return null;
+  }
+
+  void dispose() {
+    _disposed = true;
+    _themeRefreshGeneration += 1;
+    _channel.setMethodCallHandler(null);
+    unawaited(_todoActionChanges.close());
+  }
+
+  Future<List<AppleWidgetTodoAction>> pendingTodoActions() async {
+    if (!Platform.isIOS && !Platform.isMacOS) {
+      return const [];
+    }
+    try {
+      final raw = await _channel.invokeListMethod<Object?>(
+        'pendingTodoActions',
+      );
+      return (raw ?? const [])
+          .whereType<Map<Object?, Object?>>()
+          .map(AppleWidgetTodoAction.fromMap)
+          .whereType<AppleWidgetTodoAction>()
+          .toList(growable: false);
+    } on MissingPluginException {
+      return const [];
+    } on PlatformException {
+      return const [];
+    }
+  }
+
+  Future<void> acknowledgeTodoActions(Iterable<String> tokens) async {
+    if (!Platform.isIOS && !Platform.isMacOS) {
+      return;
+    }
+    final values = tokens.where((token) => token.isNotEmpty).toList();
+    if (values.isEmpty) return;
+    try {
+      await _channel.invokeMethod<void>('acknowledgeTodoActions', {
+        'tokens': values,
+      });
+    } on MissingPluginException {
+      // Unsupported embedders have no pending widget actions.
+    } on PlatformException {
+      // Leave actions pending so a later app resume can retry them.
+    }
+  }
 
   Future<void> refresh({DateTime? now}) {
     if (!Platform.isIOS && !Platform.isMacOS) {
@@ -36,6 +98,19 @@ class AppleWidgetService {
     return _refreshInFlight ??= _drainRefreshRequests().whenComplete(() {
       _refreshInFlight = null;
     });
+  }
+
+  Future<void> refreshTheme({DateTime? now}) async {
+    if (!Platform.isIOS && !Platform.isMacOS) {
+      return;
+    }
+
+    final generation = ++_themeRefreshGeneration;
+    await Future<void>.delayed(_themeRefreshDelay);
+    if (_disposed || generation != _themeRefreshGeneration) {
+      return;
+    }
+    await refresh(now: now);
   }
 
   Future<void> _drainRefreshRequests() async {
@@ -137,6 +212,7 @@ class AppleWidgetSnapshotBuilder {
 
     return {
       'generatedAt': now.millisecondsSinceEpoch,
+      'themeMode': settings.themeMode.name,
       'monthTitle': DateFormat.yMMMM(localeName).format(now),
       'weekTitle':
           '${DateFormat.MMMd(localeName).format(weekStart)} - '
@@ -156,8 +232,10 @@ class AppleWidgetSnapshotBuilder {
               .map(
                 (event) => {
                   'id': event.occurrenceId ?? event.id,
+                  'eventId': event.id,
                   'title': l10n.eventTitle(event.title, holiday: event.holiday),
                   'color': event.colorValue,
+                  'completed': event.completed,
                 },
               )
               .toList(growable: false),
@@ -192,6 +270,7 @@ class AppleWidgetSnapshotBuilder {
                   '${target.year}.${_two(target.month)}.${_two(target.day)}',
               'daysRemaining': remaining,
               'color': event.colorValue,
+              'completed': event.completed,
             };
           })
           .toList(growable: false),
@@ -249,6 +328,7 @@ class AppleWidgetSnapshotBuilder {
   ) {
     return {
       'id': event.occurrenceId ?? event.id,
+      'eventId': event.id,
       'title': localizations.eventTitle(event.title, holiday: event.holiday),
       'timeLabel': event.allDay
           ? localizations.text('종일')
@@ -257,6 +337,7 @@ class AppleWidgetSnapshotBuilder {
       'startAt': event.startAt.millisecondsSinceEpoch,
       'endAt': event.endAt.millisecondsSinceEpoch,
       'allDay': event.allDay,
+      'completed': event.completed,
     };
   }
 
@@ -269,4 +350,30 @@ class AppleWidgetSnapshotBuilder {
   }
 
   static String _two(int value) => value.toString().padLeft(2, '0');
+}
+
+class AppleWidgetTodoAction {
+  const AppleWidgetTodoAction({
+    required this.token,
+    required this.eventId,
+    required this.completed,
+  });
+
+  final String token;
+  final String eventId;
+  final bool completed;
+
+  static AppleWidgetTodoAction? fromMap(Map<Object?, Object?> map) {
+    final token = map['token'];
+    final eventId = map['eventId'];
+    final completed = map['completed'];
+    if (token is! String || eventId is! String || completed is! bool) {
+      return null;
+    }
+    return AppleWidgetTodoAction(
+      token: token,
+      eventId: eventId,
+      completed: completed,
+    );
+  }
 }

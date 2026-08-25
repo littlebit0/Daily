@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/di/app_providers.dart';
+import '../core/analytics/product_analytics.dart';
 import '../core/auth/google_account.dart';
 import '../core/security/biometric_auth_service.dart';
 import '../core/security/app_lock_privacy_service.dart';
@@ -656,6 +657,8 @@ class _AppHomeState extends ConsumerState<_AppHome>
   ValueNotifier<int>? _settingsRevisionNotifier;
   VoidCallback? _settingsRevisionListener;
   Future<void>? _siriChangeProcessing;
+  Future<void>? _widgetTodoProcessing;
+  StreamSubscription<void>? _widgetTodoChangesSubscription;
 
   @override
   void initState() {
@@ -664,11 +667,16 @@ class _AppHomeState extends ConsumerState<_AppHome>
     if (defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS) {
       _siriEventChangesChannel.setMethodCallHandler(_handleSiriEventChange);
+      _widgetTodoChangesSubscription = ref
+          .read(appleWidgetServiceProvider)
+          .todoActionChanges
+          .listen((_) => unawaited(_processPendingWidgetTodoActions()));
     }
     unawaited(
-      _startLocalNotificationServices().then(
-        (_) => _processPendingSiriEventChanges(),
-      ),
+      _startLocalNotificationServices().then((_) async {
+        await _processPendingSiriEventChanges();
+        await _processPendingWidgetTodoActions();
+      }),
     );
     _startSyncIfConnected();
     _refreshAppleWidgets();
@@ -682,6 +690,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
       _siriEventChangesChannel.setMethodCallHandler(null);
     }
     _syncRestoreRetryTimer?.cancel();
+    unawaited(_widgetTodoChangesSubscription?.cancel());
     final listener = _settingsRevisionListener;
     final notifier = _settingsRevisionNotifier;
     if (listener != null) {
@@ -709,6 +718,57 @@ class _AppHomeState extends ConsumerState<_AppHome>
         _siriChangeProcessing = null;
       }
     });
+  }
+
+  Future<void> _processPendingWidgetTodoActions() {
+    final active = _widgetTodoProcessing;
+    if (active != null) return active;
+    final operation = _processPendingWidgetTodoActionsImpl();
+    _widgetTodoProcessing = operation;
+    return operation.whenComplete(() {
+      if (identical(_widgetTodoProcessing, operation)) {
+        _widgetTodoProcessing = null;
+      }
+    });
+  }
+
+  Future<void> _processPendingWidgetTodoActionsImpl() async {
+    final widgetService = ref.read(appleWidgetServiceProvider);
+    final actions = await widgetService.pendingTodoActions();
+    if (actions.isEmpty) return;
+
+    final repository = ref.read(eventRepositoryProvider);
+    final commandService = ref.read(eventCommandServiceProvider);
+    final acknowledged = <String>[];
+    for (final action in actions) {
+      final event = await repository.findById(action.eventId);
+      if (event == null || event.isDeleted) {
+        acknowledged.add(action.token);
+        continue;
+      }
+      try {
+        await commandService.setCompleted(event, action.completed);
+        acknowledged.add(action.token);
+      } on Object {
+        break;
+      }
+    }
+    await widgetService.acknowledgeTodoActions(acknowledged);
+    if (acknowledged.isNotEmpty) {
+      await widgetService.refresh();
+      unawaited(
+        ref
+            .read(productAnalyticsProvider)
+            .record(
+              AnalyticsRecord.featureUsed(
+                AnalyticsFeature.widget,
+                outcome: AnalyticsOutcome.succeeded,
+              ),
+            )
+            .catchError((_) {}),
+      );
+      ref.invalidate(eventsInRangeProvider);
+    }
   }
 
   Future<void> _processPendingSiriEventChangesImpl(bool showFailure) async {
@@ -746,14 +806,11 @@ class _AppHomeState extends ConsumerState<_AppHome>
         }
       }
       await ref.read(appleWidgetServiceProvider).refresh();
-      await _siriEventChangesChannel.invokeMethod<void>(
-        'acknowledgeChanges',
-        {'tokens': changes.map((change) => change.token).toList()},
-      );
+      await _siriEventChangesChannel.invokeMethod<void>('acknowledgeChanges', {
+        'tokens': changes.map((change) => change.token).toList(),
+      });
       try {
-        await ref
-            .read(googleDriveSyncServiceProvider)
-            .syncPendingChangesNow();
+        await ref.read(googleDriveSyncServiceProvider).syncPendingChangesNow();
       } catch (error, stackTrace) {
         // The event remains sync_status=pending, so Drive retry is independent
         // from the completed local notification/alarm/widget reconciliation.
@@ -761,9 +818,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
         if (showFailure && mounted) {
           ScaffoldMessenger.maybeOf(context)?.showSnackBar(
             SnackBar(
-              content: Text(
-                context.tr('일정은 저장했으며 클라우드 동기화는 연결 후 재시도됩니다.'),
-              ),
+              content: Text(context.tr('일정은 저장했으며 클라우드 동기화는 연결 후 재시도됩니다.')),
             ),
           );
         }
@@ -773,9 +828,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
       if (showFailure && mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
-            content: Text(
-              context.tr('일정은 저장했지만 알림 또는 동기화 처리가 보류되었습니다.'),
-            ),
+            content: Text(context.tr('일정은 저장했지만 알림 또는 동기화 처리가 보류되었습니다.')),
           ),
         );
       }
@@ -807,6 +860,9 @@ class _AppHomeState extends ConsumerState<_AppHome>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ref.read(productAnalyticsProvider).flush().catchError((_) {}));
+    }
     switch (state) {
       case AppLifecycleState.resumed:
         _syncRestoreRetryTimer?.cancel();
@@ -815,6 +871,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
         // connection, so recreate range streams when Daily returns.
         ref.invalidate(eventsInRangeProvider);
         _processPendingSiriEventChanges();
+        _processPendingWidgetTodoActions();
         _startSyncIfConnected();
         _refreshAppleWidgets();
         break;
@@ -832,7 +889,11 @@ class _AppHomeState extends ConsumerState<_AppHome>
   Widget build(BuildContext context) {
     ref.listen<AppSettings>(appSettingsProvider, (previous, next) {
       if (previous != next) {
-        _refreshAppleWidgets();
+        if (previous?.themeMode != next.themeMode) {
+          _refreshAppleWidgetTheme();
+        } else {
+          _refreshAppleWidgets();
+        }
       }
     });
     return const MonthCalendarPage();
@@ -841,6 +902,12 @@ class _AppHomeState extends ConsumerState<_AppHome>
   void _refreshAppleWidgets() {
     unawaited(
       ref.read(appleWidgetServiceProvider).refresh().catchError((_) {}),
+    );
+  }
+
+  void _refreshAppleWidgetTheme() {
+    unawaited(
+      ref.read(appleWidgetServiceProvider).refreshTheme().catchError((_) {}),
     );
   }
 
@@ -1020,10 +1087,11 @@ class _PendingSiriEventChange {
     return _PendingSiriEventChange(
       token: token,
       eventId: eventId,
-      reminderMinutesBefore: (map['reminderMinutesBefore'] as List<Object?>? ?? const [])
-          .whereType<num>()
-          .map((value) => value.toInt())
-          .toList(),
+      reminderMinutesBefore:
+          (map['reminderMinutesBefore'] as List<Object?>? ?? const [])
+              .whereType<num>()
+              .map((value) => value.toInt())
+              .toList(),
     );
   }
 }

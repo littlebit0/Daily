@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/theme/event_completion_style.dart';
 import '../../events/domain/calendar_event.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
@@ -118,6 +119,7 @@ class _SearchResultTile extends StatelessWidget {
     final time = event.allDay
         ? context.tr('종일')
         : DateFormat.Hm(locale).format(event.startAt);
+    final color = Color(event.colorValue);
     return ListTile(
       onTap: onTap,
       shape: RoundedRectangleBorder(
@@ -125,10 +127,17 @@ class _SearchResultTile extends StatelessWidget {
         side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       leading: CircleAvatar(
-        backgroundColor: Color(event.colorValue).withValues(alpha: 0.12),
-        child: Icon(Icons.flag, color: Color(event.colorValue)),
+        backgroundColor: color.withValues(alpha: 0.12),
+        child: Icon(Icons.flag, color: color),
       ),
-      title: Text(context.l10n.eventTitle(event.title, holiday: event.holiday)),
+      title: Text(
+        context.l10n.eventTitle(event.title, holiday: event.holiday),
+        style: calendarEventCompletionStyle(
+          context,
+          Theme.of(context).textTheme.titleMedium,
+          completed: event.completed,
+        ),
+      ),
       subtitle: Text('$date  $time'),
     );
   }

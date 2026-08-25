@@ -1,3 +1,5 @@
+import 'package:daily/core/alarms/alarm_service.dart';
+import 'package:daily/core/analytics/product_analytics.dart';
 import 'package:daily/core/notifications/notification_service.dart';
 import 'package:daily/core/settings/settings_repository.dart';
 import 'package:daily/core/sync/sync_service.dart';
@@ -41,6 +43,75 @@ void main() {
       expect(widgetRefreshes, 1);
     },
   );
+
+  test(
+    'Todo completion persists, syncs, and updates scheduled delivery',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = _CompletionRepository(
+        _event('todo', EventCategory.basic),
+      );
+      final notifications = _CountingNotificationService();
+      final alarms = _CountingAlarmService();
+      final sync = _CountingSyncService();
+      final analytics = _RecordingAnalytics();
+      var widgetRefreshes = 0;
+      final service = EventCommandService(
+        repository: repository,
+        settingsRepository: SettingsRepository(preferences: preferences),
+        notificationService: notifications,
+        alarmService: alarms,
+        syncService: sync,
+        analytics: analytics,
+        onEventsChanged: () async => widgetRefreshes += 1,
+      );
+
+      await service.setCompleted(repository.event, true);
+
+      expect(repository.event.completed, isTrue);
+      expect(repository.event.syncStatus, 'pending');
+      expect(notifications.cancelCalls, 1);
+      expect(notifications.scheduleCalls, 0);
+      expect(alarms.cancelCalls, 1);
+      expect(alarms.scheduleCalls, 0);
+
+      await service.setCompleted(repository.event, false);
+
+      expect(repository.event.completed, isFalse);
+      expect(notifications.cancelCalls, 2);
+      expect(notifications.scheduleCalls, 1);
+      expect(alarms.cancelCalls, 2);
+      expect(alarms.scheduleCalls, 1);
+      expect(sync.upsertedIds, ['todo', 'todo']);
+      expect(widgetRefreshes, 2);
+      expect(
+        analytics.records.map((record) => record.attributes['operation']),
+        ['complete', 'uncomplete'],
+      );
+    },
+  );
+
+  test('analytics failure never changes an event command result', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _CompletionRepository(
+      _event('isolated', EventCategory.basic),
+    );
+    final service = EventCommandService(
+      repository: repository,
+      settingsRepository: SettingsRepository(preferences: preferences),
+      notificationService: _CountingNotificationService(),
+      alarmService: _CountingAlarmService(),
+      syncService: _CountingSyncService(),
+      analytics: const _ThrowingAnalytics(),
+    );
+
+    await service.setCompleted(repository.event, true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.event.completed, isTrue);
+  });
 }
 
 CalendarEvent _event(String id, EventCategory category) {
@@ -105,6 +176,12 @@ class _CategoryUpdateRepository implements EventRepository {
   Future<void> markSynced(String eventId) async {}
 
   @override
+  Future<List<EventRestoreMutation>> mergeRestoredEventsAtomically(
+    Iterable<CalendarEvent> remoteEvents, {
+    required RestoredEventResolver resolve,
+  }) async => const [];
+
+  @override
   Future<List<CalendarEvent>> pendingSyncEvents() async => const [];
 
   @override
@@ -162,7 +239,92 @@ class _CountingNotificationService implements NotificationService {
   Future<void> showTestNotification() async {}
 }
 
+class _CountingAlarmService implements AlarmService {
+  var cancelCalls = 0;
+  var scheduleCalls = 0;
+
+  @override
+  Future<AlarmAuthorizationState> authorizationState() async =>
+      AlarmAuthorizationState.authorized;
+
+  @override
+  Future<void> cancelAllEventAlarms() async {}
+
+  @override
+  Future<void> cancelEventAlarm(String eventId) async => cancelCalls += 1;
+
+  @override
+  Future<AlarmAuthorizationState> requestAuthorization() async =>
+      AlarmAuthorizationState.authorized;
+
+  @override
+  Future<void> scheduleEventAlarm(CalendarEvent event) async =>
+      scheduleCalls += 1;
+}
+
+class _CompletionRepository implements EventRepository {
+  _CompletionRepository(this.event);
+
+  CalendarEvent event;
+
+  @override
+  Future<CalendarEvent?> findById(String id) async =>
+      event.id == id ? event : null;
+
+  @override
+  Future<void> save(CalendarEvent value) async => event = value;
+
+  @override
+  Future<List<CalendarEvent>> allEventsForSync() async => [event];
+
+  @override
+  Future<void> clearAll() async {}
+
+  @override
+  Future<void> delete(String eventId) async {}
+
+  @override
+  Future<List<CalendarEvent>> eventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) async => [event];
+
+  @override
+  Future<void> hardDelete(String eventId) async {}
+
+  @override
+  Future<void> markSynced(String eventId) async {}
+
+  @override
+  Future<List<EventRestoreMutation>> mergeRestoredEventsAtomically(
+    Iterable<CalendarEvent> remoteEvents, {
+    required RestoredEventResolver resolve,
+  }) async => const [];
+
+  @override
+  Future<List<CalendarEvent>> pendingSyncEvents() async => [event];
+
+  @override
+  Future<List<CalendarEvent>> search(String query) async => [event];
+
+  @override
+  Future<List<CalendarEvent>> updateCategoryReferences({
+    required EventCategory previous,
+    required EventCategory updated,
+    required DateTime updatedAt,
+  }) async => const [];
+
+  @override
+  Stream<List<CalendarEvent>> watchEventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) => Stream.value([event]);
+}
+
 class _CountingSyncService implements SyncService {
+  @override
+  Future<void> queueSettingsBackup() async {}
+
   final upsertedIds = <String>[];
 
   @override
@@ -175,4 +337,20 @@ class _CountingSyncService implements SyncService {
 
   @override
   Future<void> start() async {}
+}
+
+class _RecordingAnalytics extends NoopProductAnalytics {
+  final records = <AnalyticsRecord>[];
+
+  @override
+  Future<void> record(AnalyticsRecord record) async => records.add(record);
+}
+
+class _ThrowingAnalytics extends NoopProductAnalytics {
+  const _ThrowingAnalytics();
+
+  @override
+  Future<void> record(AnalyticsRecord record) async {
+    throw StateError('analytics unavailable');
+  }
 }

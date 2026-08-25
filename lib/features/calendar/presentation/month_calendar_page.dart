@@ -11,19 +11,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/di/app_providers.dart';
+import '../../../core/analytics/product_analytics.dart';
+import '../../../core/calendar/calendar_event_ordering.dart';
+import '../../../core/calendar/calendar_event_movement.dart';
+import '../../../core/calendar/calendar_period_label.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/siri/signal_voice_service.dart';
+import '../../../core/theme/event_completion_style.dart';
+import '../../events/application/event_command_service.dart';
 import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 import '../../events/domain/event_draft.dart';
+import '../../events/domain/recurrence_rule.dart';
 import '../../events/presentation/event_details_panel.dart';
 import '../../events/presentation/event_editor_dialog.dart';
 import '../../settings/presentation/settings_page.dart';
+import '../widgets/calendar_event_drag_layer.dart';
 import '../widgets/calendar_month_grid.dart';
 import '../widgets/schedule_timeline_view.dart';
 
 enum _BottomCenterAction { quickAccess, calendar, ai }
+
+enum _RecurringDragScope { onlyThis, future, all }
 
 int _calendarContentOrder(bool quickAccessSelected, CalendarViewMode viewMode) {
   if (quickAccessSelected) {
@@ -34,6 +44,16 @@ int _calendarContentOrder(bool quickAccessSelected, CalendarViewMode viewMode) {
     CalendarViewMode.month => 2,
     CalendarViewMode.day => 3,
   };
+}
+
+int quickTodoColumnCountForPlatform(TargetPlatform platform, double width) {
+  if (platform == TargetPlatform.iOS) {
+    return 2;
+  }
+  if (platform == TargetPlatform.macOS) {
+    return ((width + 12) / 292).floor().clamp(1, 4).toInt();
+  }
+  return width >= 720 ? 2 : 1;
 }
 
 class _BottomBarUiState {
@@ -64,6 +84,22 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
   var _searchOpen = false;
   var _quickAccessSelected = false;
   var _showAllDayScheduleEvents = true;
+  var _dayPanelEventDragActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      if (!mounted) return;
+      _recordAnalytics(AnalyticsRecord.screenView(AnalyticsScreen.calendar));
+      _recordAnalytics(
+        AnalyticsRecord.calendarViewChanged(
+          _analyticsCalendarView(ref.read(calendarViewModeProvider)),
+          trigger: AnalyticsTrigger.startup,
+        ),
+      );
+    });
+  }
 
   @override
   void dispose() {
@@ -201,6 +237,8 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                                                     .state =
                                                 date;
                                           },
+                                          externalEventDragActive:
+                                              _dayPanelEventDragActive,
                                         )
                                       : wide
                                       ? Row(
@@ -233,6 +271,8 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                                                           .state =
                                                       date;
                                                 },
+                                                externalEventDragActive:
+                                                    _dayPanelEventDragActive,
                                               ),
                                             ),
                                             Container(
@@ -254,6 +294,8 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                                                 settings: settings,
                                                 searchQuery: searchQuery,
                                                 selectedDate: selectedDate,
+                                                onEventDragStateChanged:
+                                                    _setDayPanelEventDragActive,
                                               ),
                                             ),
                                           ],
@@ -290,6 +332,8 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                                               _eventsForDay(events, date),
                                             );
                                           },
+                                          externalEventDragActive:
+                                              _dayPanelEventDragActive,
                                         ),
                                 ),
                               ),
@@ -350,6 +394,13 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
       _searchOpen = opening;
     });
     if (_searchOpen) {
+      _recordAnalytics(
+        AnalyticsRecord.featureUsed(
+          AnalyticsFeature.search,
+          outcome: AnalyticsOutcome.succeeded,
+        ),
+      );
+      _recordAnalytics(AnalyticsRecord.screenView(AnalyticsScreen.search));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _searchFocusNode.requestFocus();
@@ -361,6 +412,11 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
   void _setShowAllDayScheduleEvents(bool value) {
     if (_showAllDayScheduleEvents == value) return;
     setState(() => _showAllDayScheduleEvents = value);
+  }
+
+  void _setDayPanelEventDragActive(bool value) {
+    if (_dayPanelEventDragActive == value || !mounted) return;
+    setState(() => _dayPanelEventDragActive = value);
   }
 
   void _closeSearch() {
@@ -414,6 +470,12 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     bool fromBottomBar = false,
   }) {
     ref.read(calendarViewModeProvider.notifier).state = viewMode;
+    _recordAnalytics(
+      AnalyticsRecord.calendarViewChanged(
+        _analyticsCalendarView(viewMode),
+        trigger: AnalyticsTrigger.manual,
+      ),
+    );
     if (_quickAccessSelected) {
       setState(() => _quickAccessSelected = false);
     }
@@ -498,6 +560,13 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
         if (mounted && !_quickAccessSelected) {
           setState(() => _quickAccessSelected = true);
         }
+        _recordAnalytics(
+          AnalyticsRecord.calendarViewChanged(
+            AnalyticsCalendarView.quickView,
+            trigger: AnalyticsTrigger.manual,
+          ),
+        );
+        _recordAnalytics(AnalyticsRecord.screenView(AnalyticsScreen.quickView));
       case _BottomCenterAction.calendar:
         _markBottomAction(action);
         _aiOpen.value = false;
@@ -524,6 +593,20 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
               )
             : const SizedBox(width: double.infinity, height: 0),
       ),
+    );
+  }
+
+  AnalyticsCalendarView _analyticsCalendarView(CalendarViewMode viewMode) {
+    return switch (viewMode) {
+      CalendarViewMode.week => AnalyticsCalendarView.week,
+      CalendarViewMode.month => AnalyticsCalendarView.month,
+      CalendarViewMode.day => AnalyticsCalendarView.day,
+    };
+  }
+
+  void _recordAnalytics(AnalyticsRecord record) {
+    unawaited(
+      ref.read(productAnalyticsProvider).record(record).catchError((_) {}),
     );
   }
 
@@ -582,8 +665,6 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     String query,
     DateTime currentMonth,
   ) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
     final range = _monthRangeFor(currentMonth, settings.weekStartsOnMonday);
     final eventsAsync = ref.watch(eventsInRangeProvider(range));
 
@@ -594,10 +675,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
         child: eventsAsync.when(
           data: (events) {
             final visibleEvents = _filterVisibleEvents(events, settings, query);
-            final todayEvents = _eventsForDay(visibleEvents, today);
-            final ddayEvents =
-                visibleEvents.where((event) => event.showDday).toList()
-                  ..sort((a, b) => a.startAt.compareTo(b.startAt));
+            final groups = _quickTodoGroups(visibleEvents, settings);
             return ListView(
               children: [
                 Text(
@@ -606,59 +684,49 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
-                const SizedBox(height: 16),
-                _QuickAccessCard(
-                  icon: Icons.calendar_month_outlined,
-                  title: context.tr('월간 미니 캘린더'),
-                  subtitle: DateFormat.yMMMM(
+                const SizedBox(height: 4),
+                Text(
+                  DateFormat.yMMMM(
                     Localizations.localeOf(context).toLanguageTag(),
                   ).format(currentMonth),
-                  items: _monthSummary(visibleEvents),
-                  onTap: () => _selectCalendarView(CalendarViewMode.month),
+                  style: Theme.of(context).textTheme.labelMedium,
                 ),
-                const SizedBox(height: 10),
-                _QuickAccessCard(
-                  icon: Icons.today_outlined,
-                  title: context.tr('오늘 일정'),
-                  subtitle: DateFormat.MMMd(
-                    Localizations.localeOf(context).toLanguageTag(),
-                  ).format(today),
-                  items: todayEvents.isEmpty
-                      ? [context.tr('일정 없음')]
-                      : todayEvents
-                            .take(4)
-                            .map((event) => _eventPreview(event, settings))
-                            .toList(),
-                  onTap: () {
-                    ref.read(selectedDateProvider.notifier).state = today;
-                    ref.read(visibleMonthProvider.notifier).state = DateTime(
-                      today.year,
-                      today.month,
-                    );
-                    _selectCalendarView(CalendarViewMode.day);
-                  },
-                ),
-                const SizedBox(height: 10),
-                _QuickAccessCard(
-                  icon: Icons.flag_outlined,
-                  title: 'D-day',
-                  subtitle: context.tr('중요한 날짜'),
-                  items: ddayEvents.isEmpty
-                      ? [context.tr('D-day 일정 없음')]
-                      : ddayEvents
-                            .take(4)
-                            .map((event) => _eventPreview(event, settings))
-                            .toList(),
-                  onTap: () async {
-                    final updated = settings.copyWith(calendarDdayOnly: true);
-                    await ref.read(settingsRepositoryProvider).save(updated);
-                    if (!context.mounted) {
-                      return;
-                    }
-                    ref.read(appSettingsProvider.notifier).state = updated;
-                    _selectCalendarView(CalendarViewMode.month);
-                  },
-                ),
+                const SizedBox(height: 16),
+                if (groups.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    child: Center(child: Text(context.tr('일정이 없습니다.'))),
+                  )
+                else
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      const spacing = 12.0;
+                      final columns = _quickTodoColumnCount(
+                        constraints.maxWidth,
+                      );
+                      final cardWidth =
+                          (constraints.maxWidth - spacing * (columns - 1)) /
+                          columns;
+                      return Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: [
+                          for (final group in groups)
+                            SizedBox(
+                              width: cardWidth,
+                              child: _QuickTodoCategoryCard(
+                                group: group,
+                                onCompletedChanged: (event, completed) => ref
+                                    .read(eventCommandServiceProvider)
+                                    .setCompleted(event, completed),
+                                onOpen: (event) =>
+                                    _showQuickEventDetails(context, event),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
               ],
             );
           },
@@ -672,25 +740,53 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     );
   }
 
-  List<String> _monthSummary(List<CalendarEvent> events) {
-    final normalCount = events.where((event) => !event.holiday).length;
-    final ddayCount = events.where((event) => event.showDday).length;
-    return [
-      context.tr('일정 {count}개', args: {'count': normalCount}),
-      context.tr('D-day {count}개', args: {'count': ddayCount}),
-      context.tr(
-        '공휴일 {count}개',
-        args: {'count': events.where((event) => event.holiday).length},
+  List<_QuickTodoGroup> _quickTodoGroups(
+    List<CalendarEvent> events,
+    AppSettings settings,
+  ) {
+    final categoryOrder = settings.categories
+        .map((category) => category.id)
+        .toList(growable: false);
+    final sorted = sortedCalendarEvents(
+      events.where(
+        (event) => !event.holiday && !event.readOnly && !event.systemEvent,
       ),
+      priority: settings.calendarEventSortPriority,
+      categoryOrder: categoryOrder,
+    );
+    final byCategory = <String, List<CalendarEvent>>{};
+    final categories = <String, EventCategory>{
+      for (final category in settings.categories) category.id: category,
+    };
+    for (final event in sorted) {
+      categories.putIfAbsent(event.category.id, () => event.category);
+      byCategory.putIfAbsent(event.category.id, () => []).add(event);
+    }
+    return [
+      for (final category in categories.values)
+        if (byCategory[category.id]?.isNotEmpty ?? false)
+          _QuickTodoGroup(category, byCategory[category.id]!),
     ];
   }
 
-  String _eventPreview(CalendarEvent event, AppSettings settings) {
-    final title = context.l10n.eventTitle(event.title, holiday: event.holiday);
-    if (event.allDay) {
-      return title;
-    }
-    return '$title  ${DateFormat('HH:mm').format(event.startAt)}';
+  int _quickTodoColumnCount(double width) {
+    return quickTodoColumnCountForPlatform(defaultTargetPlatform, width);
+  }
+
+  Future<void> _showQuickEventDetails(
+    BuildContext context,
+    CalendarEvent event,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => EventDetailsPanel(
+        date: event.startAt,
+        events: [event],
+        initialEvent: event,
+      ),
+    );
   }
 
   void _showDaySheet(
@@ -714,6 +810,14 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
           date: date,
           events: events,
           scrollController: scrollController,
+          onEventDropped: (event, targetDate, targetIndex) =>
+              _handleCalendarEventDrop(
+                context,
+                ref,
+                event,
+                targetDate,
+                targetIndex,
+              ),
         ),
       ),
     );
@@ -1453,6 +1557,7 @@ class _InlineSearchResultTile extends StatelessWidget {
     final time = event.allDay
         ? context.tr('종일')
         : DateFormat.Hm(locale).format(event.startAt);
+    final color = Color(event.colorValue);
     return ListTile(
       dense: true,
       onTap: onTap,
@@ -1461,36 +1566,43 @@ class _InlineSearchResultTile extends StatelessWidget {
         side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       leading: CircleAvatar(
-        backgroundColor: Color(event.colorValue).withValues(alpha: 0.12),
-        child: Icon(Icons.flag, color: Color(event.colorValue)),
+        backgroundColor: color.withValues(alpha: 0.12),
+        child: Icon(Icons.flag, color: color),
       ),
       title: Text(
         context.l10n.eventTitle(event.title, holiday: event.holiday),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
+        style: calendarEventCompletionStyle(
+          context,
+          Theme.of(context).textTheme.titleMedium,
+          completed: event.completed,
+        ),
       ),
       subtitle: Text('$date  $time'),
     );
   }
 }
 
-class _MonthDetailsPanel extends StatelessWidget {
+class _MonthDetailsPanel extends ConsumerWidget {
   const _MonthDetailsPanel({
     required this.eventsAsync,
     required this.settings,
     required this.searchQuery,
     required this.selectedDate,
+    required this.onEventDragStateChanged,
   });
 
   final AsyncValue<List<CalendarEvent>> eventsAsync;
   final AppSettings settings;
   final String searchQuery;
   final DateTime selectedDate;
+  final ValueChanged<bool> onEventDragStateChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return eventsAsync.when(
-      data: _buildPanel,
+      data: (events) => _buildPanel(context, ref, events),
       error: (error, stackTrace) => Center(child: Text('$error')),
       loading: () => EventDetailsPanel(
         date: selectedDate,
@@ -1499,13 +1611,26 @@ class _MonthDetailsPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildPanel(List<CalendarEvent> events) {
+  Widget _buildPanel(
+    BuildContext context,
+    WidgetRef ref,
+    List<CalendarEvent> events,
+  ) {
     return EventDetailsPanel(
       date: selectedDate,
       events: _eventsForDay(
         _filterVisibleEvents(events, settings, searchQuery),
         selectedDate,
       ),
+      onEventDropped: (event, targetDate, targetIndex) =>
+          _handleCalendarEventDrop(
+            context,
+            ref,
+            event,
+            targetDate,
+            targetIndex,
+          ),
+      onEventDragStateChanged: onEventDragStateChanged,
     );
   }
 }
@@ -1521,6 +1646,7 @@ class _CalendarMainContent extends StatelessWidget {
     required this.onShowAllDayScheduleEventsChanged,
     required this.onMonthDelta,
     required this.onDateSelected,
+    required this.externalEventDragActive,
   });
 
   final DateTime month;
@@ -1532,6 +1658,7 @@ class _CalendarMainContent extends StatelessWidget {
   final ValueChanged<bool> onShowAllDayScheduleEventsChanged;
   final ValueChanged<int> onMonthDelta;
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
+  final bool externalEventDragActive;
 
   @override
   Widget build(BuildContext context) {
@@ -1543,6 +1670,7 @@ class _CalendarMainContent extends StatelessWidget {
         searchQuery: searchQuery,
         onMonthDelta: onMonthDelta,
         onDateSelected: onDateSelected,
+        externalEventDragActive: externalEventDragActive,
       ),
       CalendarViewMode.week => _WeekPageView(
         selectedDate: selectedDate,
@@ -1598,6 +1726,7 @@ class _WeekPageViewState extends State<_WeekPageView> {
   var _applyingExternalDate = false;
   var _externalAnimationRevision = 0;
   DateTime? _lastPointerWeekMoveAt;
+  final _mouseWheelNavigation = _QueuedPointerPageNavigation();
 
   @override
   void initState() {
@@ -1635,7 +1764,7 @@ class _WeekPageViewState extends State<_WeekPageView> {
       child: PageView.builder(
         controller: _controller,
         allowImplicitScrolling: true,
-        physics: const _ResponsiveMonthPagePhysics(),
+        physics: _calendarPagePhysics(context),
         onPageChanged: (index) {
           if (_applyingExternalDate || index == _currentPage) {
             return;
@@ -1663,8 +1792,23 @@ class _WeekPageViewState extends State<_WeekPageView> {
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
-    if (!_isDesktopHorizontalPageScroll(context, event) ||
-        !_controller.hasClients) {
+    final navigationDelta = _desktopPageNavigationDelta(
+      context,
+      event,
+      allowVerticalMouseWheel:
+          widget.settings.weekDayLayoutMode == WeekDayLayoutMode.list,
+    );
+    if (navigationDelta == null || !_controller.hasClients) {
+      return;
+    }
+    final scroll = event as PointerScrollEvent;
+    final direction = navigationDelta > 0 ? 1 : -1;
+    if (scroll.kind == PointerDeviceKind.mouse) {
+      _mouseWheelNavigation.animate(
+        controller: _controller,
+        currentPage: _currentPage,
+        direction: direction,
+      );
       return;
     }
     final now = DateTime.now();
@@ -1674,8 +1818,7 @@ class _WeekPageViewState extends State<_WeekPageView> {
       return;
     }
     _lastPointerWeekMoveAt = now;
-    final scroll = event as PointerScrollEvent;
-    final nextPage = _currentPage + (scroll.scrollDelta.dx > 0 ? 1 : -1);
+    final nextPage = _currentPage + direction;
     unawaited(
       _controller.animateToPage(
         nextPage,
@@ -1686,6 +1829,7 @@ class _WeekPageViewState extends State<_WeekPageView> {
   }
 
   void _animateToExternalPage(int targetPage) {
+    _mouseWheelNavigation.reset();
     final revision = ++_externalAnimationRevision;
     _applyingExternalDate = true;
     _currentPage = targetPage;
@@ -1753,6 +1897,24 @@ class _CalendarWeekPage extends ConsumerWidget {
             selectedDate: selectedDate,
             use24HourTime: settings.use24HourTime,
             showAllDayEvents: showAllDayScheduleEvents,
+            holidayBackgroundEnabled: settings.calendarHolidayBackgroundEnabled,
+            holidayColorValue: settings.holidayCategory.colorValue,
+            centerEventTitles:
+                settings.calendarEventTitleAlignment ==
+                CalendarEventTitleAlignment.center,
+            eventSortPriority: settings.calendarEventSortPriority,
+            categoryOrder: settings.categories
+                .map((category) => category.id)
+                .toList(),
+            weekStartsOnMonday: settings.weekStartsOnMonday,
+            onEventDropped: (event, targetDate, targetIndex) =>
+                _handleCalendarEventDrop(
+                  context,
+                  ref,
+                  event,
+                  targetDate,
+                  targetIndex,
+                ),
             onShowAllDayEventsChanged: onShowAllDayScheduleEventsChanged,
             onDateSelected: (date) =>
                 onDateSelected(date, _eventsForDay(visibleEvents, date)),
@@ -1762,7 +1924,18 @@ class _CalendarWeekPage extends ConsumerWidget {
           selectedDate: selectedDate,
           weekStartsOnMonday: settings.weekStartsOnMonday,
           showLunarDates: settings.showLunarDates,
+          centerEventTitles:
+              settings.calendarEventTitleAlignment ==
+              CalendarEventTitleAlignment.center,
           events: visibleEvents,
+          onEventDropped: (event, targetDate, targetIndex) =>
+              _handleCalendarEventDrop(
+                context,
+                ref,
+                event,
+                targetDate,
+                targetIndex,
+              ),
           onDateSelected: onDateSelected,
         );
       },
@@ -1804,6 +1977,7 @@ class _DayPageViewState extends State<_DayPageView> {
   var _applyingExternalDate = false;
   var _externalAnimationRevision = 0;
   DateTime? _lastPointerDayMoveAt;
+  final _mouseWheelNavigation = _QueuedPointerPageNavigation();
 
   @override
   void initState() {
@@ -1841,7 +2015,7 @@ class _DayPageViewState extends State<_DayPageView> {
       child: PageView.builder(
         controller: _controller,
         allowImplicitScrolling: true,
-        physics: const _ResponsiveMonthPagePhysics(),
+        physics: _calendarPagePhysics(context),
         onPageChanged: (index) {
           if (_applyingExternalDate || index == _currentPage) {
             return;
@@ -1869,8 +2043,23 @@ class _DayPageViewState extends State<_DayPageView> {
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
-    if (!_isDesktopHorizontalPageScroll(context, event) ||
-        !_controller.hasClients) {
+    final navigationDelta = _desktopPageNavigationDelta(
+      context,
+      event,
+      allowVerticalMouseWheel:
+          widget.settings.weekDayLayoutMode == WeekDayLayoutMode.list,
+    );
+    if (navigationDelta == null || !_controller.hasClients) {
+      return;
+    }
+    final scroll = event as PointerScrollEvent;
+    final direction = navigationDelta > 0 ? 1 : -1;
+    if (scroll.kind == PointerDeviceKind.mouse) {
+      _mouseWheelNavigation.animate(
+        controller: _controller,
+        currentPage: _currentPage,
+        direction: direction,
+      );
       return;
     }
     final now = DateTime.now();
@@ -1880,8 +2069,7 @@ class _DayPageViewState extends State<_DayPageView> {
       return;
     }
     _lastPointerDayMoveAt = now;
-    final scroll = event as PointerScrollEvent;
-    final nextPage = _currentPage + (scroll.scrollDelta.dx > 0 ? 1 : -1);
+    final nextPage = _currentPage + direction;
     unawaited(
       _controller.animateToPage(
         nextPage,
@@ -1892,6 +2080,7 @@ class _DayPageViewState extends State<_DayPageView> {
   }
 
   void _animateToExternalPage(int targetPage) {
+    _mouseWheelNavigation.reset();
     final revision = ++_externalAnimationRevision;
     _applyingExternalDate = true;
     _currentPage = targetPage;
@@ -1948,11 +2137,41 @@ class _CalendarDayPage extends ConsumerWidget {
             selectedDate: date,
             use24HourTime: settings.use24HourTime,
             showAllDayEvents: showAllDayScheduleEvents,
+            holidayBackgroundEnabled: settings.calendarHolidayBackgroundEnabled,
+            holidayColorValue: settings.holidayCategory.colorValue,
+            centerEventTitles:
+                settings.calendarEventTitleAlignment ==
+                CalendarEventTitleAlignment.center,
+            eventSortPriority: settings.calendarEventSortPriority,
+            categoryOrder: settings.categories
+                .map((category) => category.id)
+                .toList(),
+            weekStartsOnMonday: settings.weekStartsOnMonday,
+            onEventDropped: (event, targetDate, targetIndex) =>
+                _handleCalendarEventDrop(
+                  context,
+                  ref,
+                  event,
+                  targetDate,
+                  targetIndex,
+                ),
             onShowAllDayEventsChanged: onShowAllDayScheduleEventsChanged,
             onDateSelected: onDateSelected,
           );
         }
-        return EventDetailsPanel(date: date, events: visibleEvents);
+        return EventDetailsPanel(
+          date: date,
+          events: visibleEvents,
+          holidayHeaderBackgroundEnabled: false,
+          onEventDropped: (event, targetDate, targetIndex) =>
+              _handleCalendarEventDrop(
+                context,
+                ref,
+                event,
+                targetDate,
+                targetIndex,
+              ),
+        );
       },
       error: (error, stackTrace) => Center(child: Text('$error')),
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -1968,6 +2187,7 @@ class _MonthPageView extends ConsumerStatefulWidget {
     required this.searchQuery,
     required this.onMonthDelta,
     required this.onDateSelected,
+    required this.externalEventDragActive,
   });
 
   final DateTime month;
@@ -1976,6 +2196,7 @@ class _MonthPageView extends ConsumerStatefulWidget {
   final String searchQuery;
   final ValueChanged<int> onMonthDelta;
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
+  final bool externalEventDragActive;
 
   @override
   ConsumerState<_MonthPageView> createState() => _MonthPageViewState();
@@ -1997,12 +2218,14 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   var _verticalExtentRevision = 0;
   var _preservingVerticalExtent = false;
   DateTime? _lastPointerMonthMoveAt;
+  final _mouseWheelNavigation = _QueuedPointerPageNavigation();
   final Map<int, RenderBox> _continuousGridBoxes = {};
   final ValueNotifier<(DateTime?, DateTime?)> _continuousRangeNotifier =
       ValueNotifier((null, null));
   DateTime? _continuousRangeStart;
   DateTime? _continuousRangeEnd;
   bool _continuousMouseRangeActive = false;
+  bool _continuousEventDragActive = false;
 
   @override
   void initState() {
@@ -2143,6 +2366,10 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
                                             externalRangeStart: range.$1,
                                             externalRangeEnd: range.$2,
                                             enableRangeGestures: false,
+                                            onEventDragStateChanged:
+                                                _setContinuousEventDragActive,
+                                            externalEventDragActive:
+                                                widget.externalEventDragActive,
                                             onDateSelected:
                                                 widget.onDateSelected,
                                           ),
@@ -2168,7 +2395,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
       child: PageView.builder(
         controller: _controller,
         allowImplicitScrolling: true,
-        physics: const _ResponsiveMonthPagePhysics(),
+        physics: _calendarPagePhysics(context),
         onPageChanged: (index) {
           if (_applyingExternalMonth || index == _currentPage) {
             return;
@@ -2184,6 +2411,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
             selectedDate: widget.selectedDate,
             settings: widget.settings,
             searchQuery: widget.searchQuery,
+            externalEventDragActive: widget.externalEventDragActive,
             onDateSelected: widget.onDateSelected,
           );
         },
@@ -2192,6 +2420,9 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 
   void _handleContinuousPointerDown(PointerDownEvent event) {
+    if (_continuousEventDragActive) {
+      return;
+    }
     if ((event.kind != PointerDeviceKind.mouse &&
             event.kind != PointerDeviceKind.trackpad) ||
         (event.buttons != 0 && (event.buttons & kPrimaryMouseButton) == 0)) {
@@ -2202,6 +2433,9 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 
   void _handleContinuousPointerMove(PointerMoveEvent event) {
+    if (_continuousEventDragActive) {
+      return;
+    }
     final start = _continuousRangeStart;
     if (start == null ||
         (event.kind != PointerDeviceKind.mouse &&
@@ -2217,6 +2451,9 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 
   void _handleContinuousPointerUp(PointerUpEvent event) {
+    if (_continuousEventDragActive) {
+      return;
+    }
     if (event.kind != PointerDeviceKind.mouse &&
         event.kind != PointerDeviceKind.trackpad) {
       return;
@@ -2234,6 +2471,9 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
     Offset globalPosition, {
     bool showImmediately = true,
   }) {
+    if (_continuousEventDragActive) {
+      return;
+    }
     final date = _continuousDateAt(globalPosition);
     if (date == null) {
       _cancelContinuousRange();
@@ -2245,6 +2485,9 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 
   void _updateContinuousRange(Offset globalPosition) {
+    if (_continuousEventDragActive) {
+      return;
+    }
     final start = _continuousRangeStart;
     final end = _continuousRangeEnd;
     final date = _continuousDateAt(globalPosition);
@@ -2272,6 +2515,10 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 
   void _commitContinuousRange() {
+    if (_continuousEventDragActive) {
+      _cancelContinuousRange();
+      return;
+    }
     final start = _continuousRangeStart;
     final end = _continuousRangeEnd;
     _cancelContinuousRange();
@@ -2325,6 +2572,17 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
     return null;
   }
 
+  void _setContinuousEventDragActive(bool active) {
+    if (_continuousEventDragActive == active) {
+      return;
+    }
+    _continuousEventDragActive = active;
+    if (active) {
+      _continuousMouseRangeActive = false;
+      _cancelContinuousRange();
+    }
+  }
+
   void _handlePointerSignal(PointerSignalEvent event) {
     if (!_usesMacDesktopExperience(Theme.of(context).platform) ||
         event is! PointerScrollEvent ||
@@ -2335,7 +2593,17 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
         event.scrollDelta.dx.abs() >= event.scrollDelta.dy.abs()
         ? event.scrollDelta.dx
         : event.scrollDelta.dy;
-    if (primaryDelta.abs() < 18) {
+    final minimumDelta = event.kind == PointerDeviceKind.mouse ? 0.0 : 18.0;
+    if (primaryDelta.abs() <= minimumDelta) {
+      return;
+    }
+    final direction = primaryDelta > 0 ? 1 : -1;
+    if (event.kind == PointerDeviceKind.mouse) {
+      _mouseWheelNavigation.animate(
+        controller: _controller,
+        currentPage: _currentPage,
+        direction: direction,
+      );
       return;
     }
     final now = DateTime.now();
@@ -2345,7 +2613,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
       return;
     }
     _lastPointerMonthMoveAt = now;
-    final nextPage = _currentPage + (primaryDelta > 0 ? 1 : -1);
+    final nextPage = _currentPage + direction;
     unawaited(
       _controller.animateToPage(
         nextPage,
@@ -2356,6 +2624,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 
   void _animateToExternalPage(int targetPage) {
+    _mouseWheelNavigation.reset();
     final revision = ++_externalAnimationRevision;
     _applyingExternalMonth = true;
     _currentPage = targetPage;
@@ -2463,6 +2732,57 @@ class _SmoothMouseWheelScrollController extends ScrollController {
       debugLabel: debugLabel,
     );
   }
+}
+
+class _QueuedPointerPageNavigation {
+  int? _targetPage;
+  var _animationRevision = 0;
+
+  void animate({
+    required PageController controller,
+    required int currentPage,
+    required int direction,
+  }) {
+    if (!controller.hasClients || direction == 0) {
+      return;
+    }
+    final visiblePage = controller.page ?? currentPage.toDouble();
+    final targetPage = (_targetPage ?? visiblePage.round()) + direction.sign;
+    _targetPage = targetPage;
+    final revision = ++_animationRevision;
+    final pendingDistance = (targetPage - visiblePage).abs();
+    final duration = Duration(
+      milliseconds: (140 + math.min(pendingDistance, 4) * 20).round(),
+    );
+    unawaited(
+      controller
+          .animateToPage(
+            targetPage,
+            duration: duration,
+            curve: Curves.easeOutCubic,
+          )
+          .whenComplete(() {
+            if (revision == _animationRevision) {
+              _targetPage = null;
+            }
+          }),
+    );
+  }
+
+  void reset() {
+    _animationRevision += 1;
+    _targetPage = null;
+  }
+}
+
+ScrollPhysics _calendarPagePhysics(BuildContext context) {
+  if (Theme.of(context).platform == TargetPlatform.macOS) {
+    // Pointer signals are converted to exactly one page transition by the
+    // surrounding Listener. Prevent PageView from consuming the same wheel
+    // event a second time while keeping programmatic animations available.
+    return const NeverScrollableScrollPhysics();
+  }
+  return const _ResponsiveMonthPagePhysics();
 }
 
 class _SmoothMouseWheelScrollPosition extends ScrollPositionWithSingleContext {
@@ -2575,17 +2895,28 @@ class _MonthBoundaryLabel extends StatelessWidget {
   }
 }
 
-bool _isDesktopHorizontalPageScroll(
+double? _desktopPageNavigationDelta(
   BuildContext context,
-  PointerSignalEvent event,
-) {
+  PointerSignalEvent event, {
+  required bool allowVerticalMouseWheel,
+}) {
   if (!_usesMacDesktopExperience(Theme.of(context).platform) ||
       event is! PointerScrollEvent) {
-    return false;
+    return null;
   }
   final horizontal = event.scrollDelta.dx.abs();
   final vertical = event.scrollDelta.dy.abs();
-  return horizontal >= 18 && horizontal > vertical;
+  final minimumDelta = event.kind == PointerDeviceKind.mouse ? 0.0 : 18.0;
+  if (horizontal > minimumDelta && horizontal > vertical) {
+    return event.scrollDelta.dx;
+  }
+  if (allowVerticalMouseWheel &&
+      event.kind == PointerDeviceKind.mouse &&
+      vertical > minimumDelta &&
+      vertical > horizontal) {
+    return event.scrollDelta.dy;
+  }
+  return null;
 }
 
 bool _usesMacDesktopExperience(TargetPlatform platform) {
@@ -2605,6 +2936,8 @@ class _CalendarMonthPage extends ConsumerWidget {
     this.externalRangeStart,
     this.externalRangeEnd,
     this.enableRangeGestures = true,
+    this.onEventDragStateChanged,
+    this.externalEventDragActive = false,
   });
 
   final DateTime month;
@@ -2618,6 +2951,8 @@ class _CalendarMonthPage extends ConsumerWidget {
   final DateTime? externalRangeStart;
   final DateTime? externalRangeEnd;
   final bool enableRangeGestures;
+  final ValueChanged<bool>? onEventDragStateChanged;
+  final bool externalEventDragActive;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2638,6 +2973,16 @@ class _CalendarMonthPage extends ConsumerWidget {
           events: visibleEvents,
           weekStartsOnMonday: settings.weekStartsOnMonday,
           showLunarDates: settings.showLunarDates,
+          holidayBackgroundEnabled: settings.calendarHolidayBackgroundEnabled,
+          holidayColorValue: settings.holidayCategory.colorValue,
+          centerEventTitles:
+              settings.calendarEventTitleAlignment ==
+              CalendarEventTitleAlignment.center,
+          eventSortPriority: settings.calendarEventSortPriority,
+          categoryOrder: settings.categories
+              .map((category) => category.id)
+              .toList(),
+          manualEventOrders: settings.calendarManualEventOrders,
           showAdjacentMonthDates:
               !continuous && settings.showAdjacentMonthDates,
           continuous: continuous,
@@ -2646,6 +2991,8 @@ class _CalendarMonthPage extends ConsumerWidget {
           externalRangeStart: externalRangeStart,
           externalRangeEnd: externalRangeEnd,
           enableRangeGestures: enableRangeGestures,
+          onEventDragStateChanged: onEventDragStateChanged,
+          externalEventDragActive: externalEventDragActive,
           onDateSelected: (date) {
             onDateSelected(date, _eventsForDay(visibleEvents, date));
           },
@@ -2657,6 +3004,15 @@ class _CalendarMonthPage extends ConsumerWidget {
             settings.categories,
             settings.defaultReminderMinutesList,
           ),
+          onEventDropped: (event, targetDate, targetIndex) => _handleEventDrop(
+            context,
+            ref,
+            event,
+            targetDate,
+            targetIndex,
+            visibleEvents,
+            settings,
+          ),
         );
       },
       error: (error, stackTrace) => Center(child: Text('$error')),
@@ -2666,6 +3022,16 @@ class _CalendarMonthPage extends ConsumerWidget {
         events: const [],
         weekStartsOnMonday: settings.weekStartsOnMonday,
         showLunarDates: settings.showLunarDates,
+        holidayBackgroundEnabled: settings.calendarHolidayBackgroundEnabled,
+        holidayColorValue: settings.holidayCategory.colorValue,
+        centerEventTitles:
+            settings.calendarEventTitleAlignment ==
+            CalendarEventTitleAlignment.center,
+        eventSortPriority: settings.calendarEventSortPriority,
+        categoryOrder: settings.categories
+            .map((category) => category.id)
+            .toList(),
+        manualEventOrders: settings.calendarManualEventOrders,
         showAdjacentMonthDates: !continuous && settings.showAdjacentMonthDates,
         continuous: continuous,
         showWeekdayHeader: showWeekdayHeader,
@@ -2673,6 +3039,7 @@ class _CalendarMonthPage extends ConsumerWidget {
         externalRangeStart: externalRangeStart,
         externalRangeEnd: externalRangeEnd,
         enableRangeGestures: enableRangeGestures,
+        externalEventDragActive: externalEventDragActive,
         onDateSelected: (date) {
           onDateSelected(date, const <CalendarEvent>[]);
         },
@@ -2703,6 +3070,562 @@ class _CalendarMonthPage extends ConsumerWidget {
     categories,
     defaultReminderMinutesList,
   );
+
+  Future<void> _handleEventDrop(
+    BuildContext context,
+    WidgetRef ref,
+    CalendarEvent event,
+    DateTime targetDate,
+    int targetIndex,
+    List<CalendarEvent> visibleEvents,
+    AppSettings settings,
+  ) async {
+    if (event.readOnly || event.systemEvent || event.holiday) {
+      return;
+    }
+    final sourceDate = _dateOnly(event.startAt);
+    final normalizedTarget = _dateOnly(targetDate);
+    var movedEvent = event;
+
+    if (!_sameDay(sourceDate, normalizedTarget)) {
+      if (event.isRecurring) {
+        final scope = await _showRecurringDragScopeDialog(context);
+        if (scope == null || !context.mounted) {
+          return;
+        }
+        final result = await _moveRecurringEvent(
+          ref,
+          event,
+          normalizedTarget,
+          scope,
+        );
+        if (result == null) {
+          return;
+        }
+        movedEvent = result;
+      } else {
+        movedEvent = shiftCalendarEventToDate(event, normalizedTarget);
+        await ref.read(eventCommandServiceProvider).save(movedEvent);
+      }
+    }
+
+    await _saveManualOrderAfterDrop(
+      ref,
+      sourceDate: sourceDate,
+      targetDate: normalizedTarget,
+      targetIndex: targetIndex,
+      originalEvent: event,
+      movedEvent: movedEvent,
+      visibleEvents: visibleEvents,
+      settings: settings,
+    );
+  }
+
+  Future<CalendarEvent?> _moveRecurringEvent(
+    WidgetRef ref,
+    CalendarEvent occurrence,
+    DateTime targetDate,
+    _RecurringDragScope scope,
+  ) async {
+    final repository = ref.read(eventRepositoryProvider);
+    final commandService = ref.read(eventCommandServiceProvider);
+    final base = await repository.findById(occurrence.id);
+    if (base == null) {
+      return null;
+    }
+    final shiftedOccurrence = shiftCalendarEventToDate(occurrence, targetDate);
+
+    switch (scope) {
+      case _RecurringDragScope.onlyThis:
+        await commandService.save(_excludeOccurrence(base, occurrence.startAt));
+        return commandService.create(
+          _eventDraftFrom(
+            shiftedOccurrence,
+            recurrence: const RecurrenceRule(),
+          ),
+        );
+      case _RecurringDragScope.future:
+        await commandService.save(_endBefore(base, occurrence.startAt));
+        final futureRule = recurrenceRuleForMovedFuture(
+          base: base,
+          occurrence: occurrence,
+          targetDate: targetDate,
+        );
+        final created = await commandService.create(
+          _eventDraftFrom(shiftedOccurrence, recurrence: futureRule),
+        );
+        return created.copyWith(
+          occurrenceId: '${created.id}@${created.startAt.toIso8601String()}',
+        );
+      case _RecurringDragScope.all:
+        final dayDelta = calendarDayDifference(targetDate, occurrence.startAt);
+        final shiftedBaseEvent = shiftCalendarEventToDate(
+          base,
+          shiftCalendarDateByDays(base.startAt, dayDelta),
+        );
+        final shiftedBase = shiftedBaseEvent.copyWith(
+          recurrence: shiftRecurrenceRuleByDays(base.recurrence, dayDelta),
+        );
+        await commandService.save(shiftedBase);
+        final shiftedStart = shiftCalendarDateByDays(
+          occurrence.startAt,
+          dayDelta,
+        );
+        return occurrence.copyWith(
+          occurrenceId: '${base.id}@${shiftedStart.toIso8601String()}',
+          startAt: shiftedStart,
+          endAt: shiftedStart.add(occurrence.duration),
+        );
+    }
+  }
+
+  Future<void> _saveManualOrderAfterDrop(
+    WidgetRef ref, {
+    required DateTime sourceDate,
+    required DateTime targetDate,
+    required int targetIndex,
+    required CalendarEvent originalEvent,
+    required CalendarEvent movedEvent,
+    required List<CalendarEvent> visibleEvents,
+    required AppSettings settings,
+  }) async {
+    final sourceKey = calendarDateKey(sourceDate);
+    final targetKey = calendarDateKey(targetDate);
+    final originalOrderKey = calendarEventOrderKey(originalEvent);
+    final movedOrderKey = calendarEventOrderKey(movedEvent);
+    final categoryOrder = settings.categories
+        .map((category) => category.id)
+        .toList();
+    final manualOrders = <String, CalendarManualEventOrder>{
+      ...settings.calendarManualEventOrders,
+    };
+    final deviceId = await ref.read(settingsRepositoryProvider).deviceId();
+    final now = DateTime.now();
+
+    if (sourceKey != targetKey) {
+      final sourceEvents = _eventsForDay(visibleEvents, sourceDate)
+          .where(
+            (candidate) =>
+                calendarEventOrderKey(candidate) != originalOrderKey &&
+                candidate.id != originalEvent.id,
+          )
+          .toList();
+      manualOrders[sourceKey] = CalendarManualEventOrder(
+        eventKeys: sourceEvents.map(calendarEventOrderKey).toList(),
+        updatedAt: now,
+        deviceId: deviceId,
+      );
+    }
+
+    final existingTarget = _eventsForDay(visibleEvents, targetDate)
+        .where(
+          (candidate) =>
+              calendarEventOrderKey(candidate) != originalOrderKey &&
+              calendarEventOrderKey(candidate) != movedOrderKey &&
+              candidate.id != originalEvent.id,
+        )
+        .toList();
+    final sortedTarget = sortedCalendarEvents(
+      existingTarget,
+      priority: settings.calendarEventSortPriority,
+      categoryOrder: categoryOrder,
+      manualOrder:
+          settings.calendarManualEventOrders[targetKey]?.eventKeys ??
+          const <String>[],
+    );
+    final insertionIndex = targetIndex.clamp(0, sortedTarget.length);
+    sortedTarget.insert(insertionIndex, movedEvent);
+    manualOrders[targetKey] = CalendarManualEventOrder(
+      eventKeys: sortedTarget.map(calendarEventOrderKey).toList(),
+      updatedAt: now,
+      deviceId: deviceId,
+    );
+
+    final updatedSettings = settings.copyWith(
+      calendarManualEventOrders: manualOrders,
+    );
+    await ref.read(settingsRepositoryProvider).save(updatedSettings);
+    ref.read(appSettingsProvider.notifier).state = updatedSettings;
+    await ref.read(syncServiceProvider).queueSettingsBackup();
+  }
+
+  EventDraft _eventDraftFrom(
+    CalendarEvent event, {
+    required RecurrenceRule recurrence,
+  }) {
+    return EventDraft(
+      title: event.title,
+      memo: event.memo,
+      location: event.location,
+      url: event.url,
+      weather: event.weather,
+      startAt: event.startAt,
+      endAt: event.endAt,
+      allDay: event.allDay,
+      category: event.category,
+      colorValue: event.colorValue,
+      reminderMinutesBeforeList: event.reminderMinutesBeforeList,
+      recurrence: recurrence,
+      showDday: event.showDday,
+      alarmEnabled: event.alarmEnabled,
+      allDayAlarmMinutes: event.allDayAlarmMinutes,
+    );
+  }
+
+  CalendarEvent _excludeOccurrence(CalendarEvent base, DateTime occurrence) {
+    final excludedDate = _dateOnly(occurrence);
+    final excluded = {
+      ...base.recurrence.excludedDates.map(_dateOnly),
+      excludedDate,
+    }.toList()..sort();
+    return base.copyWith(
+      recurrence: base.recurrence.copyWith(excludedDates: excluded),
+    );
+  }
+
+  CalendarEvent _endBefore(CalendarEvent base, DateTime occurrence) {
+    return base.copyWith(
+      recurrence: base.recurrence.copyWith(
+        until: _dateOnly(occurrence).subtract(const Duration(days: 1)),
+        clearCount: true,
+      ),
+    );
+  }
+
+  Future<_RecurringDragScope?> _showRecurringDragScopeDialog(
+    BuildContext context,
+  ) {
+    return showDialog<_RecurringDragScope>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('반복 일정 이동')),
+        content: Text(context.tr('이 반복 일정의 어느 범위를 이동할까요?')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(context.tr('취소')),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(_RecurringDragScope.onlyThis),
+            child: Text(context.tr('이 일정만')),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(_RecurringDragScope.future),
+            child: Text(context.tr('이후 일정')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(_RecurringDragScope.all),
+            child: Text(context.tr('전체 반복')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _handleCalendarEventDrop(
+  BuildContext context,
+  WidgetRef ref,
+  CalendarEvent event,
+  DateTime targetDate,
+  int targetIndex,
+) async {
+  if (!calendarEventCanMove(event)) {
+    return;
+  }
+  final sourceDate = _dateOnly(event.startAt);
+  final normalizedTarget = _dateOnly(targetDate);
+  final rangeStart = sourceDate.isBefore(normalizedTarget)
+      ? sourceDate
+      : normalizedTarget;
+  final rangeLastDate = sourceDate.isAfter(normalizedTarget)
+      ? sourceDate
+      : normalizedTarget;
+  final rangeEnd = rangeLastDate.add(const Duration(days: 1));
+  final settings = ref.read(appSettingsProvider);
+  final repository = ref.read(eventRepositoryProvider);
+  final storedEvents = await repository.eventsInRange(rangeStart, rangeEnd);
+  final holidayEvents = ref
+      .read(koreanHolidayServiceProvider)
+      .holidayEventsInRange(
+        rangeStart,
+        rangeEnd,
+        category: settings.holidayCategory,
+      );
+  final visibleEvents = _filterVisibleEvents(
+    [...storedEvents, ...holidayEvents],
+    settings,
+    '',
+  );
+  if (!context.mounted) {
+    return;
+  }
+
+  var movedEvent = event;
+  if (!_sameDay(sourceDate, normalizedTarget)) {
+    if (event.isRecurring) {
+      final scope = await _showCalendarRecurringDragScopeDialog(context);
+      if (scope == null || !context.mounted) {
+        return;
+      }
+      final result = await _moveRecurringCalendarEvent(
+        ref,
+        event,
+        normalizedTarget,
+        scope,
+      );
+      if (result == null) {
+        return;
+      }
+      movedEvent = result;
+    } else {
+      movedEvent = shiftCalendarEventToDate(event, normalizedTarget);
+      await ref.read(eventCommandServiceProvider).save(movedEvent);
+    }
+  }
+
+  await _saveCalendarManualOrderAfterDrop(
+    ref,
+    sourceDate: sourceDate,
+    targetDate: normalizedTarget,
+    targetIndex: targetIndex,
+    originalEvent: event,
+    movedEvent: movedEvent,
+    visibleEvents: visibleEvents,
+    settings: settings,
+  );
+}
+
+Future<CalendarEvent?> _moveRecurringCalendarEvent(
+  WidgetRef ref,
+  CalendarEvent occurrence,
+  DateTime targetDate,
+  _RecurringDragScope scope,
+) async {
+  final repository = ref.read(eventRepositoryProvider);
+  final commandService = ref.read(eventCommandServiceProvider);
+  final base = await repository.findById(occurrence.id);
+  if (base == null) {
+    return null;
+  }
+  final shiftedOccurrence = shiftCalendarEventToDate(occurrence, targetDate);
+
+  switch (scope) {
+    case _RecurringDragScope.onlyThis:
+      await commandService.save(
+        _excludeCalendarOccurrence(base, occurrence.startAt),
+      );
+      return _createMovedCalendarOccurrence(
+        commandService,
+        shiftedOccurrence,
+        const RecurrenceRule(),
+      );
+    case _RecurringDragScope.future:
+      await commandService.save(
+        _endCalendarRecurrenceBefore(base, occurrence.startAt),
+      );
+      final futureRule = recurrenceRuleForMovedFuture(
+        base: base,
+        occurrence: occurrence,
+        targetDate: targetDate,
+      );
+      final created = await _createMovedCalendarOccurrence(
+        commandService,
+        shiftedOccurrence,
+        futureRule,
+      );
+      return created.copyWith(
+        occurrenceId: '${created.id}@${created.startAt.toIso8601String()}',
+      );
+    case _RecurringDragScope.all:
+      final dayDelta = calendarDayDifference(targetDate, occurrence.startAt);
+      final shiftedBaseEvent = shiftCalendarEventToDate(
+        base,
+        shiftCalendarDateByDays(base.startAt, dayDelta),
+      );
+      final shiftedBase = shiftedBaseEvent.copyWith(
+        recurrence: shiftRecurrenceRuleByDays(base.recurrence, dayDelta),
+      );
+      await commandService.save(shiftedBase);
+      final shiftedStart = shiftCalendarDateByDays(
+        occurrence.startAt,
+        dayDelta,
+      );
+      return occurrence.copyWith(
+        occurrenceId: '${base.id}@${shiftedStart.toIso8601String()}',
+        startAt: shiftedStart,
+        endAt: shiftedStart.add(occurrence.duration),
+      );
+  }
+}
+
+Future<CalendarEvent> _createMovedCalendarOccurrence(
+  EventCommandService commandService,
+  CalendarEvent event,
+  RecurrenceRule recurrence,
+) async {
+  final created = await commandService.create(
+    _calendarEventDraftFrom(event, recurrence: recurrence),
+  );
+  if (!event.completed) {
+    return created;
+  }
+  final completed = created.copyWith(completed: true);
+  await commandService.save(completed);
+  return completed;
+}
+
+Future<void> _saveCalendarManualOrderAfterDrop(
+  WidgetRef ref, {
+  required DateTime sourceDate,
+  required DateTime targetDate,
+  required int targetIndex,
+  required CalendarEvent originalEvent,
+  required CalendarEvent movedEvent,
+  required List<CalendarEvent> visibleEvents,
+  required AppSettings settings,
+}) async {
+  final sourceKey = calendarDateKey(sourceDate);
+  final targetKey = calendarDateKey(targetDate);
+  final originalOrderKey = calendarEventOrderKey(originalEvent);
+  final movedOrderKey = calendarEventOrderKey(movedEvent);
+  final categoryOrder = settings.categories
+      .map((category) => category.id)
+      .toList();
+  final manualOrders = <String, CalendarManualEventOrder>{
+    ...settings.calendarManualEventOrders,
+  };
+  final deviceId = await ref.read(settingsRepositoryProvider).deviceId();
+  final now = DateTime.now();
+
+  if (sourceKey != targetKey) {
+    final sourceEvents = _eventsForDay(visibleEvents, sourceDate)
+        .where(
+          (candidate) =>
+              calendarEventOrderKey(candidate) != originalOrderKey &&
+              candidate.id != originalEvent.id,
+        )
+        .toList();
+    manualOrders[sourceKey] = CalendarManualEventOrder(
+      eventKeys: sourceEvents.map(calendarEventOrderKey).toList(),
+      updatedAt: now,
+      deviceId: deviceId,
+    );
+  }
+
+  final existingTarget = _eventsForDay(visibleEvents, targetDate)
+      .where(
+        (candidate) =>
+            calendarEventOrderKey(candidate) != originalOrderKey &&
+            calendarEventOrderKey(candidate) != movedOrderKey &&
+            candidate.id != originalEvent.id,
+      )
+      .toList();
+  final sortedTarget = sortedCalendarEvents(
+    existingTarget,
+    priority: settings.calendarEventSortPriority,
+    categoryOrder: categoryOrder,
+    manualOrder:
+        settings.calendarManualEventOrders[targetKey]?.eventKeys ??
+        const <String>[],
+  );
+  final insertionIndex = targetIndex.clamp(0, sortedTarget.length);
+  sortedTarget.insert(insertionIndex, movedEvent);
+  manualOrders[targetKey] = CalendarManualEventOrder(
+    eventKeys: sortedTarget.map(calendarEventOrderKey).toList(),
+    updatedAt: now,
+    deviceId: deviceId,
+  );
+
+  final updatedSettings = settings.copyWith(
+    calendarManualEventOrders: manualOrders,
+  );
+  await ref.read(settingsRepositoryProvider).save(updatedSettings);
+  ref.read(appSettingsProvider.notifier).state = updatedSettings;
+  await ref.read(syncServiceProvider).queueSettingsBackup();
+}
+
+EventDraft _calendarEventDraftFrom(
+  CalendarEvent event, {
+  required RecurrenceRule recurrence,
+}) {
+  return EventDraft(
+    title: event.title,
+    memo: event.memo,
+    location: event.location,
+    url: event.url,
+    weather: event.weather,
+    startAt: event.startAt,
+    endAt: event.endAt,
+    allDay: event.allDay,
+    category: event.category,
+    colorValue: event.colorValue,
+    reminderMinutesBeforeList: event.reminderMinutesBeforeList,
+    recurrence: recurrence,
+    showDday: event.showDday,
+    alarmEnabled: event.alarmEnabled,
+    allDayAlarmMinutes: event.allDayAlarmMinutes,
+  );
+}
+
+CalendarEvent _excludeCalendarOccurrence(
+  CalendarEvent base,
+  DateTime occurrence,
+) {
+  final excludedDate = _dateOnly(occurrence);
+  final excluded = {
+    ...base.recurrence.excludedDates.map(_dateOnly),
+    excludedDate,
+  }.toList()..sort();
+  return base.copyWith(
+    recurrence: base.recurrence.copyWith(excludedDates: excluded),
+  );
+}
+
+CalendarEvent _endCalendarRecurrenceBefore(
+  CalendarEvent base,
+  DateTime occurrence,
+) {
+  return base.copyWith(
+    recurrence: base.recurrence.copyWith(
+      until: _dateOnly(occurrence).subtract(const Duration(days: 1)),
+      clearCount: true,
+    ),
+  );
+}
+
+Future<_RecurringDragScope?> _showCalendarRecurringDragScopeDialog(
+  BuildContext context,
+) {
+  return showDialog<_RecurringDragScope>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(context.tr('반복 일정 이동')),
+      content: Text(context.tr('이 반복 일정의 어느 범위를 이동할까요?')),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(context.tr('취소')),
+        ),
+        TextButton(
+          onPressed: () =>
+              Navigator.of(context).pop(_RecurringDragScope.onlyThis),
+          child: Text(context.tr('이 일정만')),
+        ),
+        TextButton(
+          onPressed: () =>
+              Navigator.of(context).pop(_RecurringDragScope.future),
+          child: Text(context.tr('이후 일정')),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_RecurringDragScope.all),
+          child: Text(context.tr('전체 반복')),
+        ),
+      ],
+    ),
+  );
 }
 
 Future<void> _openRangeEventEditor(
@@ -2713,6 +3636,18 @@ Future<void> _openRangeEventEditor(
   List<EventCategory> categories,
   List<int> defaultReminderMinutesList,
 ) async {
+  final analytics = ref.read(productAnalyticsProvider);
+  final stopwatch = Stopwatch()..start();
+  unawaited(
+    analytics
+        .record(
+          AnalyticsRecord.eventEditorOpened(
+            AnalyticsEditorMode.create,
+            trigger: AnalyticsTrigger.manual,
+          ),
+        )
+        .catchError((_) {}),
+  );
   final draft = await showDialog<EventDraft>(
     context: context,
     builder: (_) => EventEditorDialog(
@@ -2723,6 +3658,19 @@ Future<void> _openRangeEventEditor(
       defaultReminderMinutesList: defaultReminderMinutesList,
       alarmService: ref.read(alarmServiceProvider),
     ),
+  );
+  unawaited(
+    analytics
+        .record(
+          AnalyticsRecord.eventEditorCompleted(
+            AnalyticsEditorMode.create,
+            outcome: draft == null
+                ? AnalyticsOutcome.canceled
+                : AnalyticsOutcome.succeeded,
+            durationMs: stopwatch.elapsedMilliseconds,
+          ),
+        )
+        .catchError((_) {}),
   );
   if (draft != null) {
     await ref.read(eventCommandServiceProvider).create(draft);
@@ -2762,23 +3710,34 @@ class _CalendarHeader extends ConsumerWidget {
     final platform = Theme.of(context).platform;
     final ios = platform == TargetPlatform.iOS;
     final desktop = _usesMacDesktopExperience(platform);
-    // Android's compact toolbar reserves fixed-width navigation and utility
-    // actions. Keep the period control to a single year there so its label and
-    // tap target cannot be squeezed out in horizontal month navigation.
-    final showYearOnly =
-        monthNavigationMode == MonthNavigationMode.vertical ||
-        (compact && !ios);
     final locale = Localizations.localeOf(context).toLanguageTag();
-    final label = showYearOnly
-        ? DateFormat.y(locale).format(month)
-        : DateFormat.yMMMM(locale).format(month);
+    final settings = ref.watch(appSettingsProvider);
+    final label = calendarPeriodLabel(
+      visibleMonth: month,
+      selectedDate: selectedDate,
+      viewMode: viewMode,
+      navigationMode: monthNavigationMode,
+      locale: locale,
+      weekStartsOnMonday: settings.weekStartsOnMonday,
+      // Android's compact toolbar reserves fixed-width navigation and utility
+      // actions, so horizontal navigation keeps its existing year-only label.
+      compactHorizontalYearOnly: compact && !ios,
+    );
+    final periodLabelMaxWidth =
+        ios &&
+            monthNavigationMode == MonthNavigationMode.vertical &&
+            viewMode == CalendarViewMode.week
+        ? 164.0
+        : 126.0;
     final colorScheme = Theme.of(context).colorScheme;
     final monthButton = TextButton.icon(
       key: const ValueKey('calendar-period-button'),
       onPressed: () => _showMonthPicker(context, ref),
       icon: const Icon(Icons.calendar_month_outlined, size: 20),
       label: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: ios ? 126 : double.infinity),
+        constraints: BoxConstraints(
+          maxWidth: ios ? periodLabelMaxWidth : double.infinity,
+        ),
         child: FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
@@ -2797,7 +3756,7 @@ class _CalendarHeader extends ConsumerWidget {
         foregroundColor: colorScheme.onSurface,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         minimumSize: ios ? const Size(0, 44) : null,
-        maximumSize: ios ? const Size(170, 44) : null,
+        maximumSize: ios ? Size(periodLabelMaxWidth + 44, 44) : null,
         tapTargetSize: ios
             ? MaterialTapTargetSize.shrinkWrap
             : MaterialTapTargetSize.padded,
@@ -3152,11 +4111,22 @@ class _CalendarHeader extends ConsumerWidget {
           );
         },
       ),
-    ).whenComplete(
-      () => WidgetsBinding.instance.addPostFrameCallback(
+    ).whenComplete(() {
+      unawaited(
+        ref
+            .read(productAnalyticsProvider)
+            .record(
+              AnalyticsRecord.featureUsed(
+                AnalyticsFeature.filter,
+                outcome: AnalyticsOutcome.succeeded,
+              ),
+            )
+            .catchError((_) {}),
+      );
+      WidgetsBinding.instance.addPostFrameCallback(
         (_) => queryController.dispose(),
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -3678,77 +4648,167 @@ class _BottomModeButton extends StatelessWidget {
   }
 }
 
-class _QuickAccessCard extends StatelessWidget {
-  const _QuickAccessCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.items,
-    required this.onTap,
+class _QuickTodoGroup {
+  const _QuickTodoGroup(this.category, this.events);
+
+  final EventCategory category;
+  final List<CalendarEvent> events;
+}
+
+class _QuickTodoCategoryCard extends StatelessWidget {
+  const _QuickTodoCategoryCard({
+    required this.group,
+    required this.onCompletedChanged,
+    required this.onOpen,
   });
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final List<String> items;
-  final VoidCallback onTap;
+  final _QuickTodoGroup group;
+  final Future<void> Function(CalendarEvent event, bool completed)
+  onCompletedChanged;
+  final ValueChanged<CalendarEvent> onOpen;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final categoryColor = Color(group.category.colorValue);
     return Material(
+      key: ValueKey('quick-todo-category-${group.category.id}'),
       color: colorScheme.surface,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            border: Border.all(color: colorScheme.outlineVariant),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: colorScheme.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        Text(
-                          subtitle,
-                          style: Theme.of(context).textTheme.labelMedium,
-                        ),
-                      ],
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              color: categoryColor.withValues(alpha: 0.1),
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: categoryColor,
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(height: 8),
-                    for (final item in items)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 3),
-                        child: Text(
-                          item,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelMedium,
-                        ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      context.l10n.categoryName(
+                        id: group.category.id,
+                        label: group.category.label,
                       ),
-                  ],
-                ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  Text(
+                    '${group.events.where((event) => event.completed).length}/${group.events.length}',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ],
               ),
+            ),
+            for (var index = 0; index < group.events.length; index++) ...[
+              _QuickTodoRow(
+                event: group.events[index],
+                onCompletedChanged: onCompletedChanged,
+                onOpen: onOpen,
+              ),
+              if (index != group.events.length - 1)
+                Divider(height: 1, color: colorScheme.outlineVariant),
             ],
-          ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _QuickTodoRow extends StatelessWidget {
+  const _QuickTodoRow({
+    required this.event,
+    required this.onCompletedChanged,
+    required this.onOpen,
+  });
+
+  final CalendarEvent event;
+  final Future<void> Function(CalendarEvent event, bool completed)
+  onCompletedChanged;
+  final ValueChanged<CalendarEvent> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final dateLabel = DateFormat.Md(locale).format(event.startAt);
+    final timeLabel = event.allDay
+        ? context.tr('종일')
+        : DateFormat.Hm(locale).format(event.startAt);
+    final titleStyle = calendarEventCompletionStyle(
+      context,
+      Theme.of(
+        context,
+      ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+      completed: event.completed,
+    );
+    final eventKey = event.occurrenceId ?? event.id;
+    return Row(
+      children: [
+        Checkbox(
+          key: ValueKey('quick-todo-checkbox-$eventKey'),
+          value: event.completed,
+          onChanged: (value) {
+            if (value != null) {
+              unawaited(onCompletedChanged(event, value));
+            }
+          },
+        ),
+        Expanded(
+          child: InkWell(
+            key: ValueKey('quick-todo-open-$eventKey'),
+            onTap: () => onOpen(event),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: Text(
+                      context.l10n.eventTitle(
+                        event.title,
+                        holiday: event.holiday,
+                      ),
+                      textAlign: TextAlign.start,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  SizedBox(
+                    width: double.infinity,
+                    child: Text(
+                      '$dateLabel · $timeLabel',
+                      textAlign: TextAlign.start,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -4262,14 +5322,18 @@ class _CalendarWeekView extends StatelessWidget {
     required this.selectedDate,
     required this.weekStartsOnMonday,
     required this.showLunarDates,
+    required this.centerEventTitles,
     required this.events,
+    required this.onEventDropped,
     required this.onDateSelected,
   });
 
   final DateTime selectedDate;
   final bool weekStartsOnMonday;
   final bool showLunarDates;
+  final bool centerEventTitles;
   final List<CalendarEvent> events;
+  final CalendarEventDropCallback onEventDropped;
   final void Function(DateTime date, List<CalendarEvent> events) onDateSelected;
 
   @override
@@ -4290,7 +5354,9 @@ class _CalendarWeekView extends StatelessWidget {
             day: day,
             selected: _sameDay(day, selectedDate),
             events: _eventsForDay(events, day),
+            centerEventTitles: centerEventTitles,
             compact: true,
+            onEventDropped: onEventDropped,
             onTap: () => onDateSelected(day, _eventsForDay(events, day)),
           );
         },
@@ -4312,7 +5378,9 @@ class _CalendarWeekView extends StatelessWidget {
                   day: day,
                   selected: _sameDay(day, selectedDate),
                   events: _eventsForDay(events, day),
+                  centerEventTitles: centerEventTitles,
                   compact: false,
+                  onEventDropped: onEventDropped,
                   onTap: () => onDateSelected(day, _eventsForDay(events, day)),
                 ),
               ),
@@ -4328,92 +5396,119 @@ class _WeekDayPanel extends StatelessWidget {
     required this.day,
     required this.selected,
     required this.events,
+    required this.centerEventTitles,
     required this.compact,
+    required this.onEventDropped,
     required this.onTap,
   });
 
   final DateTime day;
   final bool selected;
   final List<CalendarEvent> events;
+  final bool centerEventTitles;
   final bool compact;
+  final CalendarEventDropCallback onEventDropped;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final color = _weekdayColor(day, colorScheme);
-    return Material(
-      color: colorScheme.surface,
+    return CalendarEventDateDropTarget(
+      date: day,
+      onEventDropped: onEventDropped,
       borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onTap,
+      child: Material(
+        key: ValueKey('week-day-panel-${day.year}-${day.month}-${day.day}'),
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected
-                  ? colorScheme.primary
-                  : colorScheme.outlineVariant,
-              width: selected ? 1.4 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    DateFormat.E(
-                      Localizations.localeOf(context).toLanguageTag(),
-                    ).format(day),
-                    style: TextStyle(color: color, fontWeight: FontWeight.w800),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${day.month}/${day.day}',
-                    style: TextStyle(color: color, fontWeight: FontWeight.w800),
-                  ),
-                ],
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: selected
+                    ? colorScheme.primary
+                    : colorScheme.outlineVariant,
+                width: selected ? 1.4 : 1,
               ),
-              const SizedBox(height: 10),
-              if (events.isEmpty)
-                Text(
-                  context.tr('일정 없음'),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(color: colorScheme.outline),
-                )
-              else if (compact)
-                Column(
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    for (final event in events.take(4)) ...[
-                      _WeekEventFlag(event: event),
-                      const SizedBox(height: 6),
+                    Text(
+                      DateFormat.E(
+                        Localizations.localeOf(context).toLanguageTag(),
+                      ).format(day),
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${day.month}/${day.day}',
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (events.isEmpty)
+                  Text(
+                    context.tr('일정 없음'),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: colorScheme.outline,
+                    ),
+                  )
+                else if (compact)
+                  Column(
+                    children: [
+                      for (final event in events.take(4)) ...[
+                        CalendarEventDraggable(
+                          event: event,
+                          child: _WeekEventFlag(
+                            event: event,
+                            centerTitle: centerEventTitles,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      if (events.length > 4)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '+${events.length - 4}',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ),
                     ],
-                    if (events.length > 4)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          '+${events.length - 4}',
-                          style: Theme.of(context).textTheme.labelSmall,
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemBuilder: (context, index) => CalendarEventDraggable(
+                        event: events[index],
+                        child: _WeekEventFlag(
+                          event: events[index],
+                          centerTitle: centerEventTitles,
                         ),
                       ),
-                  ],
-                )
-              else
-                Expanded(
-                  child: ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    itemBuilder: (context, index) =>
-                        _WeekEventFlag(event: events[index]),
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 6),
-                    itemCount: events.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 6),
+                      itemCount: events.length,
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -4432,19 +5527,30 @@ class _WeekDayPanel extends StatelessWidget {
 }
 
 class _WeekEventFlag extends StatelessWidget {
-  const _WeekEventFlag({required this.event});
+  const _WeekEventFlag({required this.event, required this.centerTitle});
 
   final CalendarEvent event;
+  final bool centerTitle;
 
   @override
   Widget build(BuildContext context) {
-    final eventColor = Color(event.colorValue);
+    final categoryColor = Color(event.colorValue);
+    final eventColor = calendarEventAccentColor(
+      context,
+      categoryColor,
+      completed: event.completed,
+    );
+    final backgroundColor = calendarEventBackgroundColor(
+      context,
+      categoryColor,
+      completed: event.completed,
+    );
     final title = context.l10n.eventTitle(event.title, holiday: event.holiday);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       decoration: BoxDecoration(
-        color: eventColor.withValues(alpha: 0.12),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -4455,11 +5561,16 @@ class _WeekEventFlag extends StatelessWidget {
                   ? title
                   : '$title  ${DateFormat('HH:mm').format(event.startAt)}',
               maxLines: 2,
+              textAlign: centerTitle ? TextAlign.center : TextAlign.start,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: eventColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+              style: calendarEventCompletionStyle(
+                context,
+                TextStyle(
+                  color: eventColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+                completed: event.completed,
               ),
             ),
           ),
@@ -4514,7 +5625,7 @@ List<CalendarEvent> _filterVisibleEvents(
 ) {
   final hidden = settings.hiddenCategoryIds.toSet();
   final query = searchQuery.trim().toLowerCase();
-  return events.where((event) {
+  final filtered = events.where((event) {
     if (!settings.calendarShowHolidays && event.holiday) {
       return false;
     }
@@ -4536,7 +5647,12 @@ List<CalendarEvent> _filterVisibleEvents(
       event.category.label,
     ].whereType<String>().join(' ').toLowerCase();
     return searchable.contains(query);
-  }).toList()..sort((a, b) => a.startAt.compareTo(b.startAt));
+  });
+  return sortedCalendarEvents(
+    filtered,
+    priority: settings.calendarEventSortPriority,
+    categoryOrder: settings.categories.map((category) => category.id).toList(),
+  );
 }
 
 List<CalendarEvent> _eventsForDay(List<CalendarEvent> events, DateTime date) {
@@ -4546,8 +5662,7 @@ List<CalendarEvent> _eventsForDay(List<CalendarEvent> events, DateTime date) {
       .where(
         (event) => event.startAt.isBefore(end) && event.endAt.isAfter(start),
       )
-      .toList()
-    ..sort((a, b) => a.startAt.compareTo(b.startAt));
+      .toList();
 }
 
 bool _sameDay(DateTime a, DateTime b) {

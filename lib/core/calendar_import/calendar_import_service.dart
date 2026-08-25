@@ -139,11 +139,8 @@ class CalendarImportService {
 
     final categories = <EventCategory>[
       for (final category in settings.categories)
-        if (!replacements.containsKey(category.id) &&
-            category.id != EventCategory.holiday.id)
-          category,
+        replacements.remove(category.id) ?? category,
       ...replacements.values,
-      EventCategory.holiday,
     ];
     final changed =
         categories.length != settings.categories.length ||

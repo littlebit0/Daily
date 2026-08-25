@@ -1346,7 +1346,7 @@ enum DailySiriEventChangeSignal {
 
 private struct DailySignalConfirmationRequired: Error {}
 
-@available(iOS 17.0, macOS 14.0, *)
+@available(iOS 16.0, macOS 13.0, *)
 private struct DailyGenerativeUnderstanding: Sendable {
   let action: DailySiriAction
   let eventReference: String?
@@ -2631,7 +2631,7 @@ actor DailySiriSearchIndexer {
   }
 }
 
-@available(iOS 17.0, macOS 14.0, *)
+@available(iOS 16.0, macOS 13.0, *)
 enum DailySiriAction: String, AppEnum {
   case yesterday
   case today
@@ -2644,51 +2644,18 @@ enum DailySiriAction: String, AppEnum {
   case update
   case delete
 
-  static var typeDisplayRepresentation = TypeDisplayRepresentation(
-    name: "Daily action",
-    synonyms: ["Daily request", "데일리 작업", "시그널 명령"]
-  )
+  static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Daily action")
   static var caseDisplayRepresentations: [DailySiriAction: DisplayRepresentation] = [
-    .yesterday: DisplayRepresentation(
-      title: "어제 일정",
-      synonyms: ["어제 일정 알려줘", "어제 스케줄", "어제 일정 확인"]
-    ),
-    .today: DisplayRepresentation(
-      title: "오늘 일정",
-      synonyms: ["오늘 일정 알려줘", "오늘 스케줄", "오늘 일정 확인"]
-    ),
-    .tomorrow: DisplayRepresentation(
-      title: "내일 일정",
-      synonyms: ["내일 일정 알려줘", "내일 스케줄", "내일 일정 확인"]
-    ),
-    .date: DisplayRepresentation(
-      title: "지정 날짜 일정",
-      synonyms: ["날짜별 일정", "특정 날짜 일정", "그날 일정"]
-    ),
-    .next: DisplayRepresentation(
-      title: "다음 일정",
-      synonyms: ["다음 일정 알려줘", "다가오는 일정", "가장 가까운 일정"]
-    ),
-    .search: DisplayRepresentation(
-      title: "일정 검색",
-      synonyms: ["일정 찾아줘", "일정 검색해줘", "스케줄 검색"]
-    ),
-    .dday: DisplayRepresentation(
-      title: "D-day 일정",
-      synonyms: ["디데이", "디데이 일정", "D-day 알려줘"]
-    ),
-    .add: DisplayRepresentation(
-      title: "일정 추가",
-      synonyms: ["일정 만들어줘", "일정 등록", "스케줄 추가"]
-    ),
-    .update: DisplayRepresentation(
-      title: "일정 수정",
-      synonyms: ["일정 바꿔줘", "일정 변경", "스케줄 수정"]
-    ),
-    .delete: DisplayRepresentation(
-      title: "일정 삭제",
-      synonyms: ["일정 지워줘", "일정 취소", "스케줄 삭제"]
-    ),
+    .yesterday: DisplayRepresentation(title: "어제 일정"),
+    .today: DisplayRepresentation(title: "오늘 일정"),
+    .tomorrow: DisplayRepresentation(title: "내일 일정"),
+    .date: DisplayRepresentation(title: "지정 날짜 일정"),
+    .next: DisplayRepresentation(title: "다음 일정"),
+    .search: DisplayRepresentation(title: "일정 검색"),
+    .dday: DisplayRepresentation(title: "D-day 일정"),
+    .add: DisplayRepresentation(title: "일정 추가"),
+    .update: DisplayRepresentation(title: "일정 수정"),
+    .delete: DisplayRepresentation(title: "일정 삭제"),
   ]
 }
 
@@ -2942,7 +2909,7 @@ struct OpenDailyCalendarIntent: AppIntent {
   }
 }
 
-@available(iOS 17.0, macOS 14.0, *)
+@available(iOS 16.0, macOS 13.0, *)
 struct DailySignalCommandIntent: AppIntent {
   static var title: LocalizedStringResource = "Daily Signal"
   static var description = IntentDescription("Interprets a captured Signal phrase as one of Daily's supported calendar actions.")
@@ -3448,14 +3415,14 @@ struct DailyAppShortcuts: AppShortcutsProvider {
       systemImageName: "flag"
     )
     AppShortcut(
-      intent: OpenDailyCalendarIntent(),
+      intent: DailySignalCommandIntent(),
       phrases: [
-        "Open \(.applicationName) calendar",
-        "\(.applicationName) 앱 열어줘",
-        "\(.applicationName) 캘린더 열어줘",
+        "Run Signal in \(.applicationName)",
+        "\(.applicationName)에서 시그널 실행",
+        "\(.applicationName) 시그널",
       ],
-      shortTitle: "Open Calendar",
-      systemImageName: "calendar.circle"
+      shortTitle: "Signal",
+      systemImageName: "waveform"
     )
   }
 }

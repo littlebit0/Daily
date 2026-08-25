@@ -80,4 +80,148 @@ void main() {
 
     expect(occurrences, isEmpty);
   });
+
+  test('includes the until date for timed daily recurrences', () {
+    final occurrences = RecurrenceExpander().expand(
+      _recurringEvent(
+        startAt: DateTime(2026, 8, 24, 9),
+        endAt: DateTime(2026, 8, 24, 10),
+        recurrence: RecurrenceRule(
+          frequency: RecurrenceFrequency.daily,
+          until: DateTime(2026, 8, 26),
+        ),
+      ),
+      DateTime(2026, 8, 1),
+      DateTime(2026, 9, 1),
+    );
+
+    expect(occurrences.map((event) => event.startAt.day), [24, 25, 26]);
+  });
+
+  test('includes the until date for all-day daily recurrences', () {
+    final occurrences = RecurrenceExpander().expand(
+      _recurringEvent(
+        startAt: DateTime(2026, 8, 24),
+        endAt: DateTime(2026, 8, 25),
+        allDay: true,
+        recurrence: RecurrenceRule(
+          frequency: RecurrenceFrequency.daily,
+          until: DateTime(2026, 8, 26),
+        ),
+      ),
+      DateTime(2026, 8, 1),
+      DateTime(2026, 9, 1),
+    );
+
+    expect(occurrences.map((event) => event.startAt.day), [24, 25, 26]);
+  });
+
+  test('includes the until date across a year boundary and stops after it', () {
+    final occurrences = RecurrenceExpander().expand(
+      _recurringEvent(
+        startAt: DateTime(2026, 12, 30, 23, 30),
+        endAt: DateTime(2026, 12, 31, 0, 30),
+        recurrence: RecurrenceRule(
+          frequency: RecurrenceFrequency.daily,
+          until: DateTime(2027, 1, 1),
+        ),
+      ),
+      DateTime(2026, 12, 1),
+      DateTime(2027, 2, 1),
+    );
+
+    expect(occurrences.map((event) => event.startAt), [
+      DateTime(2026, 12, 30, 23, 30),
+      DateTime(2026, 12, 31, 23, 30),
+      DateTime(2027, 1, 1, 23, 30),
+    ]);
+  });
+
+  test(
+    'includes matching until dates for every supported recurrence period',
+    () {
+      final cases =
+          <
+            ({
+              RecurrenceFrequency frequency,
+              DateTime start,
+              DateTime until,
+              List<DateTime> expected,
+            })
+          >[
+            (
+              frequency: RecurrenceFrequency.weekly,
+              start: DateTime(2026, 8, 12, 9),
+              until: DateTime(2026, 8, 26),
+              expected: [
+                DateTime(2026, 8, 12, 9),
+                DateTime(2026, 8, 19, 9),
+                DateTime(2026, 8, 26, 9),
+              ],
+            ),
+            (
+              frequency: RecurrenceFrequency.monthly,
+              start: DateTime(2026, 10, 26, 9),
+              until: DateTime(2027, 1, 26),
+              expected: [
+                DateTime(2026, 10, 26, 9),
+                DateTime(2026, 11, 26, 9),
+                DateTime(2026, 12, 26, 9),
+                DateTime(2027, 1, 26, 9),
+              ],
+            ),
+            (
+              frequency: RecurrenceFrequency.yearly,
+              start: DateTime(2024, 8, 26, 9),
+              until: DateTime(2026, 8, 26),
+              expected: [
+                DateTime(2024, 8, 26, 9),
+                DateTime(2025, 8, 26, 9),
+                DateTime(2026, 8, 26, 9),
+              ],
+            ),
+          ];
+
+      for (final testCase in cases) {
+        final occurrences = RecurrenceExpander().expand(
+          _recurringEvent(
+            startAt: testCase.start,
+            endAt: testCase.start.add(const Duration(hours: 1)),
+            recurrence: RecurrenceRule(
+              frequency: testCase.frequency,
+              until: testCase.until,
+            ),
+          ),
+          DateTime(2024),
+          DateTime(2028),
+        );
+
+        expect(
+          occurrences.map((event) => event.startAt),
+          testCase.expected,
+          reason: testCase.frequency.name,
+        );
+      }
+    },
+  );
+}
+
+CalendarEvent _recurringEvent({
+  required DateTime startAt,
+  required DateTime endAt,
+  required RecurrenceRule recurrence,
+  bool allDay = false,
+}) {
+  return CalendarEvent(
+    id: 'recurrence-${recurrence.frequency.name}-${startAt.toIso8601String()}',
+    title: '반복 일정',
+    startAt: startAt,
+    endAt: endAt,
+    allDay: allDay,
+    category: EventCategory.basic,
+    colorValue: EventCategory.basic.colorValue,
+    recurrence: recurrence,
+    createdAt: startAt,
+    updatedAt: startAt,
+  );
 }

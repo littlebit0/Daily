@@ -11,7 +11,12 @@ void main() {
   test('builds month, today, and D-day widget data', () {
     final now = DateTime(2026, 7, 28, 10);
     final events = [
-      _event(id: 'meeting', title: '회의', startAt: DateTime(2026, 7, 28, 11)),
+      _event(
+        id: 'meeting',
+        title: '회의',
+        startAt: DateTime(2026, 7, 28, 11),
+        completed: true,
+      ),
       _event(
         id: 'private',
         title: '노출되면 안 되는 일정',
@@ -33,11 +38,14 @@ void main() {
       allEvents: events,
     );
 
+    expect(snapshot['themeMode'], AppThemeMode.system.name);
     expect(snapshot['weekTitle'], '7월 26일 - 8월 1일');
 
     final todayEvents = (snapshot['todayEvents']! as List)
         .cast<Map<String, Object?>>();
     expect(todayEvents.map((event) => event['title']), ['회의', '노출되면 안 되는 일정']);
+    expect(todayEvents.first['eventId'], 'meeting');
+    expect(todayEvents.first['completed'], isTrue);
     final scheduleEvents = (snapshot['scheduleEvents']! as List)
         .cast<Map<String, Object?>>();
     expect(scheduleEvents, hasLength(3));
@@ -55,6 +63,8 @@ void main() {
     expect(today['eventCount'], 2);
     final monthEvents = (today['events']! as List).cast<Map<String, Object?>>();
     expect(monthEvents.map((event) => event['title']), ['회의', '노출되면 안 되는 일정']);
+    expect(monthEvents.first['eventId'], 'meeting');
+    expect(monthEvents.first['completed'], isTrue);
   });
 
   test('excludes hidden categories, deleted events, and disabled holidays', () {
@@ -115,6 +125,19 @@ void main() {
 
     expect(occurrenceIds, ['trip', 'trip', 'trip']);
   });
+
+  test('parses a pending widget Todo action', () {
+    final action = AppleWidgetTodoAction.fromMap({
+      'token': 'widget-action-1',
+      'eventId': 'meeting',
+      'completed': true,
+    });
+
+    expect(action, isNotNull);
+    expect(action!.token, 'widget-action-1');
+    expect(action.eventId, 'meeting');
+    expect(action.completed, isTrue);
+  });
 }
 
 CalendarEvent _event({
@@ -126,6 +149,7 @@ CalendarEvent _event({
   EventCategory category = EventCategory.basic,
   bool showDday = false,
   bool holiday = false,
+  bool completed = false,
   DateTime? deletedAt,
 }) {
   return CalendarEvent(
@@ -141,6 +165,7 @@ CalendarEvent _event({
     updatedAt: startAt,
     showDday: showDday,
     holiday: holiday,
+    completed: completed,
     deletedAt: deletedAt,
   );
 }

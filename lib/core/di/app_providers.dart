@@ -11,6 +11,7 @@ import '../../features/events/data/app_database.dart';
 import '../../features/events/data/drift_event_repository.dart';
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
+import '../analytics/product_analytics.dart';
 import '../auth/apple_sign_in_service.dart';
 import '../alarms/alarm_service.dart';
 import '../alarms/native_alarm_service.dart';
@@ -18,6 +19,7 @@ import '../calendar/korean_holiday_service.dart';
 import '../calendar_import/calendar_import_service.dart';
 import '../calendar_import/google_calendar_source.dart';
 import '../calendar_import/native_calendar_source.dart';
+import '../migration/todo_database_migration_service.dart';
 import '../notifications/local_notification_service.dart';
 import '../notifications/notification_service.dart';
 import '../settings/app_settings.dart';
@@ -46,6 +48,10 @@ final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   throw UnimplementedError('settingsRepositoryProvider must be overridden');
 });
 
+final productAnalyticsProvider = Provider<ProductAnalytics>((ref) {
+  return const NoopProductAnalytics();
+});
+
 final appSettingsProvider = StateProvider<AppSettings>((ref) {
   return ref.watch(settingsRepositoryProvider).load();
 });
@@ -61,10 +67,12 @@ final eventRepositoryProvider = Provider<EventRepository>((ref) {
 });
 
 final appleWidgetServiceProvider = Provider<AppleWidgetService>((ref) {
-  return AppleWidgetService(
+  final service = AppleWidgetService(
     eventRepository: ref.watch(eventRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
   );
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
@@ -99,11 +107,28 @@ final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
     notificationService: ref.watch(notificationServiceProvider),
     alarmService: ref.watch(alarmServiceProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
+    analytics: ref.watch(productAnalyticsProvider),
     onEventsChanged: ref.watch(appleWidgetServiceProvider).refresh,
   );
   ref.onDispose(service.dispose);
   return service;
 });
+
+final todoDatabaseMigrationServiceProvider =
+    Provider<TodoDatabaseMigrationService>((ref) {
+      final database = ref.watch(databaseProvider);
+      final settingsRepository = ref.watch(settingsRepositoryProvider);
+      final syncService = ref.watch(googleDriveSyncServiceProvider);
+      final service = TodoDatabaseMigrationService(
+        databaseFile: database.databaseFile,
+        hasLinkedGoogleAccount: () =>
+            settingsRepository.dailyAccount()?.googleAccount != null,
+        loadRemoteEvents: syncService.downloadEventsForMigration,
+        backupMigratedEvents: syncService.syncPendingChangesNow,
+      );
+      ref.onDispose(service.dispose);
+      return service;
+    });
 
 final syncServiceProvider = Provider<SyncService>((ref) {
   return ref.watch(googleDriveSyncServiceProvider);
@@ -116,6 +141,7 @@ final eventCommandServiceProvider = Provider<EventCommandService>((ref) {
     notificationService: ref.watch(notificationServiceProvider),
     alarmService: ref.watch(alarmServiceProvider),
     syncService: ref.watch(syncServiceProvider),
+    analytics: ref.watch(productAnalyticsProvider),
     onEventsChanged: ref.watch(appleWidgetServiceProvider).refresh,
   );
 });
@@ -159,9 +185,14 @@ final calendarSearchQueryProvider = StateProvider<String>((ref) => '');
 
 final eventsInRangeProvider =
     StreamProvider.family<List<CalendarEvent>, CalendarRange>((ref, range) {
+      final settings = ref.watch(appSettingsProvider);
       final holidays = ref
           .watch(koreanHolidayServiceProvider)
-          .holidayEventsInRange(range.start, range.end);
+          .holidayEventsInRange(
+            range.start,
+            range.end,
+            category: settings.holidayCategory,
+          );
       return ref
           .watch(eventRepositoryProvider)
           .watchEventsInRange(range.start, range.end)

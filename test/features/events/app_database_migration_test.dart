@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'schema 6 removes the private-event field without deleting events',
+    'schema 7 preserves events and initializes Todo completion as false',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'daily-migration-',
@@ -24,11 +24,11 @@ void main() {
         [
           'kept-event',
           '보존할 일정',
-      DateTime(2026, 7, 30).millisecondsSinceEpoch ~/ 1000,
-      DateTime(2026, 7, 30, 1).millisecondsSinceEpoch ~/ 1000,
+          DateTime(2026, 7, 30).millisecondsSinceEpoch ~/ 1000,
+          DateTime(2026, 7, 30, 1).millisecondsSinceEpoch ~/ 1000,
           0xff2563eb,
-      DateTime(2026, 7, 29).millisecondsSinceEpoch ~/ 1000,
-      DateTime(2026, 7, 29).millisecondsSinceEpoch ~/ 1000,
+          DateTime(2026, 7, 29).millisecondsSinceEpoch ~/ 1000,
+          DateTime(2026, 7, 29).millisecondsSinceEpoch ~/ 1000,
         ],
       );
       await oldDatabase.customStatement(
@@ -48,7 +48,7 @@ void main() {
           .get();
       final names = columns.map((row) => row.read<String>('name')).toSet();
       final event = await database
-          .customSelect('SELECT id, title FROM event_records')
+          .customSelect('SELECT id, title, completed FROM event_records')
           .getSingle();
       final version = await database
           .customSelect('PRAGMA user_version')
@@ -57,7 +57,8 @@ void main() {
       expect(names, isNot(contains('sensitive')));
       expect(event.read<String>('id'), 'kept-event');
       expect(event.read<String>('title'), '보존할 일정');
-      expect(version.read<int>('user_version'), 6);
+      expect(event.read<int>('completed'), 0);
+      expect(version.read<int>('user_version'), 7);
     },
   );
 }

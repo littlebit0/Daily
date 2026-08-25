@@ -29,7 +29,7 @@ class RecurrenceExpander {
 
     while (current.isBefore(rangeEnd)) {
       generated += 1;
-      if (until != null && current.isAfter(until)) {
+      if (until != null && _isAfterCalendarDate(current, until)) {
         break;
       }
       if (maxCount != null && generated > maxCount) {
@@ -138,6 +138,12 @@ class RecurrenceExpander {
 
   int _daysInMonth(int year, int month) {
     return DateTime(year, month + 1, 0).day;
+  }
+
+  bool _isAfterCalendarDate(DateTime value, DateTime boundary) {
+    final valueDate = DateTime(value.year, value.month, value.day);
+    final boundaryDate = DateTime(boundary.year, boundary.month, boundary.day);
+    return valueDate.isAfter(boundaryDate);
   }
 }
 

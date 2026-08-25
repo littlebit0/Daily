@@ -1,0 +1,277 @@
+import 'package:flutter/foundation.dart';
+
+enum AnalyticsScreen {
+  onboarding,
+  calendar,
+  quickView,
+  search,
+  settings,
+  notificationSettings,
+  accountSettings,
+  eventDetails,
+}
+
+enum AnalyticsCalendarView { quickView, week, month, day }
+
+enum AnalyticsEditorMode { create, edit }
+
+enum AnalyticsOperation { create, update, delete, complete, uncomplete }
+
+enum AnalyticsFeature { search, filter, widget, calendarImport, siri, map }
+
+enum AnalyticsSyncOperation {
+  backup,
+  restore,
+  backupThenRestore,
+  detectRemoteChanges,
+  backupThenDetectRemoteChanges,
+}
+
+enum AnalyticsTrigger { automatic, manual, startup, resume, localChange }
+
+enum AnalyticsOutcome { succeeded, failed, canceled }
+
+enum AnalyticsErrorCode {
+  authenticationRequired,
+  canceled,
+  timeout,
+  network,
+  permission,
+  validation,
+  storage,
+  conflict,
+  unavailable,
+  unknown,
+}
+
+enum AnalyticsEventName {
+  appLoadCompleted('app_load_completed'),
+  screenView('screen_view'),
+  calendarViewChanged('calendar_view_changed'),
+  eventEditorOpened('event_editor_opened'),
+  eventEditorCompleted('event_editor_completed'),
+  eventSaveSucceeded('event_save_succeeded'),
+  eventSaveFailed('event_save_failed'),
+  featureUsed('feature_used'),
+  syncStarted('sync_started'),
+  syncSucceeded('sync_succeeded'),
+  syncFailed('sync_failed'),
+  slowInteractionDetected('slow_interaction_detected');
+
+  const AnalyticsEventName(this.wireName);
+
+  final String wireName;
+}
+
+@immutable
+class AnalyticsRecord {
+  const AnalyticsRecord._(this.name, this.attributes);
+
+  factory AnalyticsRecord.appLoad({required int durationMs}) {
+    return AnalyticsRecord._(AnalyticsEventName.appLoadCompleted, {
+      'durationMs': _boundedDuration(durationMs),
+    });
+  }
+
+  factory AnalyticsRecord.screenView(AnalyticsScreen screen) {
+    return AnalyticsRecord._(AnalyticsEventName.screenView, {
+      'screen': screen.name,
+    });
+  }
+
+  factory AnalyticsRecord.calendarViewChanged(
+    AnalyticsCalendarView view, {
+    required AnalyticsTrigger trigger,
+  }) {
+    return AnalyticsRecord._(AnalyticsEventName.calendarViewChanged, {
+      'view': view.name,
+      'trigger': trigger.name,
+    });
+  }
+
+  factory AnalyticsRecord.eventEditorOpened(
+    AnalyticsEditorMode mode, {
+    required AnalyticsTrigger trigger,
+  }) {
+    return AnalyticsRecord._(AnalyticsEventName.eventEditorOpened, {
+      'mode': mode.name,
+      'trigger': trigger.name,
+    });
+  }
+
+  factory AnalyticsRecord.eventEditorCompleted(
+    AnalyticsEditorMode mode, {
+    required AnalyticsOutcome outcome,
+    required int durationMs,
+  }) {
+    return AnalyticsRecord._(AnalyticsEventName.eventEditorCompleted, {
+      'mode': mode.name,
+      'outcome': outcome.name,
+      'durationMs': _boundedDuration(durationMs),
+    });
+  }
+
+  factory AnalyticsRecord.eventSave(
+    AnalyticsOperation operation, {
+    required bool succeeded,
+    required int durationMs,
+    AnalyticsErrorCode? errorCode,
+  }) {
+    return AnalyticsRecord._(
+      succeeded
+          ? AnalyticsEventName.eventSaveSucceeded
+          : AnalyticsEventName.eventSaveFailed,
+      {
+        'operation': operation.name,
+        'durationMs': _boundedDuration(durationMs),
+        if (!succeeded)
+          'errorCode': (errorCode ?? AnalyticsErrorCode.unknown).name,
+      },
+    );
+  }
+
+  factory AnalyticsRecord.featureUsed(
+    AnalyticsFeature feature, {
+    required AnalyticsOutcome outcome,
+  }) {
+    return AnalyticsRecord._(AnalyticsEventName.featureUsed, {
+      'feature': feature.name,
+      'outcome': outcome.name,
+    });
+  }
+
+  factory AnalyticsRecord.sync(
+    AnalyticsSyncOperation operation, {
+    required AnalyticsTrigger trigger,
+    required AnalyticsOutcome outcome,
+    required int durationMs,
+    AnalyticsErrorCode? errorCode,
+  }) {
+    final name = switch (outcome) {
+      AnalyticsOutcome.succeeded => AnalyticsEventName.syncSucceeded,
+      AnalyticsOutcome.failed ||
+      AnalyticsOutcome.canceled => AnalyticsEventName.syncFailed,
+    };
+    return AnalyticsRecord._(name, {
+      'operation': operation.name,
+      'trigger': trigger.name,
+      'outcome': outcome.name,
+      'durationMs': _boundedDuration(durationMs),
+      if (outcome != AnalyticsOutcome.succeeded)
+        'errorCode': (errorCode ?? AnalyticsErrorCode.unknown).name,
+    });
+  }
+
+  factory AnalyticsRecord.syncStarted(
+    AnalyticsSyncOperation operation, {
+    required AnalyticsTrigger trigger,
+  }) {
+    return AnalyticsRecord._(AnalyticsEventName.syncStarted, {
+      'operation': operation.name,
+      'trigger': trigger.name,
+    });
+  }
+
+  factory AnalyticsRecord.slowInteraction({
+    required String interaction,
+    required int durationMs,
+    int slowFrameCount = 0,
+  }) {
+    if (!analyticsInteractionValues.contains(interaction)) {
+      throw ArgumentError.value(interaction, 'interaction');
+    }
+    return AnalyticsRecord._(AnalyticsEventName.slowInteractionDetected, {
+      'interaction': interaction,
+      'durationMs': _boundedDuration(durationMs),
+      'slowFrameCount': slowFrameCount.clamp(0, 120),
+    });
+  }
+
+  final AnalyticsEventName name;
+  final Map<String, Object> attributes;
+
+  static int _boundedDuration(int value) => value.clamp(0, 120000);
+}
+
+const analyticsInteractionValues = <String>{
+  'app_start',
+  'calendar_transition',
+  'event_save',
+  'search_open',
+  'sync',
+  'frame_batch',
+};
+
+abstract interface class ProductAnalytics {
+  ValueListenable<bool> get enabledListenable;
+  bool get enabled;
+  int get pendingEventCount;
+
+  Future<void> initialize();
+  Future<void> setEnabled(bool enabled);
+  Future<void> deletePendingData();
+  Future<void> record(AnalyticsRecord record);
+  Future<void> flush();
+  void dispose();
+}
+
+class NoopProductAnalytics implements ProductAnalytics {
+  const NoopProductAnalytics();
+
+  static final ValueNotifier<bool> _disabled = ValueNotifier<bool>(false);
+
+  @override
+  bool get enabled => false;
+
+  @override
+  ValueListenable<bool> get enabledListenable => _disabled;
+
+  @override
+  int get pendingEventCount => 0;
+
+  @override
+  Future<void> deletePendingData() async {}
+
+  @override
+  void dispose() {}
+
+  @override
+  Future<void> flush() async {}
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> record(AnalyticsRecord record) async {}
+
+  @override
+  Future<void> setEnabled(bool enabled) async {}
+}
+
+AnalyticsErrorCode categorizeAnalyticsError(Object error) {
+  final text = '${error.runtimeType} $error'.toLowerCase();
+  if (text.contains('cancel')) return AnalyticsErrorCode.canceled;
+  if (text.contains('timeout')) return AnalyticsErrorCode.timeout;
+  if (text.contains('auth') || text.contains('sign')) {
+    return AnalyticsErrorCode.authenticationRequired;
+  }
+  if (text.contains('socket') ||
+      text.contains('network') ||
+      text.contains('clientexception')) {
+    return AnalyticsErrorCode.network;
+  }
+  if (text.contains('permission') || text.contains('denied')) {
+    return AnalyticsErrorCode.permission;
+  }
+  if (text.contains('validation') || text.contains('invalid')) {
+    return AnalyticsErrorCode.validation;
+  }
+  if (text.contains('sqlite') || text.contains('storage')) {
+    return AnalyticsErrorCode.storage;
+  }
+  if (text.contains('conflict')) return AnalyticsErrorCode.conflict;
+  if (text.contains('unavailable') || text.contains('unsupported')) {
+    return AnalyticsErrorCode.unavailable;
+  }
+  return AnalyticsErrorCode.unknown;
+}

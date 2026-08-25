@@ -44,8 +44,13 @@ class SettingsRepository {
   static const _legacyCalendarDensityKey = 'calendarDensity';
   static const _defaultCalendarViewKey = 'defaultCalendarView';
   static const _weekDayLayoutModeKey = 'weekDayLayoutMode';
+  static const _calendarEventTitleAlignmentKey = 'calendarEventTitleAlignment';
+  static const _calendarEventSortPriorityKey = 'calendarEventSortPriority';
+  static const _calendarManualEventOrdersKey = 'calendarManualEventOrders';
   static const _hiddenCategoryIdsKey = 'hiddenCategoryIds';
   static const _calendarShowHolidaysKey = 'calendarShowHolidays';
+  static const _calendarHolidayBackgroundEnabledKey =
+      'calendarHolidayBackgroundEnabled';
   static const _calendarDdayOnlyKey = 'calendarDdayOnly';
   static const _appLockEnabledKey = 'appLockEnabled';
   static const _appLockBiometricsEnabledKey = 'appLockBiometricsEnabled';
@@ -97,9 +102,18 @@ class SettingsRepository {
       weekDayLayoutMode: WeekDayLayoutMode.fromName(
         _preferences.getString(_weekDayLayoutModeKey),
       ),
+      calendarEventTitleAlignment: CalendarEventTitleAlignment.fromName(
+        _preferences.getString(_calendarEventTitleAlignmentKey),
+      ),
+      calendarEventSortPriority: CalendarEventSortPriority.fromName(
+        _preferences.getString(_calendarEventSortPriorityKey),
+      ),
+      calendarManualEventOrders: _loadCalendarManualEventOrders(),
       hiddenCategoryIds: _loadStringList(_hiddenCategoryIdsKey),
       calendarShowHolidays:
           _preferences.getBool(_calendarShowHolidaysKey) ?? true,
+      calendarHolidayBackgroundEnabled:
+          _preferences.getBool(_calendarHolidayBackgroundEnabledKey) ?? true,
       calendarDdayOnly: _preferences.getBool(_calendarDdayOnlyKey) ?? false,
       appLockEnabled: _preferences.getBool(_appLockEnabledKey) ?? false,
       appLockBiometricsEnabled:
@@ -193,12 +207,32 @@ class SettingsRepository {
       settings.weekDayLayoutMode.name,
     );
     await _preferences.setString(
+      _calendarEventTitleAlignmentKey,
+      settings.calendarEventTitleAlignment.name,
+    );
+    await _preferences.setString(
+      _calendarEventSortPriorityKey,
+      settings.calendarEventSortPriority.name,
+    );
+    await _preferences.setString(
+      _calendarManualEventOrdersKey,
+      jsonEncode(
+        settings.calendarManualEventOrders.map(
+          (date, order) => MapEntry(date, order.toJson()),
+        ),
+      ),
+    );
+    await _preferences.setString(
       _hiddenCategoryIdsKey,
       jsonEncode(settings.hiddenCategoryIds),
     );
     await _preferences.setBool(
       _calendarShowHolidaysKey,
       settings.calendarShowHolidays,
+    );
+    await _preferences.setBool(
+      _calendarHolidayBackgroundEnabledKey,
+      settings.calendarHolidayBackgroundEnabled,
     );
     await _preferences.setBool(_calendarDdayOnlyKey, settings.calendarDdayOnly);
     await _preferences.remove('hideSensitiveEvents');
@@ -426,8 +460,12 @@ class SettingsRepository {
     await _preferences.remove(_legacyCalendarDensityKey);
     await _preferences.remove(_defaultCalendarViewKey);
     await _preferences.remove(_weekDayLayoutModeKey);
+    await _preferences.remove(_calendarEventTitleAlignmentKey);
+    await _preferences.remove(_calendarEventSortPriorityKey);
+    await _preferences.remove(_calendarManualEventOrdersKey);
     await _preferences.remove(_hiddenCategoryIdsKey);
     await _preferences.remove(_calendarShowHolidaysKey);
+    await _preferences.remove(_calendarHolidayBackgroundEnabledKey);
     await _preferences.remove(_calendarDdayOnlyKey);
     await _preferences.remove('hideSensitiveEvents');
     await _preferences.remove('hideSensitiveNotifications');
@@ -463,6 +501,30 @@ class SettingsRepository {
         details.contains('-34018') ||
         message.contains('-34018') ||
         message.contains('entitlement');
+  }
+
+  Map<String, CalendarManualEventOrder> _loadCalendarManualEventOrders() {
+    final raw = _preferences.getString(_calendarManualEventOrdersKey);
+    if (raw == null || raw.isEmpty) {
+      return const <String, CalendarManualEventOrder>{};
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return const <String, CalendarManualEventOrder>{};
+      }
+      final orders = <String, CalendarManualEventOrder>{};
+      for (final entry in decoded.entries) {
+        final date = entry.key?.toString() ?? '';
+        final order = CalendarManualEventOrder.fromJson(entry.value);
+        if (date.isNotEmpty && order != null) {
+          orders[date] = order;
+        }
+      }
+      return orders;
+    } on Object {
+      return const <String, CalendarManualEventOrder>{};
+    }
   }
 
   List<EventCategory> _loadCategories() {

@@ -213,6 +213,221 @@ void main() {
     expect(find.byKey(const ValueKey('day-number-2026-5-3')), findsOneWidget);
   });
 
+  testWidgets('uses the configured holiday color only when enabled', (
+    tester,
+  ) async {
+    const holidayColor = Color(0xff10b981);
+    final holidayCategory = EventCategory.holiday.copyWith(
+      colorValue: holidayColor.toARGB32(),
+    );
+    final holiday = CalendarEvent(
+      id: 'holiday',
+      title: '공휴일',
+      startAt: DateTime(2026, 5, 5),
+      endAt: DateTime(2026, 5, 6),
+      allDay: true,
+      category: holidayCategory,
+      colorValue: holidayCategory.colorValue,
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+      holiday: true,
+    );
+
+    Future<void> pump({
+      required bool enabled,
+      Brightness brightness = Brightness.light,
+      DateTime? selectedDate,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.light(),
+          darkTheme: ThemeData.dark(),
+          themeMode: brightness == Brightness.dark
+              ? ThemeMode.dark
+              : ThemeMode.light,
+          home: Scaffold(
+            body: SizedBox(
+              width: 700,
+              height: 420,
+              child: CalendarMonthGrid(
+                month: DateTime(2026, 5),
+                selectedDate: selectedDate ?? DateTime(2026, 5, 4),
+                events: [holiday],
+                weekStartsOnMonday: true,
+                showLunarDates: false,
+                holidayBackgroundEnabled: enabled,
+                holidayColorValue: holidayCategory.colorValue,
+                onDateSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pump(enabled: true);
+    var cell = tester.widget<Container>(
+      find.byKey(const ValueKey('day-cell-2026-5-5')),
+    );
+    expect(
+      (cell.decoration! as BoxDecoration).color,
+      holidayColor.withValues(alpha: 0.14),
+    );
+
+    await pump(enabled: false);
+    cell = tester.widget<Container>(
+      find.byKey(const ValueKey('day-cell-2026-5-5')),
+    );
+    expect((cell.decoration! as BoxDecoration).color, Colors.transparent);
+
+    await pump(enabled: true, brightness: Brightness.dark);
+    cell = tester.widget<Container>(
+      find.byKey(const ValueKey('day-cell-2026-5-5')),
+    );
+    expect(
+      (cell.decoration! as BoxDecoration).color,
+      holidayColor.withValues(alpha: 0.22),
+    );
+
+    await pump(
+      enabled: true,
+      brightness: Brightness.dark,
+      selectedDate: DateTime(2026, 5, 5),
+    );
+    cell = tester.widget<Container>(
+      find.byKey(const ValueKey('day-cell-2026-5-5')),
+    );
+    expect(
+      (cell.decoration! as BoxDecoration).color,
+      ThemeData.dark().colorScheme.primaryContainer.withValues(alpha: 0.45),
+    );
+  });
+
+  testWidgets('keeps month event height while changing title alignment', (
+    tester,
+  ) async {
+    final event = CalendarEvent(
+      id: 'alignment',
+      title: '정렬 테스트',
+      startAt: DateTime(2026, 5, 5),
+      endAt: DateTime(2026, 5, 6),
+      allDay: true,
+      category: EventCategory.basic,
+      colorValue: EventCategory.basic.colorValue,
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+
+    Future<Size> pump({required bool centered}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 700,
+              height: 420,
+              child: CalendarMonthGrid(
+                month: DateTime(2026, 5),
+                selectedDate: DateTime(2026, 5, 4),
+                events: [event],
+                weekStartsOnMonday: true,
+                showLunarDates: false,
+                centerEventTitles: centered,
+                onDateSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      return tester.getSize(
+        find.byKey(const ValueKey('event-span-alignment-2026-5-4')),
+      );
+    }
+
+    final leadingSize = await pump(centered: false);
+    expect(tester.widget<Text>(find.text('정렬 테스트')).textAlign, TextAlign.start);
+
+    final centeredSize = await pump(centered: true);
+    expect(
+      tester.widget<Text>(find.text('정렬 테스트')).textAlign,
+      TextAlign.center,
+    );
+    expect(centeredSize.height, leadingSize.height);
+  });
+
+  testWidgets('month event lanes follow the selected sort priority', (
+    tester,
+  ) async {
+    const work = EventCategory(id: 'work', label: '업무', colorValue: 0xff2563eb);
+    const personal = EventCategory(
+      id: 'personal',
+      label: '개인',
+      colorValue: 0xff10b981,
+    );
+    final workEvent = CalendarEvent(
+      id: 'work-late',
+      title: '업무',
+      startAt: DateTime(2026, 5, 5, 18),
+      endAt: DateTime(2026, 5, 5, 19),
+      allDay: false,
+      category: work,
+      colorValue: work.colorValue,
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+    final personalEvent = CalendarEvent(
+      id: 'personal-early',
+      title: '개인',
+      startAt: DateTime(2026, 5, 5, 9),
+      endAt: DateTime(2026, 5, 5, 10),
+      allDay: false,
+      category: personal,
+      colorValue: personal.colorValue,
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+
+    Future<void> pump(CalendarEventSortPriority priority) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 700,
+              height: 420,
+              child: CalendarMonthGrid(
+                month: DateTime(2026, 5),
+                selectedDate: DateTime(2026, 5, 4),
+                events: [personalEvent, workEvent],
+                weekStartsOnMonday: true,
+                showLunarDates: false,
+                eventSortPriority: priority,
+                categoryOrder: const ['work', 'personal'],
+                onDateSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    const workFlag = ValueKey('event-span-work-late-2026-5-4');
+    const personalFlag = ValueKey('event-span-personal-early-2026-5-4');
+
+    await pump(CalendarEventSortPriority.category);
+    expect(
+      tester.getTopLeft(find.byKey(workFlag)).dy,
+      lessThan(tester.getTopLeft(find.byKey(personalFlag)).dy),
+    );
+
+    await pump(CalendarEventSortPriority.time);
+    expect(
+      tester.getTopLeft(find.byKey(personalFlag)).dy,
+      lessThan(tester.getTopLeft(find.byKey(workFlag)).dy),
+    );
+  });
+
   testWidgets('uses fixed iPhone-width event capacity in month cells', (
     tester,
   ) async {
@@ -442,6 +657,140 @@ void main() {
     await tester.pump();
 
     expect(selectedDate, targetDate);
+  });
+
+  testWidgets('tapping a multi-day event selects the date under the pointer', (
+    tester,
+  ) async {
+    final event = CalendarEvent(
+      id: 'tap-event',
+      title: '연속 일정',
+      startAt: DateTime(2026, 5, 4),
+      endAt: DateTime(2026, 5, 7),
+      allDay: true,
+      category: EventCategory.basic,
+      colorValue: EventCategory.basic.colorValue,
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+    DateTime? selectedDate;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            height: 420,
+            child: CalendarMonthGrid(
+              month: DateTime(2026, 5),
+              selectedDate: DateTime(2026, 5, 1),
+              events: [event],
+              weekStartsOnMonday: true,
+              showLunarDates: false,
+              onDateSelected: (date) => selectedDate = date,
+              onEventDropped: (_, _, _) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final flag = find.byKey(const ValueKey('event-span-tap-event-2026-5-4'));
+    final rect = tester.getRect(flag);
+    await tester.tapAt(Offset(rect.left + rect.width * 5 / 6, rect.center.dy));
+    await tester.pump();
+
+    expect(selectedDate, DateTime(2026, 5, 6));
+  });
+
+  testWidgets('long-press dragging an event drops it on another date', (
+    tester,
+  ) async {
+    final event = CalendarEvent(
+      id: 'drag-event',
+      title: '이동할 일정',
+      startAt: DateTime(2026, 5, 4, 9),
+      endAt: DateTime(2026, 5, 4, 10),
+      allDay: false,
+      category: EventCategory.basic,
+      colorValue: EventCategory.basic.colorValue,
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+    CalendarEvent? droppedEvent;
+    DateTime? droppedDate;
+    int? droppedIndex;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            height: 420,
+            child: CalendarMonthGrid(
+              month: DateTime(2026, 5),
+              selectedDate: DateTime(2026, 5, 4),
+              events: [event],
+              weekStartsOnMonday: true,
+              showLunarDates: false,
+              onDateSelected: (_) {},
+              onEventDropped: (event, date, index) async {
+                droppedEvent = event;
+                droppedDate = date;
+                droppedIndex = index;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final flag = find.byKey(const ValueKey('event-span-drag-event-2026-5-4'));
+    final target = _dayNumberKey(DateTime(2026, 5, 6));
+    final gesture = await tester.startGesture(
+      tester.getCenter(flag),
+      kind: PointerDeviceKind.mouse,
+      buttons: kPrimaryMouseButton,
+    );
+    await tester.pump(const Duration(milliseconds: 360));
+    await gesture.moveTo(tester.getCenter(target) + const Offset(0, 35));
+    await tester.pump(const Duration(milliseconds: 150));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(droppedEvent?.id, 'drag-event');
+    expect(droppedDate, DateTime(2026, 5, 6));
+    expect(droppedIndex, isNotNull);
+  });
+
+  testWidgets('external event drag enables the month date drop targets', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            height: 420,
+            child: CalendarMonthGrid(
+              month: DateTime(2026, 5),
+              selectedDate: DateTime(2026, 5, 4),
+              events: const [],
+              weekStartsOnMonday: true,
+              showLunarDates: false,
+              externalEventDragActive: true,
+              onDateSelected: (_) {},
+              onEventDropped: (_, _, _) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('event-drop-target-2026-5-6')),
+      findsOneWidget,
+    );
   });
 
   test('defines the requested full-app text scale choices', () {

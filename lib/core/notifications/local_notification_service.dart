@@ -108,7 +108,10 @@ class LocalNotificationService implements NotificationService {
     bool allowImmediate = false,
   }) async {
     await initialize();
-    if (event.deletedAt != null || event.systemEvent || event.readOnly) {
+    if (event.deletedAt != null ||
+        event.completed ||
+        event.systemEvent ||
+        event.readOnly) {
       return;
     }
 
@@ -260,14 +263,15 @@ class LocalNotificationService implements NotificationService {
     final l10n = _localizations(settings);
     final events =
         (await _eventRepository.eventsInRange(
-          today,
-          tomorrow,
-        )).where((event) => !event.isDeleted).toList()..sort((a, b) {
-          if (a.allDay != b.allDay) {
-            return a.allDay ? -1 : 1;
-          }
-          return a.startAt.compareTo(b.startAt);
-        });
+            today,
+            tomorrow,
+          )).where((event) => !event.isDeleted && !event.completed).toList()
+          ..sort((a, b) {
+            if (a.allDay != b.allDay) {
+              return a.allDay ? -1 : 1;
+            }
+            return a.startAt.compareTo(b.startAt);
+          });
     if (events.isEmpty) {
       return l10n.text('오늘 등록된 일정이 없습니다.');
     }
