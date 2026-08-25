@@ -1,13 +1,10 @@
 name: Release Installers
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v3.1.0"
+        description: "Release tag, for example v3.2.0"
         required: true
         type: string
 
@@ -15,7 +12,7 @@ permissions:
   contents: write
 
 env:
-  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  RELEASE_TAG: ${{ inputs.tag }}
 
 jobs:
   ios:
@@ -181,8 +178,8 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          name: Daily ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          body_path: docs/RELEASE_NOTES_3.1.0.md
+          tag_name: ${{ inputs.tag }}
+          name: DailyCalendar ${{ inputs.tag }}
+          body_path: docs/RELEASE_NOTES_3.2.0.md
           files: dist/*
           fail_on_unmatched_files: true

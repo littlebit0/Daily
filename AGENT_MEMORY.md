@@ -4384,3 +4384,22 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - 검증 후 앱 설정과 공유 위젯 스냅샷의 `themeMode`가 모두 `system`임을
   확인했다. Daily Test의 앱 테마는 `시스템 설정에 따름`으로 남겨 두었다.
 - Android와 Windows는 수정하지 않았으며 커밋·푸시는 진행하지 않았다.
+
+### 2026-08-25 DailyCalendar 3.2.0 릴리스 준비
+
+- 앱 표시 버전과 빌드를 `3.2.0 (3.2.0)`으로 승격했다.
+- README의 버전, 다운로드 파일, 저장소 주소와 기능 설명을 현재 구현에 맞게
+  갱신하고 공식 저장소 주소를 `littlebit0/DailyCalendar`로 통일했다.
+- `docs/RELEASE_NOTES_3.2.0.md`에 3.1.0 이후 Todo 통합, 안전 마이그레이션,
+  일정 날짜 이동·수동 순서, 분류·공휴일 설정, 복원 안전성, Siri와 Apple 위젯
+  개선 사항을 정리했다.
+- `v3.2.0` 태그 푸시 시 Apple 전용 릴리스 워크플로가 iOS unsigned IPA와
+  macOS unsigned DMG를 만들고 GitHub Release에 게시하도록 구성했다.
+- Android 서명 비밀값이 없어 자동 태그 릴리스가 실패하던 전체 플랫폼
+  워크플로는 수동 실행으로 유지한다. Android와 Windows 구현 파일은 이번
+  릴리스 준비에서 수정하지 않았다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub -r compact` 전체 242개 통과
+  - macOS Debug와 iOS Simulator Debug 빌드 통과
+  - iOS/macOS 앱과 위젯의 표시 버전·빌드가 모두 `3.2.0 / 3.2.0`임을 확인
