@@ -1,0 +1,129 @@
+import json
+import stat
+import tempfile
+import unittest
+from pathlib import Path
+
+from tool.analytics_receiver import (
+    BugReportBackend,
+    BugReportRateLimited,
+    InvalidGoogleToken,
+    normalize_bug_report,
+)
+
+
+def _payload():
+    return {
+        "report": {
+            "title": "일정 저장 실패",
+            "description": "저장 버튼을 눌러도 일정이 보이지 않습니다.",
+            "reproductionSteps": "1. 일정을 추가합니다.\n2. 저장을 누릅니다.",
+            "expectedBehavior": "월간 달력에 일정이 표시됩니다.",
+            "actualBehavior": "일정이 표시되지 않습니다.",
+        },
+        "environment": {
+            "version": "3.2.0",
+            "buildNumber": "3.2.0",
+            "platform": "macOS",
+            "osVersion": "Version 26.5.2",
+        },
+    }
+
+
+class BugReportBackendTest(unittest.TestCase):
+    def test_normalizes_the_expected_report_schema(self):
+        self.assertEqual(normalize_bug_report(_payload()), _payload())
+
+        invalid = _payload()
+        invalid["report"]["title"] = " "
+        self.assertIsNone(normalize_bug_report(invalid))
+
+    def test_creates_an_issue_without_publishing_the_email(self):
+        with tempfile.TemporaryDirectory() as directory:
+            captured = {}
+
+            def create_issue(title, body):
+                captured["title"] = title
+                captured["body"] = body
+                return {
+                    "number": 321,
+                    "html_url": "https://github.com/littlebit0/DailyCalendar/issues/321",
+                }
+
+            backend = BugReportBackend(
+                directory,
+                github_token="test-token",
+                github_repository="littlebit0/DailyCalendar",
+                google_identity_fetcher=lambda _authorization: {
+                    "sub": "google-subject-1",
+                    "email": "daily-user@example.com",
+                    "email_verified": True,
+                },
+                github_issue_creator=create_issue,
+            )
+
+            submission = backend.submit(_payload(), "Bearer google-access-token")
+
+            self.assertEqual(submission["issueNumber"], 321)
+            self.assertEqual(captured["title"], "[Bug] 일정 저장 실패")
+            self.assertNotIn("daily-user@example.com", captured["body"])
+            self.assertIn("Google 로그인: 서버 검증 완료", captured["body"])
+
+            contacts = list((Path(directory) / "bug-report-contacts").glob("*.json"))
+            self.assertEqual(len(contacts), 1)
+            stored = json.loads(contacts[0].read_text())
+            self.assertEqual(stored["email"], "daily-user@example.com")
+            self.assertEqual(stored["issueNumber"], 321)
+            self.assertNotIn("google-subject-1", contacts[0].read_text())
+            self.assertEqual(stat.S_IMODE(contacts[0].stat().st_mode), 0o600)
+
+    def test_rejects_an_unverified_google_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            backend = BugReportBackend(
+                directory,
+                github_token="test-token",
+                google_identity_fetcher=lambda _authorization: {
+                    "sub": "google-subject-1",
+                    "email": "daily-user@example.com",
+                    "email_verified": False,
+                },
+                github_issue_creator=lambda _title, _body: {},
+            )
+
+            with self.assertRaises(InvalidGoogleToken):
+                backend.submit(_payload(), "Bearer invalid-token")
+
+    def test_limits_each_verified_google_account_to_five_reports_per_hour(self):
+        with tempfile.TemporaryDirectory() as directory:
+            issue_number = 0
+
+            def create_issue(_title, _body):
+                nonlocal issue_number
+                issue_number += 1
+                return {
+                    "number": issue_number,
+                    "html_url": (
+                        "https://github.com/littlebit0/DailyCalendar/issues/"
+                        f"{issue_number}"
+                    ),
+                }
+
+            backend = BugReportBackend(
+                directory,
+                github_token="test-token",
+                google_identity_fetcher=lambda _authorization: {
+                    "sub": "google-subject-1",
+                    "email": "daily-user@example.com",
+                    "email_verified": True,
+                },
+                github_issue_creator=create_issue,
+            )
+
+            for _ in range(5):
+                backend.submit(_payload(), "Bearer google-access-token")
+            with self.assertRaises(BugReportRateLimited):
+                backend.submit(_payload(), "Bearer google-access-token")
+
+
+if __name__ == "__main__":
+    unittest.main()

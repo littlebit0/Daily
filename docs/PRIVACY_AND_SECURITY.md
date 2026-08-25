@@ -1,6 +1,6 @@
 # Privacy, Security, and Consent Notes
 
-Current release baseline: `3.0.1`.
+Current release baseline: `3.2.1`.
 
 This document is the pre-release checklist for Daily's current data handling.
 It is not legal advice; it is the engineering baseline that should be reviewed
@@ -46,6 +46,26 @@ before public distribution.
 See [Anonymous Analytics Deployment](ANALYTICS_DEPLOYMENT.md) for server and
 release configuration.
 
+## Authenticated Bug Reports
+
+- Availability: only while a verified Google account is actively signed in.
+- Explicit action: no report is sent until the user reviews and submits the
+  in-app form.
+- Collected data: the user-entered report, app version/build, platform, OS
+  version, and verified Google email address.
+- Token boundary: the Google bearer token is used only against Google's UserInfo
+  endpoint and is never persisted or logged.
+- Public/private boundary: report text and environment are posted to the public
+  `littlebit0/DailyCalendar` GitHub issue tracker. Email is excluded from the
+  issue and stored only in a private server-side contact mapping.
+- Server storage: contact files use directory mode `0700`, file mode `0600`, and
+  a maximum 365-day retention period on `/mnt/storage/daily-analytics`.
+- Abuse control: each verified Google subject is limited to five reports per
+  hour; only a SHA-256 digest of the Google subject is stored with the contact.
+- GitHub credential: a fine-grained token owned by `littlebit0`, restricted to
+  the DailyCalendar repository with Issues write access, is loaded from a
+  systemd environment file and never committed.
+
 ## App Store Connect Update For Analytics
 
 Before distributing a build with a configured analytics endpoint:
@@ -58,6 +78,14 @@ Before distributing a build with a configured analytics endpoint:
   tracking purposes.
 - Keep the privacy-policy URL pointing to the policy that contains the optional
   analytics section above.
+
+For a build that includes authenticated bug reporting, also declare:
+
+- `Contact Info > Email Address` as collected, linked to the user, and used for
+  `App Functionality`/customer support.
+- User-entered bug-report text under the applicable `User Content` support
+  category, linked to the user and used only for app functionality/support.
+- Do not mark either category as tracking or advertising data.
 
 ## Google Drive Sync
 

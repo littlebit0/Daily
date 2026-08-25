@@ -1431,7 +1431,7 @@ void main() {
     );
     final startDate = container.read(selectedDateProvider);
     final weekPageView = tester.widget<PageView>(find.byType(PageView));
-    expect(weekPageView.physics, isA<NeverScrollableScrollPhysics>());
+    expect(weekPageView.physics, isA<PageScrollPhysics>());
     final weekController = weekPageView.controller!;
 
     await tester.tap(find.byTooltip('이전'));
@@ -1475,6 +1475,53 @@ void main() {
     await tester.tap(find.byTooltip('이전'));
     await tester.pumpAndSettle();
     expect(container.read(selectedDateProvider), startDate);
+
+    await tester.trackpadFling(
+      weekNavigation,
+      const Offset(-240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(selectedDateProvider),
+      DateTime(startDate.year, startDate.month, startDate.day + 7),
+    );
+    await tester.trackpadFling(
+      weekNavigation,
+      const Offset(240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(selectedDateProvider), startDate);
+
+    container.read(appSettingsProvider.notifier).state = container
+        .read(appSettingsProvider)
+        .copyWith(weekDayLayoutMode: WeekDayLayoutMode.schedule);
+    await tester.pumpAndSettle();
+    final scheduleWeekNavigation = find.byKey(
+      const ValueKey('week-pointer-navigation'),
+    );
+    await tester.trackpadFling(
+      scheduleWeekNavigation,
+      const Offset(-240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(selectedDateProvider),
+      DateTime(startDate.year, startDate.month, startDate.day + 7),
+    );
+    await tester.trackpadFling(
+      scheduleWeekNavigation,
+      const Offset(240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(selectedDateProvider), startDate);
+    container.read(appSettingsProvider.notifier).state = container
+        .read(appSettingsProvider)
+        .copyWith(weekDayLayoutMode: WeekDayLayoutMode.list);
+    await tester.pumpAndSettle();
 
     final macToolbarBeforeTransition = tester.getRect(
       find.byKey(const ValueKey('macos-calendar-toolbar')),
@@ -1522,7 +1569,7 @@ void main() {
     );
     expect(
       tester.widget<PageView>(find.byType(PageView)).physics,
-      isA<NeverScrollableScrollPhysics>(),
+      isA<PageScrollPhysics>(),
     );
     dayListener.onPointerSignal!(
       const PointerScrollEvent(
@@ -1549,11 +1596,48 @@ void main() {
       startDate.day + 2,
     );
     expect(container.read(selectedDateProvider), listDateAfterVerticalWheel);
+    await tester.trackpadFling(
+      find.byKey(const ValueKey('day-pointer-navigation')),
+      const Offset(-240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(selectedDateProvider),
+      DateTime(startDate.year, startDate.month, startDate.day + 3),
+    );
+    await tester.trackpadFling(
+      find.byKey(const ValueKey('day-pointer-navigation')),
+      const Offset(240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(selectedDateProvider), listDateAfterVerticalWheel);
 
     container.read(appSettingsProvider.notifier).state = container
         .read(appSettingsProvider)
         .copyWith(weekDayLayoutMode: WeekDayLayoutMode.schedule);
     await tester.pumpAndSettle();
+    final scheduleDayNavigation = find.byKey(
+      const ValueKey('day-pointer-navigation'),
+    );
+    await tester.trackpadFling(
+      scheduleDayNavigation,
+      const Offset(-240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(selectedDateProvider),
+      DateTime(startDate.year, startDate.month, startDate.day + 3),
+    );
+    await tester.trackpadFling(
+      scheduleDayNavigation,
+      const Offset(240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(selectedDateProvider), listDateAfterVerticalWheel);
     final scheduleDayListener = tester.widget<Listener>(
       find.byKey(const ValueKey('day-pointer-navigation')),
     );
@@ -1607,7 +1691,7 @@ void main() {
             ),
           )
           .physics,
-      isA<NeverScrollableScrollPhysics>(),
+      isA<PageScrollPhysics>(),
     );
     await tester.sendEventToBinding(
       PointerScrollEvent(
@@ -1639,6 +1723,26 @@ void main() {
       DateTime(monthBeforeScroll.year, monthBeforeScroll.month + 5),
     );
     await tester.pumpAndSettle();
+    await tester.trackpadFling(
+      find.byKey(const ValueKey('month-pointer-navigation')),
+      const Offset(-240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(visibleMonthProvider),
+      DateTime(monthBeforeScroll.year, monthBeforeScroll.month + 6),
+    );
+    await tester.trackpadFling(
+      find.byKey(const ValueKey('month-pointer-navigation')),
+      const Offset(240, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(visibleMonthProvider),
+      DateTime(monthBeforeScroll.year, monthBeforeScroll.month + 5),
+    );
 
     await tester.tap(find.byTooltip('빠른 보기'));
     await tester.pump();
@@ -2183,7 +2287,19 @@ void main() {
     expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
     expect(find.byIcon(Icons.account_circle_outlined), findsOneWidget);
     expect(find.byKey(const ValueKey('siri-shortcut-setup')), findsOneWidget);
-    expect(find.text('시그널 단축어를 추가하고 Siri에서 Daily 명령을 사용합니다.'), findsOneWidget);
+    const siriDescription = '시그널 단축어를 추가하고 Siri에서 Daily 명령을 사용합니다.';
+    final responsiveDescription = find.byWidgetPredicate(
+      (widget) => widget is Text && widget.semanticsLabel == siriDescription,
+    );
+    expect(responsiveDescription, findsOneWidget);
+    final renderedDescription = tester
+        .widget<Text>(responsiveDescription)
+        .data!;
+    expect(renderedDescription, contains('\n'));
+    expect(
+      renderedDescription.replaceAll('\u2060', '').replaceAll('\n', ' '),
+      siriDescription,
+    );
 
     final mainList = find.byType(ListView);
     for (var index = 0; index < 8; index++) {
@@ -2198,7 +2314,10 @@ void main() {
       mainList,
       const Offset(0, 560),
     );
-    await tester.tap(find.widgetWithText(ListTile, '알림'));
+    final notificationSettingsTile = find.widgetWithText(ListTile, '알림');
+    await tester.ensureVisible(notificationSettingsTile);
+    await tester.pumpAndSettle();
+    await tester.tap(notificationSettingsTile);
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.notifications_active_outlined), findsOneWidget);
     expectVisibleRowsHaveIcons();

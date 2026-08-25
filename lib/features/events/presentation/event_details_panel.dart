@@ -29,7 +29,6 @@ class EventDetailsPanel extends ConsumerWidget {
     required this.events,
     this.scrollController,
     this.initialEvent,
-    this.holidayHeaderBackgroundEnabled = true,
     this.onEventDropped,
     this.onEventDragStateChanged,
   });
@@ -38,7 +37,6 @@ class EventDetailsPanel extends ConsumerWidget {
   final List<CalendarEvent> events;
   final ScrollController? scrollController;
   final CalendarEvent? initialEvent;
-  final bool holidayHeaderBackgroundEnabled;
   final CalendarEventDropCallback? onEventDropped;
   final ValueChanged<bool>? onEventDragStateChanged;
 
@@ -82,18 +80,6 @@ class EventDetailsPanel extends ConsumerWidget {
             const <String>[],
       ),
     );
-    final holiday = dayEvents.any((event) => event.holiday);
-    final holidayBackground =
-        holiday &&
-            holidayHeaderBackgroundEnabled &&
-            settings.calendarHolidayBackgroundEnabled
-        ? Color(settings.holidayCategory.colorValue).withValues(
-            alpha: Theme.of(context).brightness == Brightness.dark
-                ? 0.22
-                : 0.14,
-          )
-        : Colors.transparent;
-
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: Padding(
@@ -106,22 +92,9 @@ class EventDetailsPanel extends ConsumerWidget {
                 Expanded(
                   child: Align(
                     alignment: AlignmentDirectional.centerStart,
-                    child: Container(
-                      key: ValueKey(
-                        'day-holiday-header-${date.year}-${date.month}-${date.day}',
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: holidayBackground,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        dateLabel,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
+                    child: Text(
+                      dateLabel,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
                 ),

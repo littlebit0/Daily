@@ -2162,7 +2162,6 @@ class _CalendarDayPage extends ConsumerWidget {
         return EventDetailsPanel(
           date: date,
           events: visibleEvents,
-          holidayHeaderBackgroundEnabled: false,
           onEventDropped: (event, targetDate, targetIndex) =>
               _handleCalendarEventDrop(
                 context,
@@ -2776,12 +2775,6 @@ class _QueuedPointerPageNavigation {
 }
 
 ScrollPhysics _calendarPagePhysics(BuildContext context) {
-  if (Theme.of(context).platform == TargetPlatform.macOS) {
-    // Pointer signals are converted to exactly one page transition by the
-    // surrounding Listener. Prevent PageView from consuming the same wheel
-    // event a second time while keeping programmatic animations available.
-    return const NeverScrollableScrollPhysics();
-  }
   return const _ResponsiveMonthPagePhysics();
 }
 

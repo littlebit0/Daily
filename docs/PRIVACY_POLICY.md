@@ -1,8 +1,8 @@
 # Daily Privacy Policy
 
-Effective date: 2026-08-21
+Effective date: 2026-08-25
 
-Current app release baseline: `3.0.1`.
+Current app release baseline: `3.2.1`.
 
 Daily is a personal calendar app. This policy explains what data the app uses
 and how it is handled.
@@ -52,6 +52,25 @@ allowlist again and stores only daily aggregate counts and performance totals
 for up to 90 days. It does not persist session identifiers, event identifiers,
 network addresses, or raw request bodies.
 
+## User-Submitted Bug Reports
+
+The in-app bug-report form is available only to users with an active Google
+login. When you explicitly submit a report, Daily sends the report text, app
+version, build number, platform, operating-system version, and the current
+Google access token to Daily's support receiver.
+
+The receiver uses the access token only to request your Google account identity
+from Google's OpenID Connect UserInfo service. It requires a verified email
+address and does not store or log the access token. The verified email is kept
+privately so the developer can contact you about the report. The report text and
+app environment are posted as a public issue in the DailyCalendar GitHub
+repository; the email address is not included in that public issue. The app
+shows this public/private distinction before submission.
+
+Private email-to-issue contact mappings are access-restricted on Daily's Ubuntu
+server and are retained for no more than 365 days. Bug-report submission is a
+support feature and is independent of the optional anonymous analytics setting.
+
 ## Data Sharing
 
 Daily does not operate a separate backend server for your calendar data. When
@@ -60,6 +79,11 @@ Google APIs under your Google account. If you explicitly enable anonymous
 usage analytics, the allowlisted anonymous events described above are sent to
 Daily's aggregate analytics receiver. They are not combined with calendar,
 account, advertising, or third-party data.
+
+When you explicitly submit a bug report, the report text and app environment are
+shared with GitHub as a public issue. Google receives the one-time UserInfo
+request needed to verify the signed-in account. The verified email is retained
+only by Daily's support receiver and is not published to GitHub.
 
 ## Deleting Data
 
@@ -72,6 +96,9 @@ on the device. Settings also provides a separate delete action for queued
 analytics. Data already received is aggregate-only and has no account or
 persistent device identifier, so it cannot be identified or deleted as one
 specific user's history.
+
+To request deletion of a private bug-report contact mapping or redaction of a
+public issue, contact the address below and include the GitHub issue number.
 
 ## Contact
 

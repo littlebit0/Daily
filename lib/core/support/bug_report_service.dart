@@ -1,6 +1,6 @@
-import 'package:url_launcher/url_launcher.dart';
+import 'dart:convert';
 
-typedef BugReportLauncher = Future<bool> Function(Uri uri);
+import 'package:http/http.dart' as http;
 
 class BugReportEnvironment {
   const BugReportEnvironment({
@@ -14,53 +14,142 @@ class BugReportEnvironment {
   final String buildNumber;
   final String platform;
   final String osVersion;
+
+  Map<String, String> toJson() => {
+    'version': version,
+    'buildNumber': buildNumber,
+    'platform': platform,
+    'osVersion': osVersion,
+  };
+}
+
+class BugReportDraft {
+  const BugReportDraft({
+    required this.title,
+    required this.description,
+    required this.reproductionSteps,
+    required this.expectedBehavior,
+    required this.actualBehavior,
+  });
+
+  final String title;
+  final String description;
+  final String reproductionSteps;
+  final String expectedBehavior;
+  final String actualBehavior;
+
+  Map<String, String> toJson() => {
+    'title': title.trim(),
+    'description': description.trim(),
+    'reproductionSteps': reproductionSteps.trim(),
+    'expectedBehavior': expectedBehavior.trim(),
+    'actualBehavior': actualBehavior.trim(),
+  };
+}
+
+class BugReportSubmission {
+  const BugReportSubmission({
+    required this.issueNumber,
+    required this.issueUrl,
+  });
+
+  final int issueNumber;
+  final Uri issueUrl;
+}
+
+class BugReportException implements Exception {
+  const BugReportException(this.code, this.message);
+
+  final String code;
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class BugReportService {
-  static final Uri _newIssueUri = Uri.https(
-    'github.com',
-    '/littlebit0/Daily/issues/new',
+  BugReportService({http.Client? httpClient, Uri? endpoint})
+    : _httpClient = httpClient ?? http.Client(),
+      _ownsHttpClient = httpClient == null,
+      _endpoint = endpoint ?? _configuredEndpoint;
+
+  static final Uri _configuredEndpoint = Uri.parse(
+    const String.fromEnvironment(
+      'DAILY_BUG_REPORT_ENDPOINT',
+      defaultValue: 'https://littlebit.tail6514a4.ts.net/v1/bug-reports',
+    ),
   );
 
-  static Uri buildReportUri(BugReportEnvironment environment) {
-    final build = environment.buildNumber.trim().isEmpty
-        ? '확인할 수 없음'
-        : environment.buildNumber.trim();
-    final body =
-        '''## 문제 설명
+  final http.Client _httpClient;
+  final bool _ownsHttpClient;
+  final Uri _endpoint;
 
+  Future<BugReportSubmission> submit({
+    required BugReportDraft draft,
+    required BugReportEnvironment environment,
+    required Map<String, String> googleAuthorizationHeaders,
+  }) async {
+    final authorization =
+        googleAuthorizationHeaders['Authorization'] ??
+        googleAuthorizationHeaders['authorization'];
+    if (authorization == null || !authorization.startsWith('Bearer ')) {
+      throw const BugReportException(
+        'google_auth_required',
+        'Google 로그인 정보를 확인할 수 없습니다.',
+      );
+    }
 
-## 재현 방법
-1.
+    late final http.Response response;
+    try {
+      response = await _httpClient
+          .post(
+            _endpoint,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authorization,
+            },
+            body: jsonEncode({
+              'report': draft.toJson(),
+              'environment': environment.toJson(),
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } on Object {
+      throw const BugReportException('network', '버그 제보 서버에 연결할 수 없습니다.');
+    }
 
-## 예상 동작
-
-
-## 실제 동작
-
-
-## 환경
-- Daily: ${environment.version} ($build)
-- 플랫폼: ${environment.platform}
-- OS: ${environment.osVersion}
-
-> 일정, 계정 정보, 메모 등 개인정보는 첨부하지 마세요.
-''';
-
-    return _newIssueUri.replace(
-      queryParameters: {'title': '[Bug] 문제를 간단히 적어 주세요', 'body': body},
-    );
+    Map<String, Object?> body = const {};
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map) body = Map<String, Object?>.from(decoded);
+    } on FormatException {
+      // The status code below still produces a stable user-facing error.
+    }
+    if (response.statusCode != 201) {
+      final code = body['error']?.toString() ?? 'submission_failed';
+      throw BugReportException(code, _messageFor(code));
+    }
+    final issueNumber = body['issueNumber'];
+    final issueUrl = Uri.tryParse(body['issueUrl']?.toString() ?? '');
+    if (issueNumber is! int || issueUrl == null || issueUrl.scheme != 'https') {
+      throw const BugReportException(
+        'invalid_response',
+        '버그 제보 결과를 확인할 수 없습니다.',
+      );
+    }
+    return BugReportSubmission(issueNumber: issueNumber, issueUrl: issueUrl);
   }
 
-  static Future<bool> open(
-    BugReportEnvironment environment, {
-    BugReportLauncher? launcher,
-  }) {
-    final uri = buildReportUri(environment);
-    return (launcher ?? _launchExternally)(uri);
+  void dispose() {
+    if (_ownsHttpClient) _httpClient.close();
   }
 
-  static Future<bool> _launchExternally(Uri uri) {
-    return launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
+  static String _messageFor(String code) => switch (code) {
+    'google_auth_required' ||
+    'invalid_google_token' => 'Google 로그인 상태를 확인한 뒤 다시 시도해 주세요.',
+    'rate_limited' => '버그 제보 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+    'invalid_report' => '버그 제보 내용을 다시 확인해 주세요.',
+    'github_unavailable' => 'GitHub 이슈를 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    _ => '버그 제보를 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  };
 }

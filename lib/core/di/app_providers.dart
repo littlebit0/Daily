@@ -12,6 +12,7 @@ import '../../features/events/data/drift_event_repository.dart';
 import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
 import '../analytics/product_analytics.dart';
+import '../support/bug_report_service.dart';
 import '../auth/apple_sign_in_service.dart';
 import '../alarms/alarm_service.dart';
 import '../alarms/native_alarm_service.dart';
@@ -110,6 +111,12 @@ final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
     analytics: ref.watch(productAnalyticsProvider),
     onEventsChanged: ref.watch(appleWidgetServiceProvider).refresh,
   );
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+final bugReportServiceProvider = Provider<BugReportService>((ref) {
+  final service = BugReportService();
   ref.onDispose(service.dispose);
   return service;
 });

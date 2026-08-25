@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -65,6 +65,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   var _appleBusy = false;
   var _notificationMessage = '';
   var _notificationBusy = false;
+  var _bugReportBusy = false;
   var _deviceAuthenticationAvailable = false;
   var _biometricAuthenticationAvailable = false;
   AppleAccount? _appleAccount;
@@ -202,7 +203,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.notifications_outlined,
                   ),
                   title: Text(context.tr('알림')),
-                  subtitle: Text(context.tr('일정 알림, 아침 브리핑, D-day 알림')),
+                  subtitle: _SettingsDescription(
+                    context.tr('일정 알림, 아침 브리핑, D-day 알림'),
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -220,7 +223,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.account_circle_outlined,
                   ),
                   title: Text(context.tr('계정')),
-                  subtitle: Text(context.tr('Apple, Google, 동기화 및 계정 관리')),
+                  subtitle: _SettingsDescription(
+                    context.tr('Apple, Google, 동기화 및 계정 관리'),
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -240,7 +245,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       Icons.add_link_outlined,
                     ),
                     title: Text(context.tr('Siri 단축어 설정')),
-                    subtitle: Text(
+                    subtitle: _SettingsDescription(
                       context.tr('시그널 단축어를 추가하고 Siri에서 Daily 명령을 사용합니다.'),
                     ),
                     trailing: const Icon(Icons.chevron_right),
@@ -254,7 +259,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       Icons.record_voice_over_outlined,
                     ),
                     title: Text(context.tr('Siri 작업 기록')),
-                    subtitle: Text(
+                    subtitle: _SettingsDescription(
                       context.tr('Siri와 자동화로 실행한 Daily 작업을 날짜별로 확인합니다.'),
                     ),
                     trailing: const Icon(Icons.chevron_right),
@@ -343,7 +348,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                   value: settings.morningBriefingEnabled,
                   title: Text(context.tr('아침 브리핑')),
-                  subtitle: Text(context.tr('매일 지정한 시간에 오늘 일정을 알려줍니다.')),
+                  subtitle: _SettingsDescription(
+                    context.tr('매일 지정한 시간에 오늘 일정을 알려줍니다.'),
+                  ),
                   onChanged: (value) async {
                     final updated = settings.copyWith(
                       morningBriefingEnabled: value,
@@ -481,7 +488,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       Icons.move_to_inbox_outlined,
                     ),
                     title: Text(context.tr('캘린더 데이터 옮기기')),
-                    subtitle: Text(
+                    subtitle: _SettingsDescription(
                       context.tr(
                         defaultTargetPlatform == TargetPlatform.android
                             ? 'Samsung 캘린더 또는 Google 캘린더에서 가져옵니다.'
@@ -524,7 +531,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                   value: settings.showLunarDates,
                   title: Text(context.tr('음력 표시')),
-                  subtitle: Text(context.tr('월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.')),
+                  subtitle: _SettingsDescription(
+                    context.tr('월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.'),
+                  ),
                   onChanged: (value) =>
                       _save(settings.copyWith(showLunarDates: value)),
                 ),
@@ -543,7 +552,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ? false
                         : settings.showAdjacentMonthDates,
                     title: Text(context.tr('인접한 달 날짜 표시')),
-                    subtitle: Text(
+                    subtitle: _SettingsDescription(
                       settings.monthNavigationMode ==
                               MonthNavigationMode.vertical
                           ? context.tr(
@@ -591,7 +600,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.calendar_view_month_outlined,
                   ),
                   title: Text(context.tr('기본 보기')),
-                  subtitle: Text(context.tr('앱을 열었을 때 먼저 보여줄 달력 보기')),
+                  subtitle: _SettingsDescription(
+                    context.tr('앱을 열었을 때 먼저 보여줄 달력 보기'),
+                  ),
                   trailing: SizedBox(
                     width: 188,
                     child: _ThreeWayCapsule<CalendarViewMode>(
@@ -674,7 +685,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                     value: enabled,
                     title: Text(context.tr('익명 사용성 분석 허용')),
-                    subtitle: Text(
+                    subtitle: _SettingsDescription(
                       context.tr(
                         '일정 내용, 검색어, 계정 정보 없이 화면과 기능 사용, 오류 범주, 성능 정보만 수집합니다.',
                       ),
@@ -690,7 +701,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.delete_sweep_outlined,
                   ),
                   title: Text(context.tr('분석 데이터 삭제')),
-                  subtitle: Text(
+                  subtitle: _SettingsDescription(
                     context.tr('이 기기에 전송 대기 중인 익명 분석 데이터를 삭제합니다.'),
                   ),
                   onTap: _deleteAnalyticsData,
@@ -701,7 +712,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   secondary: const _SettingsLeadingIcon(Icons.lock_outline),
                   value: settings.appLockEnabled,
                   title: Text(context.tr('앱 잠금')),
-                  subtitle: Text(
+                  subtitle: _SettingsDescription(
                     settings.appLockEnabled
                         ? '앱 실행 시 ${settings.appLockMethod.label}으로 확인합니다.'
                         : context.tr('앱을 다시 열 때 사용자를 확인합니다.'),
@@ -726,7 +737,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       secondary: const _SettingsLeadingIcon(Icons.fingerprint),
                       value: settings.appLockBiometricsEnabled,
                       title: Text(context.tr('생체인식 잠금 해제')),
-                      subtitle: Text(
+                      subtitle: _SettingsDescription(
                         _biometricAuthenticationAvailable
                             ? defaultTargetPlatform == TargetPlatform.macOS
                                   ? 'PIN 대신 Touch ID 또는 Apple Watch로 잠금을 해제할 수 있습니다.'
@@ -806,7 +817,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                   value: settings.calendarHolidayBackgroundEnabled,
                   title: Text(context.tr('공휴일 날짜 배경')),
-                  subtitle: Text(context.tr('공휴일 분류 색상을 날짜 배경에 표시합니다.')),
+                  subtitle: _SettingsDescription(
+                    context.tr('공휴일 분류 색상을 날짜 배경에 표시합니다.'),
+                  ),
                   onChanged: (value) => _save(
                     settings.copyWith(calendarHolidayBackgroundEnabled: value),
                   ),
@@ -837,7 +850,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             Icons.auto_awesome_outlined,
                           ),
                           title: Text(context.tr('AI 기능')),
-                          subtitle: Text(context.tr('개발 중입니다.')),
+                          subtitle: _SettingsDescription(
+                            context.tr('개발 중입니다.'),
+                          ),
                         ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
@@ -931,9 +946,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     Icons.bug_report_outlined,
                   ),
                   title: Text(context.tr('버그 제보')),
-                  subtitle: Text(context.tr('GitHub 제보 양식을 기본 브라우저에서 엽니다.')),
-                  trailing: const Icon(Icons.open_in_new),
-                  onTap: _reportBug,
+                  subtitle: _SettingsDescription(
+                    context.tr('Google 로그인 사용자만 GitHub 이슈를 자동 등록할 수 있습니다.'),
+                  ),
+                  trailing: _bugReportBusy
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.chevron_right),
+                  onTap: _bugReportBusy ? null : _reportBug,
                 ),
               ],
             ),
@@ -1019,6 +1041,38 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _reportBug() async {
+    final linkedGoogle = _dailyAccount?.googleAccount;
+    final activeGoogle = _googleDriveAccount;
+    if (linkedGoogle == null ||
+        activeGoogle == null ||
+        !_sameEmail(linkedGoogle.email, activeGoogle.email)) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(context.tr('Google 로그인이 필요합니다.')),
+          content: Text(
+            context.tr(
+              '버그 제보는 Google 로그인으로 Daily를 사용 중인 경우에만 등록할 수 있습니다. 계정 설정에서 Google 계정을 연결해 주세요.',
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(context.tr('확인')),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final draft = await showDialog<BugReportDraft>(
+      context: context,
+      builder: (context) => _BugReportDialog(email: activeGoogle.email),
+    );
+    if (draft == null || !mounted) return;
+
+    setState(() => _bugReportBusy = true);
     final info = await _appVersionInfo;
     final environment = BugReportEnvironment(
       version: info.version,
@@ -1026,13 +1080,62 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       platform: _platformName(defaultTargetPlatform),
       osVersion: Platform.operatingSystemVersion,
     );
-    final opened = await BugReportService.open(environment);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.tr('버그 제보 페이지를 열 수 없습니다. 잠시 후 다시 시도하세요.')),
+    try {
+      final authorizationHeaders = await ref
+          .read(googleDriveAuthServiceProvider)
+          .authorizationHeaders();
+      if (authorizationHeaders == null) {
+        throw const BugReportException(
+          'google_auth_required',
+          'Google 로그인 정보를 확인할 수 없습니다.',
+        );
+      }
+      final submission = await ref
+          .read(bugReportServiceProvider)
+          .submit(
+            draft: draft,
+            environment: environment,
+            googleAuthorizationHeaders: authorizationHeaders,
+          );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(context.tr('버그 제보를 등록했습니다.')),
+          content: Text(
+            context.tr(
+              'GitHub 이슈 #{number}로 등록되었습니다.',
+              args: {'number': '${submission.issueNumber}'},
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(context.tr('닫기')),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                unawaited(
+                  launchUrl(
+                    submission.issueUrl,
+                    mode: LaunchMode.externalApplication,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.open_in_new),
+              label: Text(context.tr('GitHub에서 보기')),
+            ),
+          ],
         ),
       );
+    } on BugReportException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.tr(error.message))));
+    } finally {
+      if (mounted) setState(() => _bugReportBusy = false);
     }
   }
 
@@ -2416,6 +2519,262 @@ class _SettingsRowLeading extends StatelessWidget {
   }
 }
 
+class _SettingsDescription extends StatelessWidget {
+  const _SettingsDescription(this.text, {this.style});
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final platform = Theme.of(context).platform;
+        final maxWidth = constraints.maxWidth;
+        if (platform != TargetPlatform.iOS ||
+            !maxWidth.isFinite ||
+            maxWidth <= 0) {
+          return Text(text, style: style, softWrap: true);
+        }
+        final defaultStyle = DefaultTextStyle.of(context).style;
+        final effectiveStyle = style == null
+            ? defaultStyle
+            : defaultStyle.merge(style);
+        final textScaler = MediaQuery.textScalerOf(context);
+        final textDirection = Directionality.of(context);
+        final locale = Localizations.maybeLocaleOf(context);
+        final wrapped = _wrapAtWhitespace(
+          text,
+          maxWidth: maxWidth,
+          style: effectiveStyle,
+          textScaler: textScaler,
+          textDirection: textDirection,
+          locale: locale,
+        );
+        return Text(
+          wrapped,
+          style: style,
+          softWrap: true,
+          maxLines: null,
+          semanticsLabel: text,
+        );
+      },
+    );
+  }
+
+  String _wrapAtWhitespace(
+    String value, {
+    required double maxWidth,
+    required TextStyle style,
+    required TextScaler textScaler,
+    required TextDirection textDirection,
+    required Locale? locale,
+  }) {
+    bool fits(String candidate) {
+      final painter = TextPainter(
+        text: TextSpan(text: candidate, style: style),
+        textDirection: textDirection,
+        textScaler: textScaler,
+        locale: locale,
+        maxLines: 1,
+      )..layout();
+      return painter.width <= maxWidth;
+    }
+
+    String protectWord(String word) {
+      if (!fits(word)) return word;
+      return word.runes.map(String.fromCharCode).join('\u2060');
+    }
+
+    final output = <String>[];
+    for (final paragraph in value.split('\n')) {
+      final words = paragraph
+          .trim()
+          .split(RegExp(r'\s+'))
+          .where((word) => word.isNotEmpty)
+          .toList();
+      if (words.isEmpty) {
+        output.add('');
+        continue;
+      }
+      var line = '';
+      for (final word in words) {
+        final candidate = line.isEmpty ? word : '$line $word';
+        if (line.isEmpty || fits(candidate)) {
+          line = candidate;
+          continue;
+        }
+        output.add(line.split(' ').map(protectWord).join(' '));
+        line = word;
+      }
+      output.add(line.split(' ').map(protectWord).join(' '));
+    }
+    return output.join('\n');
+  }
+}
+
+class _BugReportDialog extends StatefulWidget {
+  const _BugReportDialog({required this.email});
+
+  final String email;
+
+  @override
+  State<_BugReportDialog> createState() => _BugReportDialogState();
+}
+
+class _BugReportDialogState extends State<_BugReportDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _reproductionController = TextEditingController();
+  final _expectedController = TextEditingController();
+  final _actualController = TextEditingController();
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _reproductionController.dispose();
+    _expectedController.dispose();
+    _actualController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(context.tr('버그 제보')),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  context.tr(
+                    'Google 계정 이메일 {email}을 제보 연락처로 수집합니다. 이메일은 공개 GitHub 이슈에 표시되지 않고 Daily 서버에 비공개로 저장됩니다.',
+                    args: {'email': widget.email},
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  context.tr('작성한 제보 내용은 공개 GitHub 이슈로 등록됩니다. 개인정보를 입력하지 마세요.'),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _field(
+                  key: const ValueKey('bug-report-title'),
+                  controller: _titleController,
+                  label: context.tr('제목'),
+                  maxLength: 120,
+                  autofocus: true,
+                ),
+                const SizedBox(height: 10),
+                _field(
+                  key: const ValueKey('bug-report-description'),
+                  controller: _descriptionController,
+                  label: context.tr('문제 설명'),
+                  maxLength: 4000,
+                  minLines: 3,
+                  maxLines: 6,
+                ),
+                const SizedBox(height: 10),
+                _field(
+                  key: const ValueKey('bug-report-reproduction'),
+                  controller: _reproductionController,
+                  label: context.tr('재현 방법'),
+                  maxLength: 4000,
+                  minLines: 3,
+                  maxLines: 6,
+                ),
+                const SizedBox(height: 10),
+                _field(
+                  key: const ValueKey('bug-report-expected'),
+                  controller: _expectedController,
+                  label: context.tr('예상 동작'),
+                  maxLength: 2000,
+                  minLines: 2,
+                  maxLines: 4,
+                ),
+                const SizedBox(height: 10),
+                _field(
+                  key: const ValueKey('bug-report-actual'),
+                  controller: _actualController,
+                  label: context.tr('실제 동작'),
+                  maxLength: 2000,
+                  minLines: 2,
+                  maxLines: 4,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(context.tr('취소')),
+        ),
+        FilledButton.icon(
+          key: const ValueKey('submit-bug-report'),
+          onPressed: _submit,
+          icon: const Icon(Icons.send_outlined),
+          label: Text(context.tr('GitHub 이슈 등록')),
+        ),
+      ],
+    );
+  }
+
+  Widget _field({
+    required Key key,
+    required TextEditingController controller,
+    required String label,
+    required int maxLength,
+    int minLines = 1,
+    int maxLines = 1,
+    bool autofocus = false,
+  }) {
+    return TextFormField(
+      key: key,
+      controller: controller,
+      autofocus: autofocus,
+      minLines: minLines,
+      maxLines: maxLines,
+      maxLength: maxLength,
+      textInputAction: maxLines == 1
+          ? TextInputAction.next
+          : TextInputAction.newline,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      validator: (value) => value == null || value.trim().isEmpty
+          ? context.tr('필수 입력 항목입니다.')
+          : null,
+    );
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop(
+      BugReportDraft(
+        title: _titleController.text,
+        description: _descriptionController.text,
+        reproductionSteps: _reproductionController.text,
+        expectedBehavior: _expectedController.text,
+        actualBehavior: _actualController.text,
+      ),
+    );
+  }
+}
+
 class _AppVersionInfo {
   const _AppVersionInfo({
     required this.version,
@@ -2453,7 +2812,7 @@ class _AppVersionTile extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             leading: const _SettingsLeadingIcon(Icons.info_outline),
             title: Text(context.tr('Daily 버전')),
-            subtitle: Text(
+            subtitle: _SettingsDescription(
               context.tr(
                 '버전 {version} · 더블 클릭하여 Github 확인하기',
                 args: {'version': versionLabel},
@@ -2571,7 +2930,7 @@ class _TimeTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: _SettingsLeadingIcon(icon),
       title: Text(title),
-      subtitle: Text('$subtitle · $label'),
+      subtitle: _SettingsDescription('$subtitle · $label'),
       trailing: IconButton(
         tooltip: context.tr('시간 선택'),
         onPressed: () async {
@@ -2746,7 +3105,7 @@ class _NotificationTestTile extends StatelessWidget {
               Icons.notifications_active_outlined,
             ),
             title: Text(context.tr('알림 테스트')),
-            subtitle: Text(subtitle),
+            subtitle: _SettingsDescription(subtitle),
             trailing: button,
           );
         }
@@ -2767,7 +3126,7 @@ class _NotificationTestTile extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    _SettingsDescription(
                       subtitle,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
@@ -2910,7 +3269,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           leading: const _SettingsLeadingIcon(Icons.account_circle_outlined),
           title: Text(context.tr('Google 계정')),
-          subtitle: Text(
+          subtitle: _SettingsDescription(
             linked ? email! : context.tr('Google 로그인 시 Daily 계정에 연결됩니다.'),
           ),
         ),
@@ -2918,7 +3277,7 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           leading: const _SettingsLeadingIcon(Icons.cloud_sync_outlined),
           title: Text(context.tr('Google Drive 동기화')),
-          subtitle: Text(
+          subtitle: _SettingsDescription(
             sessionConnected
                 ? context.tr('이 계정의 Google Drive AppData에 일정을 백업하고 복원합니다.')
                 : linked
@@ -3044,7 +3403,7 @@ class _AppleSignInSettings extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           leading: const _SettingsLeadingIcon(Icons.apple),
           title: Text(title),
-          subtitle: Text(subtitle),
+          subtitle: _SettingsDescription(subtitle),
         ),
         if (!connected)
           Row(
@@ -3103,7 +3462,7 @@ class _DailyAccountStatus extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: const _SettingsLeadingIcon(Icons.person_outline),
       title: Text(context.tr('Daily 계정')),
-      subtitle: Text(
+      subtitle: _SettingsDescription(
         providers.isEmpty
             ? context.tr('Apple 또는 Google 계정을 연결할 수 있습니다.')
             : context.tr(
@@ -3166,7 +3525,7 @@ class _SyncStatusTile extends StatelessWidget {
             syncing ? Icons.sync : Icons.cloud_done_outlined,
           ),
           title: Text(context.tr('동기화 상태')),
-          subtitle: Text(
+          subtitle: _SettingsDescription(
             subtitle.isEmpty ? context.tr('아직 동기화 기록이 없습니다.') : subtitle,
           ),
         );

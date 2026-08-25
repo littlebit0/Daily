@@ -4403,3 +4403,76 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   - `./tool/flutter.sh test --no-pub -r compact` 전체 242개 통과
   - macOS Debug와 iOS Simulator Debug 빌드 통과
   - iOS/macOS 앱과 위젯의 표시 버전·빌드가 모두 `3.2.0 / 3.2.0`임을 확인
+### 2026-08-25 실시간 익명 사용성 분석 서버 배포
+
+- Ubuntu `littlebit@100.113.124.14`에 독립 Python 분석 수신기를 배포했다.
+  - 사용자 systemd 서비스: `daily-analytics.service`
+  - 실행 파일: `~/.local/lib/daily-analytics/analytics_receiver.py`
+  - 집계 저장소: `/mnt/storage/daily-analytics` (1.8TB HDD `/dev/sda1`)
+  - `loginctl` linger를 활성화해 로그아웃 및 재부팅 뒤에도 서비스를 시작한다.
+- Tailscale Funnel 공개 HTTPS를 연결했다.
+  - 수신: `https://littlebit.tail6514a4.ts.net/v1/events`
+  - 상태: `https://littlebit.tail6514a4.ts.net/health`
+- 실제 외부 POST가 서버 디스크의 일별 집계 파일에 즉시 반영되는 것을 확인했다.
+  원본 요청, 세션 ID와 이벤트 ID는 집계 파일에 저장되지 않는다.
+- `3.2.0 (3.2.0)` iOS/macOS App Store 서명 산출물을 위 엔드포인트가 포함된
+  상태로 다시 생성했다.
+  - `dist/transporter-upload/3.2.0/ios/Daily-iOS-AppStore-3.2.0-build-3.2.0.ipa`
+  - `dist/transporter-upload/3.2.0/macos/Daily-macOS-AppStore-3.2.0-build-3.2.0.pkg`
+- 익명 사용성 분석은 계속 기본 비활성화이며 사용자가 설정에서 명시적으로
+  허용한 경우에만 전송한다.
+
+### 2026-08-25 macOS 이동·인증 버그 제보·iOS 설정 가독성
+
+- macOS 주간/일간 트랙패드 이동은 기존 구현이 이미 동작하고 있었다. 후속
+  작업에서 중복 추가했던 `PointerPanZoom` 처리 때문에 좌우 방향이 반전되어,
+  추가 처리기와 누적 판정 코드를 전부 제거하고 기존 단일 스크롤 경로로
+  복원했다. 목록·스케줄의 원래 이동 방식과 스케줄 세로 시간 이동을 유지한다.
+- 일정 상세 및 macOS 우측 하루 보기의 날짜 헤더에서 공휴일 색상 강조 기능
+  자체를 제거했다. 공휴일인 날짜도 일반 날짜와 같은 텍스트 헤더로 표시한다.
+- Google로 Daily를 이용 중인 사용자만 설정의 버그 제보 기능을 사용할 수
+  있도록 구현했다.
+  - 앱은 자동 로그인 창을 띄우지 않고 기존 Google 인증을 조용히 확인한다.
+  - 서버는 Google 토큰의 서명·이메일 인증 여부를 확인한 뒤 사용자의
+    `littlebit0/DailyCalendar` 저장소에 이슈를 생성한다.
+  - 이메일은 공개 GitHub 이슈 본문에 넣지 않고 Ubuntu HDD의
+    `/mnt/storage/daily-analytics/bug-report-contacts`에만 비공개로 보관한다.
+  - 서버의 GitHub 토큰은 `littlebit0/DailyCalendar` 단일 저장소의 Issues
+    쓰기 권한만 가진 fine-grained PAT이며, Ubuntu의
+    `~/.config/daily/bug-report.env`에 권한 `0600`으로 저장했다. 최초 생성
+    토큰은 노출 가능성을 확인해 사용 전에 폐기했고, 새 토큰을 재생성해
+    적용했다. 토큰 값은 저장소에 기록하지 않았다.
+- iOS 설정 설명은 기기 가로폭, 글자 크기, 언어를 기준으로 단어 경계에서
+  반응형 줄바꿈되도록 수정했다. 긴 단일 문자열은 화면 밖으로 넘치지 않도록
+  예외적으로 글자 단위 줄바꿈을 허용한다.
+- 서버 확인:
+  - `daily-analytics.service` 활성 상태
+  - `https://littlebit.tail6514a4.ts.net/health` 정상
+  - GitHub 인증 사용자 `littlebit0`, 대상 저장소 `littlebit0/DailyCalendar`
+  - 잘못된 Google 토큰은 `401 invalid_google_token`으로 거부
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - 전체 Flutter 테스트 243개 통과
+  - 분석/버그 제보 서버 테스트 4개 통과
+  - macOS Debug 및 iOS Simulator Debug 빌드 통과
+  - `/Users/kimhwi/Applications/Daily Test.app`과 iPhone 17 시뮬레이터에
+    최신 빌드 업데이트 및 실행 확인
+- App Store의 `/Applications/Daily.app`은 변경하지 않았다. Android와
+  Windows 구현 파일도 수정하지 않았다.
+
+### 2026-08-26 DailyCalendar 3.2.1 릴리스
+
+- 앱과 Apple 위젯의 표시 버전·빌드를 `3.2.1 (3.2.1)`로 승격했다.
+- macOS 월간 좌우, 주간·일간 목록/스케줄의 트랙패드 이동이 멈춘 원인은
+  공통 `PageView`에 적용된 `NeverScrollableScrollPhysics`였다.
+- `_ResponsiveMonthPagePhysics`를 복원해 macOS 네이티브 트랙패드
+  `PointerPanZoom` 이동을 다시 활성화했다. 마우스 휠의 개별 페이지 이동에는
+  기존 단일 포인터 신호 경로만 사용하며 중복 트랙패드 처리기는 추가하지 않았다.
+- 검증:
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - 전체 Flutter 테스트 243개 통과
+  - 분석·버그 제보 서버 테스트 4개 통과
+  - 월간 좌우, 주간·일간 목록/스케줄의 `PointerPanZoom` 왕복 테스트 통과
+- 사용자의 지시에 따라 GUI 실행과 수동 동작 테스트는 진행하지 않았다.
+- GitHub Release에는 unsigned IPA/DMG만 공개하고, App Store Connect용 서명
+  IPA/PKG는 `dist/transporter-upload/3.2.1`에만 생성한다.
