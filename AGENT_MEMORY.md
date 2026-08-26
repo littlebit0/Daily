@@ -4579,3 +4579,19 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   - `python3 -m unittest test/tool/analytics_receiver_test.py` 전체 4개 통과
 - 사용자의 별도 실행 요청이 없으므로 3.3.0 앱을 설치하거나 GUI로 실행하지
   않았다.
+
+### 2026-08-26 DailyCalendar 3.3.1 분석 전송 보정
+
+- 앱과 Apple 위젯의 표시 버전·빌드를 `3.3.1 (3.3.1)`로 승격했다.
+- 3.3.0 서명 산출물에는 버그 제보 주소만 포함되고 익명 사용성 분석 주소가
+  누락된 사실을 바이너리 문자열 검사로 확인했다.
+- 같은 누락이 반복되지 않도록 Release 모드에서는 운영 HTTPS 분석 주소를
+  기본값으로 사용하고, Debug/Test에서는 명시적인 주소가 없으면 계속 전송하지
+  않도록 수정했다. 분석 수집은 기존과 동일하게 사용자 동의 전에는 꺼져 있다.
+- README, Apple 빌드·개인정보·분석 배포 문서와 GitHub 릴리스 워크플로를
+  3.3.1 기준으로 갱신하고 `docs/RELEASE_NOTES_3.3.1.md`를 추가했다.
+- 검증:
+  - `git diff --check` 통과
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub -r compact` 전체 250개 통과
+  - `python3 -m unittest test/tool/analytics_receiver_test.py` 전체 4개 통과

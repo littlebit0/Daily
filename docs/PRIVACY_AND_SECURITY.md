@@ -1,6 +1,6 @@
 # Privacy, Security, and Consent Notes
 
-Current release baseline: `3.3.0`.
+Current release baseline: `3.3.1`.
 
 This document is the pre-release checklist for Daily's current data handling.
 It is not legal advice; it is the engineering baseline that should be reviewed

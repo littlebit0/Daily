@@ -30,6 +30,8 @@ class AnalyticsEnvironment {
 }
 
 class PrivacyAnalyticsService implements ProductAnalytics {
+  static const _productionEndpoint =
+      'https://littlebit.tail6514a4.ts.net/v1/events';
   PrivacyAnalyticsService({
     required SharedPreferences preferences,
     http.Client? httpClient,
@@ -361,8 +363,10 @@ class PrivacyAnalyticsService implements ProductAnalytics {
 
   static Uri? _parseConfiguredEndpoint() {
     const raw = String.fromEnvironment('DAILY_ANALYTICS_ENDPOINT');
-    if (raw.trim().isEmpty) return null;
-    return Uri.tryParse(raw.trim());
+    final configured = raw.trim();
+    if (configured.isNotEmpty) return Uri.tryParse(configured);
+    if (kReleaseMode) return Uri.parse(_productionEndpoint);
+    return null;
   }
 
   static bool _isAllowedEndpoint(Uri endpoint) {

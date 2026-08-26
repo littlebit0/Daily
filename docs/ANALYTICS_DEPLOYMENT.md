@@ -91,8 +91,8 @@ network transmission occurs.
 - Aggregate storage: `/mnt/storage/daily-analytics` (HDD)
 - Public HTTPS: Tailscale Funnel to `127.0.0.1:8787`
 
-The `3.3.0` iOS and macOS App Store artifacts in
-`dist/transporter-upload/3.3.0` include this endpoint. Collection remains off
+The `3.3.1` iOS and macOS App Store artifacts in
+`dist/transporter-upload/3.3.1` include this endpoint. Collection remains off
 until the user explicitly enables anonymous usage analytics in Daily.
 
 ## Verification

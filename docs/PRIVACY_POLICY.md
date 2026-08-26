@@ -2,7 +2,7 @@
 
 Effective date: 2026-08-25
 
-Current app release baseline: `3.3.0`.
+Current app release baseline: `3.3.1`.
 
 Daily is a personal calendar app. This policy explains what data the app uses
 and how it is handled.
