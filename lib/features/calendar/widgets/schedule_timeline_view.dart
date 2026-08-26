@@ -9,6 +9,7 @@ import '../../../core/localization/app_localizations.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/theme/daily_ui.dart';
 import '../../../core/theme/event_completion_style.dart';
+import '../../../core/widgets/smooth_mouse_wheel_scroll_controller.dart';
 import '../../events/domain/calendar_event.dart';
 import 'calendar_event_drag_layer.dart';
 
@@ -54,20 +55,22 @@ class _ScheduleTimelineViewState extends State<ScheduleTimelineView> {
   static const _hourHeight = 64.0;
   static const _initialHour = 7;
 
-  late final ScrollController _scrollController;
+  ScrollController? _scrollController;
   CalendarEvent? _draggingEvent;
 
   @override
-  void initState() {
-    super.initState();
-    _scrollController = ScrollController(
-      initialScrollOffset: _initialHour * _hourHeight,
-    );
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scrollController ??= Theme.of(context).platform == TargetPlatform.windows
+        ? SmoothMouseWheelScrollController(
+            initialScrollOffset: _initialHour * _hourHeight,
+          )
+        : ScrollController(initialScrollOffset: _initialHour * _hourHeight);
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _scrollController?.dispose();
     super.dispose();
   }
 
@@ -76,6 +79,7 @@ class _ScheduleTimelineViewState extends State<ScheduleTimelineView> {
     final allDayEvents = widget.events.where((event) => event.allDay).toList();
     final showAllDayArea = widget.showAllDayEvents && allDayEvents.isNotEmpty;
     final scheme = Theme.of(context).colorScheme;
+    final scrollController = _scrollController!;
     final holidayEvents = widget.events
         .where((event) => event.holiday)
         .toList();
@@ -111,10 +115,10 @@ class _ScheduleTimelineViewState extends State<ScheduleTimelineView> {
           child: Stack(
             children: [
               Scrollbar(
-                controller: _scrollController,
+                controller: scrollController,
                 child: SingleChildScrollView(
                   key: const ValueKey('schedule-time-scroll'),
-                  controller: _scrollController,
+                  controller: scrollController,
                   physics: const ClampingScrollPhysics(),
                   child: _ScheduleTimeGrid(
                     days: widget.days,

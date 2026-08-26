@@ -594,15 +594,16 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   }
 
   Future<void> _completeOnboarding() async {
-    final settings = ref
-        .read(settingsRepositoryProvider)
-        .load()
-        .copyWith(onboardingCompleted: true);
-    await ref.read(settingsRepositoryProvider).save(settings);
+    final settingsRepository = ref.read(settingsRepositoryProvider);
+    final previous = settingsRepository.load();
+    await settingsRepository.save(
+      previous.copyWith(onboardingCompleted: true),
+      changedFrom: previous,
+    );
     if (!mounted) {
       return;
     }
-    ref.read(appSettingsProvider.notifier).state = settings;
+    ref.read(appSettingsProvider.notifier).state = settingsRepository.load();
   }
 }
 

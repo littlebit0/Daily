@@ -22,6 +22,10 @@ class SettingsRepository {
 
   final SharedPreferences _preferences;
   final FlutterSecureStorage _secureStorage;
+  Future<void> _settingsMutationTail = Future<void>.value();
+  var _settingsMutationGeneration = 0;
+
+  int get settingsMutationGeneration => _settingsMutationGeneration;
 
   static const _defaultReminderKey = 'defaultReminderMinutes';
   static const _defaultReminderListKey = 'defaultReminderMinutesList';
@@ -132,130 +136,302 @@ class SettingsRepository {
     );
   }
 
-  Future<void> save(AppSettings settings, {bool markSyncPending = true}) async {
-    await _preferences.setString(
-      _defaultReminderListKey,
-      jsonEncode(settings.defaultReminderMinutesList),
+  Future<void> save(
+    AppSettings settings, {
+    bool markSyncPending = true,
+    AppSettings? changedFrom,
+  }) {
+    return _enqueueSettingsMutation(
+      () => _saveSettings(
+        settings,
+        markSyncPending: markSyncPending,
+        changedFrom: changedFrom,
+      ),
     );
-    if (settings.defaultReminderMinutesList.isEmpty) {
-      await _preferences.remove(_defaultReminderKey);
-    } else {
+  }
+
+  Future<void> _saveSettings(
+    AppSettings settings, {
+    required bool markSyncPending,
+    required AppSettings? changedFrom,
+  }) async {
+    final previous = load();
+    final baseline = changedFrom ?? previous;
+    final previousReminderListJson = jsonEncode(
+      previous.defaultReminderMinutesList,
+    );
+    final baselineReminderListJson = jsonEncode(
+      baseline.defaultReminderMinutesList,
+    );
+    final reminderListJson = jsonEncode(settings.defaultReminderMinutesList);
+    final shouldMigrateLegacyReminder =
+        !_preferences.containsKey(_defaultReminderListKey) &&
+        _preferences.containsKey(_defaultReminderKey);
+    if ((baselineReminderListJson != reminderListJson &&
+            previousReminderListJson != reminderListJson) ||
+        shouldMigrateLegacyReminder) {
+      await _preferences.setString(_defaultReminderListKey, reminderListJson);
+      if (settings.defaultReminderMinutesList.isEmpty) {
+        if (_preferences.containsKey(_defaultReminderKey)) {
+          await _preferences.remove(_defaultReminderKey);
+        }
+      } else if (_preferences.getInt(_defaultReminderKey) !=
+          settings.defaultReminderMinutesList.first) {
+        await _preferences.setInt(
+          _defaultReminderKey,
+          settings.defaultReminderMinutesList.first,
+        );
+      }
+    }
+    if (baseline.allDayReminderHour != settings.allDayReminderHour &&
+        previous.allDayReminderHour != settings.allDayReminderHour) {
       await _preferences.setInt(
-        _defaultReminderKey,
-        settings.defaultReminderMinutesList.first,
+        _allDayReminderHourKey,
+        settings.allDayReminderHour,
       );
     }
-    await _preferences.setInt(
-      _allDayReminderHourKey,
-      settings.allDayReminderHour,
+    if (baseline.allDayReminderMinute != settings.allDayReminderMinute &&
+        previous.allDayReminderMinute != settings.allDayReminderMinute) {
+      await _preferences.setInt(
+        _allDayReminderMinuteKey,
+        settings.allDayReminderMinute,
+      );
+    }
+    if (baseline.morningBriefingHour != settings.morningBriefingHour &&
+        previous.morningBriefingHour != settings.morningBriefingHour) {
+      await _preferences.setInt(_briefingHourKey, settings.morningBriefingHour);
+    }
+    if (baseline.morningBriefingMinute != settings.morningBriefingMinute &&
+        previous.morningBriefingMinute != settings.morningBriefingMinute) {
+      await _preferences.setInt(
+        _briefingMinuteKey,
+        settings.morningBriefingMinute,
+      );
+    }
+    if (baseline.morningBriefingEnabled != settings.morningBriefingEnabled &&
+        previous.morningBriefingEnabled != settings.morningBriefingEnabled) {
+      await _preferences.setBool(
+        _briefingEnabledKey,
+        settings.morningBriefingEnabled,
+      );
+    }
+    if (baseline.weekStartsOnMonday != settings.weekStartsOnMonday &&
+        previous.weekStartsOnMonday != settings.weekStartsOnMonday) {
+      await _preferences.setBool(
+        _weekStartsOnMondayKey,
+        settings.weekStartsOnMonday,
+      );
+    }
+    if (baseline.showLunarDates != settings.showLunarDates &&
+        previous.showLunarDates != settings.showLunarDates) {
+      await _preferences.setBool(_showLunarDatesKey, settings.showLunarDates);
+    }
+    if (baseline.showAdjacentMonthDates != settings.showAdjacentMonthDates &&
+        previous.showAdjacentMonthDates != settings.showAdjacentMonthDates) {
+      await _preferences.setBool(
+        _showAdjacentMonthDatesKey,
+        settings.showAdjacentMonthDates,
+      );
+    }
+    if (baseline.onboardingCompleted != settings.onboardingCompleted &&
+        previous.onboardingCompleted != settings.onboardingCompleted) {
+      await _preferences.setBool(
+        _onboardingCompletedKey,
+        settings.onboardingCompleted,
+      );
+    }
+    if (baseline.aiEnabled != settings.aiEnabled &&
+        previous.aiEnabled != settings.aiEnabled) {
+      await _preferences.setBool(_aiEnabledKey, settings.aiEnabled);
+    }
+    if (baseline.aiOnlyForComplexInput != settings.aiOnlyForComplexInput &&
+        previous.aiOnlyForComplexInput != settings.aiOnlyForComplexInput) {
+      await _preferences.setBool(
+        _aiComplexOnlyKey,
+        settings.aiOnlyForComplexInput,
+      );
+    }
+    if (baseline.blockSensitiveAi != settings.blockSensitiveAi &&
+        previous.blockSensitiveAi != settings.blockSensitiveAi) {
+      await _preferences.setBool(
+        _blockSensitiveAiKey,
+        settings.blockSensitiveAi,
+      );
+    }
+    final previousCategoriesJson = jsonEncode(
+      previous.categories.map((category) => category.toJson()).toList(),
     );
-    await _preferences.setInt(
-      _allDayReminderMinuteKey,
-      settings.allDayReminderMinute,
+    final baselineCategoriesJson = jsonEncode(
+      baseline.categories.map((category) => category.toJson()).toList(),
     );
-    await _preferences.setInt(_briefingHourKey, settings.morningBriefingHour);
-    await _preferences.setInt(
-      _briefingMinuteKey,
-      settings.morningBriefingMinute,
+    final categoriesJson = jsonEncode(
+      settings.categories.map((category) => category.toJson()).toList(),
     );
-    await _preferences.setBool(
-      _briefingEnabledKey,
-      settings.morningBriefingEnabled,
-    );
-    await _preferences.setBool(
-      _weekStartsOnMondayKey,
-      settings.weekStartsOnMonday,
-    );
-    await _preferences.setBool(_showLunarDatesKey, settings.showLunarDates);
-    await _preferences.setBool(
-      _showAdjacentMonthDatesKey,
-      settings.showAdjacentMonthDates,
-    );
-    await _preferences.setBool(
-      _onboardingCompletedKey,
-      settings.onboardingCompleted,
-    );
-    await _preferences.setBool(_aiEnabledKey, settings.aiEnabled);
-    await _preferences.setBool(
-      _aiComplexOnlyKey,
-      settings.aiOnlyForComplexInput,
-    );
-    await _preferences.setBool(_blockSensitiveAiKey, settings.blockSensitiveAi);
-    await _preferences.setString(
-      _categoriesKey,
-      jsonEncode(
-        settings.categories.map((category) => category.toJson()).toList(),
+    if (baselineCategoriesJson != categoriesJson &&
+        previousCategoriesJson != categoriesJson) {
+      await _preferences.setString(_categoriesKey, categoriesJson);
+    }
+    final previousDdayOffsetsJson = jsonEncode(previous.dDayReminderOffsets);
+    final baselineDdayOffsetsJson = jsonEncode(baseline.dDayReminderOffsets);
+    final ddayOffsetsJson = jsonEncode(settings.dDayReminderOffsets);
+    if (baselineDdayOffsetsJson != ddayOffsetsJson &&
+        previousDdayOffsetsJson != ddayOffsetsJson) {
+      await _preferences.setString(_dDayReminderOffsetsKey, ddayOffsetsJson);
+    }
+    final shouldMigrateLegacyTextSize =
+        !_preferences.containsKey(_appTextSizeKey) &&
+        _preferences.containsKey(_legacyCalendarEventTextSizeKey);
+    if ((baseline.appTextSize != settings.appTextSize &&
+            previous.appTextSize != settings.appTextSize) ||
+        shouldMigrateLegacyTextSize) {
+      await _preferences.setString(_appTextSizeKey, settings.appTextSize.name);
+    }
+    if (baseline.monthNavigationMode != settings.monthNavigationMode &&
+        previous.monthNavigationMode != settings.monthNavigationMode) {
+      await _preferences.setString(
+        _monthNavigationModeKey,
+        settings.monthNavigationMode.name,
+      );
+    }
+    if (_preferences.containsKey(_legacyCalendarEventTextSizeKey)) {
+      await _preferences.remove(_legacyCalendarEventTextSizeKey);
+    }
+    if (_preferences.containsKey(_legacyCalendarDensityKey)) {
+      await _preferences.remove(_legacyCalendarDensityKey);
+    }
+    if (baseline.defaultCalendarView != settings.defaultCalendarView &&
+        previous.defaultCalendarView != settings.defaultCalendarView) {
+      await _preferences.setString(
+        _defaultCalendarViewKey,
+        settings.defaultCalendarView.name,
+      );
+    }
+    if (baseline.weekDayLayoutMode != settings.weekDayLayoutMode &&
+        previous.weekDayLayoutMode != settings.weekDayLayoutMode) {
+      await _preferences.setString(
+        _weekDayLayoutModeKey,
+        settings.weekDayLayoutMode.name,
+      );
+    }
+    if (baseline.calendarEventTitleAlignment !=
+            settings.calendarEventTitleAlignment &&
+        previous.calendarEventTitleAlignment !=
+            settings.calendarEventTitleAlignment) {
+      await _preferences.setString(
+        _calendarEventTitleAlignmentKey,
+        settings.calendarEventTitleAlignment.name,
+      );
+    }
+    if (baseline.calendarEventSortPriority !=
+            settings.calendarEventSortPriority &&
+        previous.calendarEventSortPriority !=
+            settings.calendarEventSortPriority) {
+      await _preferences.setString(
+        _calendarEventSortPriorityKey,
+        settings.calendarEventSortPriority.name,
+      );
+    }
+    final previousManualOrdersJson = jsonEncode(
+      previous.calendarManualEventOrders.map(
+        (date, order) => MapEntry(date, order.toJson()),
       ),
     );
-    await _preferences.setString(
-      _dDayReminderOffsetsKey,
-      jsonEncode(settings.dDayReminderOffsets),
-    );
-    await _preferences.setString(_appTextSizeKey, settings.appTextSize.name);
-    await _preferences.setString(
-      _monthNavigationModeKey,
-      settings.monthNavigationMode.name,
-    );
-    await _preferences.remove(_legacyCalendarEventTextSizeKey);
-    await _preferences.remove(_legacyCalendarDensityKey);
-    await _preferences.setString(
-      _defaultCalendarViewKey,
-      settings.defaultCalendarView.name,
-    );
-    await _preferences.setString(
-      _weekDayLayoutModeKey,
-      settings.weekDayLayoutMode.name,
-    );
-    await _preferences.setString(
-      _calendarEventTitleAlignmentKey,
-      settings.calendarEventTitleAlignment.name,
-    );
-    await _preferences.setString(
-      _calendarEventSortPriorityKey,
-      settings.calendarEventSortPriority.name,
-    );
-    await _preferences.setString(
-      _calendarManualEventOrdersKey,
-      jsonEncode(
-        settings.calendarManualEventOrders.map(
-          (date, order) => MapEntry(date, order.toJson()),
-        ),
+    final baselineManualOrdersJson = jsonEncode(
+      baseline.calendarManualEventOrders.map(
+        (date, order) => MapEntry(date, order.toJson()),
       ),
     );
-    await _preferences.setString(
-      _hiddenCategoryIdsKey,
-      jsonEncode(settings.hiddenCategoryIds),
+    final manualOrdersJson = jsonEncode(
+      settings.calendarManualEventOrders.map(
+        (date, order) => MapEntry(date, order.toJson()),
+      ),
     );
-    await _preferences.setBool(
-      _calendarShowHolidaysKey,
-      settings.calendarShowHolidays,
-    );
-    await _preferences.setBool(
-      _calendarHolidayBackgroundEnabledKey,
-      settings.calendarHolidayBackgroundEnabled,
-    );
-    await _preferences.setBool(_calendarDdayOnlyKey, settings.calendarDdayOnly);
-    await _preferences.remove('hideSensitiveEvents');
-    await _preferences.remove('hideSensitiveNotifications');
-    await _preferences.remove('privateEventHidingConfigured');
-    await _preferences.setBool(_appLockEnabledKey, settings.appLockEnabled);
-    await _preferences.setBool(
-      _appLockBiometricsEnabledKey,
-      settings.appLockBiometricsEnabled,
-    );
-    await _preferences.setString(
-      _appLockMethodKey,
-      settings.appLockMethod.name,
-    );
-    await _preferences.setBool(_use24HourTimeKey, settings.use24HourTime);
-    await _preferences.setString(_themeModeKey, settings.themeMode.name);
-    await _preferences.setString(_languageKey, settings.language.name);
+    if (baselineManualOrdersJson != manualOrdersJson &&
+        previousManualOrdersJson != manualOrdersJson) {
+      await _preferences.setString(
+        _calendarManualEventOrdersKey,
+        manualOrdersJson,
+      );
+    }
+    final previousHiddenCategoriesJson = jsonEncode(previous.hiddenCategoryIds);
+    final baselineHiddenCategoriesJson = jsonEncode(baseline.hiddenCategoryIds);
+    final hiddenCategoriesJson = jsonEncode(settings.hiddenCategoryIds);
+    if (baselineHiddenCategoriesJson != hiddenCategoriesJson &&
+        previousHiddenCategoriesJson != hiddenCategoriesJson) {
+      await _preferences.setString(_hiddenCategoryIdsKey, hiddenCategoriesJson);
+    }
+    if (baseline.calendarShowHolidays != settings.calendarShowHolidays &&
+        previous.calendarShowHolidays != settings.calendarShowHolidays) {
+      await _preferences.setBool(
+        _calendarShowHolidaysKey,
+        settings.calendarShowHolidays,
+      );
+    }
+    if (baseline.calendarHolidayBackgroundEnabled !=
+            settings.calendarHolidayBackgroundEnabled &&
+        previous.calendarHolidayBackgroundEnabled !=
+            settings.calendarHolidayBackgroundEnabled) {
+      await _preferences.setBool(
+        _calendarHolidayBackgroundEnabledKey,
+        settings.calendarHolidayBackgroundEnabled,
+      );
+    }
+    if (baseline.calendarDdayOnly != settings.calendarDdayOnly &&
+        previous.calendarDdayOnly != settings.calendarDdayOnly) {
+      await _preferences.setBool(
+        _calendarDdayOnlyKey,
+        settings.calendarDdayOnly,
+      );
+    }
+    for (final legacyKey in const [
+      'hideSensitiveEvents',
+      'hideSensitiveNotifications',
+      'privateEventHidingConfigured',
+    ]) {
+      if (_preferences.containsKey(legacyKey)) {
+        await _preferences.remove(legacyKey);
+      }
+    }
+    if (baseline.appLockEnabled != settings.appLockEnabled &&
+        previous.appLockEnabled != settings.appLockEnabled) {
+      await _preferences.setBool(_appLockEnabledKey, settings.appLockEnabled);
+    }
+    if (baseline.appLockBiometricsEnabled !=
+            settings.appLockBiometricsEnabled &&
+        previous.appLockBiometricsEnabled !=
+            settings.appLockBiometricsEnabled) {
+      await _preferences.setBool(
+        _appLockBiometricsEnabledKey,
+        settings.appLockBiometricsEnabled,
+      );
+    }
+    if (baseline.appLockMethod != settings.appLockMethod &&
+        previous.appLockMethod != settings.appLockMethod) {
+      await _preferences.setString(
+        _appLockMethodKey,
+        settings.appLockMethod.name,
+      );
+    }
+    if (baseline.use24HourTime != settings.use24HourTime &&
+        previous.use24HourTime != settings.use24HourTime) {
+      await _preferences.setBool(_use24HourTimeKey, settings.use24HourTime);
+    }
+    if (baseline.themeMode != settings.themeMode &&
+        previous.themeMode != settings.themeMode) {
+      await _preferences.setString(_themeModeKey, settings.themeMode.name);
+    }
+    if (baseline.language != settings.language &&
+        previous.language != settings.language) {
+      await _preferences.setString(_languageKey, settings.language.name);
+    }
     if (markSyncPending) {
       await _preferences.setInt(
         _settingsSyncRevisionKey,
         settingsSyncRevision + 1,
       );
-      await _preferences.setBool(_settingsSyncPendingKey, true);
+      if (!hasPendingSettingsSync) {
+        await _preferences.setBool(_settingsSyncPendingKey, true);
+      }
     }
   }
 
@@ -265,11 +441,36 @@ class SettingsRepository {
   int get settingsSyncRevision =>
       _preferences.getInt(_settingsSyncRevisionKey) ?? 0;
 
-  Future<void> markSettingsSyncedIfRevision(int revision) async {
-    if (settingsSyncRevision != revision) {
-      return;
-    }
-    await _preferences.setBool(_settingsSyncPendingKey, false);
+  Future<void> markSettingsSyncedIfRevision(int revision) {
+    return _enqueueSettingsMutation(() async {
+      if (settingsSyncRevision != revision) {
+        return;
+      }
+      await _preferences.setBool(_settingsSyncPendingKey, false);
+    });
+  }
+
+  /// Applies a downloaded settings snapshot only while the local settings
+  /// state observed before the download is still current.
+  ///
+  /// [buildRestoredSettings] runs inside the settings mutation queue so it can
+  /// preserve device-local fields from the latest persisted snapshot.
+  Future<bool> applyRestoredSettingsIfUnchanged({
+    required int expectedRevision,
+    required int expectedMutationGeneration,
+    required AppSettings Function(AppSettings current) buildRestoredSettings,
+  }) {
+    var applied = false;
+    return _enqueueSettingsMutation(() async {
+      if (hasPendingSettingsSync ||
+          settingsSyncRevision != expectedRevision ||
+          settingsMutationGeneration != expectedMutationGeneration) {
+        return;
+      }
+      final restored = buildRestoredSettings(load());
+      await _saveSettings(restored, markSyncPending: false, changedFrom: null);
+      applied = true;
+    }).then((_) => applied);
   }
 
   String? driveChangePageToken(String accountEmail) {
@@ -439,8 +640,14 @@ class SettingsRepository {
     return stored != null && stored == _hashPin(pin);
   }
 
-  Future<void> resetAll() async {
+  Future<void> resetAll() {
+    _settingsMutationGeneration += 1;
+    return _enqueueSettingsMutation(_resetAll);
+  }
+
+  Future<void> _resetAll() async {
     await _preferences.remove(_defaultReminderKey);
+    await _preferences.remove(_defaultReminderListKey);
     await _preferences.remove(_allDayReminderHourKey);
     await _preferences.remove(_allDayReminderMinuteKey);
     await _preferences.remove(_briefingHourKey);
@@ -474,6 +681,9 @@ class SettingsRepository {
     await _preferences.remove(_appLockBiometricsEnabledKey);
     await _preferences.remove(_appLockMethodKey);
     await _preferences.remove(_use24HourTimeKey);
+    await _preferences.remove(_themeModeKey);
+    await _preferences.remove(_monthNavigationModeKey);
+    await _preferences.remove(_languageKey);
     await _preferences.remove(_settingsSyncPendingKey);
     await _preferences.remove(_settingsSyncRevisionKey);
     await clearDriveChangePageToken();
@@ -481,6 +691,12 @@ class SettingsRepository {
     await deleteDailyAccount();
     await deleteGeminiApiKey();
     await deleteAppLockPin();
+  }
+
+  Future<void> _enqueueSettingsMutation(Future<void> Function() mutation) {
+    final operation = _settingsMutationTail.then((_) => mutation());
+    _settingsMutationTail = operation.catchError((Object _) {});
+    return operation;
   }
 
   Future<void> _deleteSecureStorageKey(String key) async {

@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Daily</string>
-    <string name="widget_month_description">Daily 월간 미니 캘린더</string>
-    <string name="widget_today_description">Daily 오늘 일정</string>
-    <string name="widget_dday_description">Daily D-day 일정</string>
+    <string name="app_name">DailyCalendar</string>
+    <string name="widget_month_description">DailyCalendar monthly calendar</string>
+    <string name="widget_today_description">DailyCalendar today schedule</string>
+    <string name="widget_dday_description">DailyCalendar D-day schedule</string>
+    <string name="widget_month_title">Monthly calendar</string>
+    <string name="widget_today_title">Today</string>
+    <string name="widget_dday_title">D-day</string>
+    <string name="widget_no_today_events">No events today</string>
+    <string name="widget_no_ddays">No D-day events</string>
+    <string name="widget_open_app">Open DailyCalendar to load widget data</string>
+    <string name="widget_toggle_todo">Toggle completion</string>
+    <string name="widget_more_count">+%1$d</string>
 </resources>

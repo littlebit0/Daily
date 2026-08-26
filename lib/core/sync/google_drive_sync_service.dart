@@ -695,30 +695,34 @@ class GoogleDriveSyncService implements SyncService {
   }
 
   Future<void> _restore(Map<String, String> authHeaders) async {
-    final localSettings = _settingsRepository.load();
     final localSettingsRevision = _settingsRepository.settingsSyncRevision;
+    final localSettingsMutationGeneration =
+        _settingsRepository.settingsMutationGeneration;
     final remoteSettings = await _downloadRestorableSettings(authHeaders);
     final remoteEvents = await _downloadAllEvents(authHeaders);
-    final canApplySettings =
-        remoteSettings != null &&
-        !_settingsRepository.hasPendingSettingsSync &&
-        _settingsRepository.settingsSyncRevision == localSettingsRevision;
-    final restoredSettings = canApplySettings
-        ? _restoredSettingsTarget(remoteSettings, localSettings)
-        : null;
-    final shouldWriteSettings =
-        restoredSettings != null &&
-        !_sameSettingsSnapshot(restoredSettings, localSettings);
+    AppSettings? settingsBeforeRestore;
+    AppSettings? restoredSettings;
     var settingsWritten = false;
     final keptLocalEventIds = <String>{};
     late final List<EventRestoreMutation> mutations;
     try {
-      if (shouldWriteSettings) {
-        await _settingsRepository.save(
-          restoredSettings,
-          markSyncPending: false,
-        );
-        settingsWritten = true;
+      if (remoteSettings != null) {
+        final settingsApplied = await _settingsRepository
+            .applyRestoredSettingsIfUnchanged(
+              expectedRevision: localSettingsRevision,
+              expectedMutationGeneration: localSettingsMutationGeneration,
+              buildRestoredSettings: (current) {
+                settingsBeforeRestore = current;
+                restoredSettings = _restoredSettingsTarget(
+                  remoteSettings,
+                  current,
+                );
+                return restoredSettings!;
+              },
+            );
+        settingsWritten =
+            settingsApplied &&
+            !_sameSettingsSnapshot(restoredSettings!, settingsBeforeRestore!);
       }
       mutations = await _eventRepository.mergeRestoredEventsAtomically(
         remoteEvents,
@@ -737,7 +741,11 @@ class GoogleDriveSyncService implements SyncService {
       );
     } on Object {
       if (settingsWritten) {
-        await _settingsRepository.save(localSettings, markSyncPending: false);
+        await _settingsRepository.applyRestoredSettingsIfUnchanged(
+          expectedRevision: localSettingsRevision,
+          expectedMutationGeneration: localSettingsMutationGeneration,
+          buildRestoredSettings: (_) => settingsBeforeRestore!,
+        );
       }
       rethrow;
     }
@@ -820,8 +828,9 @@ class GoogleDriveSyncService implements SyncService {
     if (externalSettings != null) {
       restored = await _applyDownloadedSettings(
         externalSettings,
-        localSettings: _settingsRepository.load(),
         expectedLocalRevision: _settingsRepository.settingsSyncRevision,
+        expectedMutationGeneration:
+            _settingsRepository.settingsMutationGeneration,
       );
     }
     externalEvents.sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
@@ -960,15 +969,18 @@ class GoogleDriveSyncService implements SyncService {
 
   Future<bool> _applyDownloadedSettings(
     _DownloadedSettings remoteSettings, {
-    required AppSettings localSettings,
     required int expectedLocalRevision,
+    required int expectedMutationGeneration,
   }) async {
-    if (_settingsRepository.hasPendingSettingsSync ||
-        _settingsRepository.settingsSyncRevision != expectedLocalRevision) {
+    final applied = await _settingsRepository.applyRestoredSettingsIfUnchanged(
+      expectedRevision: expectedLocalRevision,
+      expectedMutationGeneration: expectedMutationGeneration,
+      buildRestoredSettings: (current) =>
+          _restoredSettingsTarget(remoteSettings, current),
+    );
+    if (!applied) {
       return false;
     }
-    final restored = _restoredSettingsTarget(remoteSettings, localSettings);
-    await _settingsRepository.save(restored, markSyncPending: false);
     settingsRevisionNotifier.value += 1;
     return true;
   }

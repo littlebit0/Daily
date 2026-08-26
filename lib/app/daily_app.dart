@@ -13,6 +13,7 @@ import '../core/security/biometric_auth_service.dart';
 import '../core/security/app_lock_privacy_service.dart';
 import '../core/settings/app_settings.dart';
 import '../core/localization/app_localizations.dart';
+import '../core/platform/windows_build_identity.dart';
 import '../features/calendar/presentation/month_calendar_page.dart';
 import '../features/onboarding/presentation/analytics_consent_page.dart';
 import '../features/onboarding/presentation/welcome_page.dart';
@@ -36,11 +37,13 @@ class DailyApp extends ConsumerWidget {
       valueListenable: analytics.consentPromptCompletedListenable,
       builder: (context, consentPromptCompleted, child) => MaterialApp(
         key: ValueKey(
-          '${settings.onboardingCompleted ? 'daily-home' : 'daily-onboarding'}-'
-          '${consentPromptCompleted ? 'consent-complete' : 'consent-pending'}',
+          settings.onboardingCompleted
+              ? 'daily-home-'
+                    '${consentPromptCompleted ? 'consent-complete' : 'consent-pending'}'
+              : 'daily-onboarding',
         ),
         title: defaultTargetPlatform == TargetPlatform.windows
-            ? 'DailyCalendar'
+            ? (isWindowsTestEdition ? 'DailyCalendar Test' : 'DailyCalendar')
             : 'Daily',
         debugShowCheckedModeBanner: false,
         locale: localeForLanguage(settings.language),
@@ -108,7 +111,7 @@ class DailyApp extends ConsumerWidget {
 }
 
 double appTextScaleForPlatform(AppTextSize size, TargetPlatform platform) {
-  if (_usesMacDesktopExperience(platform)) {
+  if (_usesDesktopAppExperience(platform)) {
     return switch (size) {
       AppTextSize.basic => 1.0,
       AppTextSize.large => 1.15,
@@ -118,7 +121,7 @@ double appTextScaleForPlatform(AppTextSize size, TargetPlatform platform) {
   return size.scale;
 }
 
-bool _usesMacDesktopExperience(TargetPlatform platform) {
+bool _usesDesktopAppExperience(TargetPlatform platform) {
   return platform == TargetPlatform.macOS || platform == TargetPlatform.windows;
 }
 
@@ -436,7 +439,7 @@ class _AppLockGateState extends ConsumerState<_AppLockGate>
   }
 
   void _handlePinKeyEvent(KeyEvent event) {
-    if (!_usesMacDesktopExperience(defaultTargetPlatform) ||
+    if (!_usesDesktopAppExperience(defaultTargetPlatform) ||
         !_pinEntryVisible ||
         event is! KeyDownEvent) {
       return;
@@ -675,8 +678,11 @@ class _AppHomeState extends ConsumerState<_AppHome>
     if (defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS) {
       _siriEventChangesChannel.setMethodCallHandler(_handleSiriEventChange);
+    }
+    final widgetService = ref.read(calendarWidgetServiceProvider);
+    if (widgetService.isSupported) {
       _widgetTodoChangesSubscription = ref
-          .read(appleWidgetServiceProvider)
+          .read(calendarWidgetServiceProvider)
           .todoActionChanges
           .listen((_) => unawaited(_processPendingWidgetTodoActions()));
     }
@@ -687,7 +693,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
       }),
     );
     _startSyncIfConnected();
-    _refreshAppleWidgets();
+    _refreshCalendarWidgets();
   }
 
   @override
@@ -741,7 +747,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
   }
 
   Future<void> _processPendingWidgetTodoActionsImpl() async {
-    final widgetService = ref.read(appleWidgetServiceProvider);
+    final widgetService = ref.read(calendarWidgetServiceProvider);
     final actions = await widgetService.pendingTodoActions();
     if (actions.isEmpty) return;
 
@@ -813,7 +819,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
           await alarmService.scheduleEventAlarm(event);
         }
       }
-      await ref.read(appleWidgetServiceProvider).refresh();
+      await ref.read(calendarWidgetServiceProvider).refresh();
       await _siriEventChangesChannel.invokeMethod<void>('acknowledgeChanges', {
         'tokens': changes.map((change) => change.token).toList(),
       });
@@ -881,7 +887,7 @@ class _AppHomeState extends ConsumerState<_AppHome>
         _processPendingSiriEventChanges();
         _processPendingWidgetTodoActions();
         _startSyncIfConnected();
-        _refreshAppleWidgets();
+        _refreshCalendarWidgets();
         break;
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
@@ -898,24 +904,24 @@ class _AppHomeState extends ConsumerState<_AppHome>
     ref.listen<AppSettings>(appSettingsProvider, (previous, next) {
       if (previous != next) {
         if (previous?.themeMode != next.themeMode) {
-          _refreshAppleWidgetTheme();
+          _refreshCalendarWidgetTheme();
         } else {
-          _refreshAppleWidgets();
+          _refreshCalendarWidgets();
         }
       }
     });
     return const MonthCalendarPage();
   }
 
-  void _refreshAppleWidgets() {
+  void _refreshCalendarWidgets() {
     unawaited(
-      ref.read(appleWidgetServiceProvider).refresh().catchError((_) {}),
+      ref.read(calendarWidgetServiceProvider).refresh().catchError((_) {}),
     );
   }
 
-  void _refreshAppleWidgetTheme() {
+  void _refreshCalendarWidgetTheme() {
     unawaited(
-      ref.read(appleWidgetServiceProvider).refreshTheme().catchError((_) {}),
+      ref.read(calendarWidgetServiceProvider).refreshTheme().catchError((_) {}),
     );
   }
 

@@ -1,8 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+
+@visibleForTesting
+bool shouldRunWindowsAutoUpdater({
+  required TargetPlatform targetPlatform,
+  required bool isReleaseMode,
+}) {
+  return targetPlatform == TargetPlatform.windows && isReleaseMode;
+}
 
 class AppUpdateService {
   AppUpdateService({http.Client? client}) : _client = client ?? http.Client();
@@ -14,7 +23,10 @@ class AppUpdateService {
   final http.Client _client;
 
   Future<void> checkAndInstallIfAvailable() async {
-    if (!Platform.isWindows) {
+    if (!shouldRunWindowsAutoUpdater(
+      targetPlatform: defaultTargetPlatform,
+      isReleaseMode: kReleaseMode,
+    )) {
       return;
     }
     try {

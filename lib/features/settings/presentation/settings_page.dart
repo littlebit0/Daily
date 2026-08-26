@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -64,6 +65,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   static const _accountActionTimeout = Duration(seconds: 10);
   static const _logoutAccountReserve = Duration(seconds: 3);
   static const _resetNotificationCleanupTimeout = Duration(seconds: 3);
+  static const _windowsSettingsPersistenceDelay = Duration(milliseconds: 240);
 
   final _apiKeyController = TextEditingController();
   late final Future<_AppVersionInfo> _appVersionInfo;
@@ -74,6 +76,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   var _bugReportBusy = false;
   var _deviceAuthenticationAvailable = false;
   var _biometricAuthenticationAvailable = false;
+  AppSettings? _pendingWindowsSettings;
+  Future<void> _windowsSettingsSaveTail = Future<void>.value();
+  var _windowsSettingsSaveRevision = 0;
   AppleAccount? _appleAccount;
   GoogleDriveAccount? _googleDriveAccount;
   DailyAccount? _dailyAccount;
@@ -186,7 +191,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(appSettingsProvider);
+    final storedSettings = ref.watch(appSettingsProvider);
+    final settings = defaultTargetPlatform == TargetPlatform.windows
+        ? _pendingWindowsSettings ?? storedSettings
+        : storedSettings;
     final analytics = ref.watch(productAnalyticsProvider);
     final appleSignInService = ref.watch(appleSignInServiceProvider);
     final account = _dailyAccount;
@@ -395,6 +403,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         presets: const [0, 10, 30, 60, 1440],
                         onChanged: (values) => _save(
                           settings.copyWith(defaultReminderMinutesList: values),
+                          changedFrom: settings,
                         ),
                         onCustom: () async {
                           final value = await _showNumberDialog(
@@ -412,6 +421,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                       value,
                                     ]),
                               ),
+                              changedFrom: settings,
                             );
                           }
                         },
@@ -429,16 +439,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             allDayReminderHour: time.hour,
                             allDayReminderMinute: time.minute,
                           ),
+                          changedFrom: settings,
                         ),
                       ),
                       const Divider(height: 1),
                       _TimeFormatTile(
                         use24HourTime: settings.use24HourTime,
-                        onChanged: (value) =>
-                            _save(settings.copyWith(use24HourTime: value)),
+                        onChanged: (value) => _save(
+                          settings.copyWith(use24HourTime: value),
+                          changedFrom: settings,
+                        ),
                       ),
                       const Divider(height: 1),
-                      SwitchListTile(
+                      _AnimatedSettingsSwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         secondary: const _SettingsLeadingIcon(
                           Icons.wb_sunny_outlined,
@@ -452,7 +465,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           final updated = settings.copyWith(
                             morningBriefingEnabled: value,
                           );
-                          await _save(updated);
+                          await _save(updated, changedFrom: settings);
                           if (value) {
                             await ref
                                 .read(notificationServiceProvider)
@@ -480,7 +493,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               morningBriefingHour: time.hour,
                               morningBriefingMinute: time.minute,
                             );
-                            await _save(updated);
+                            await _save(updated, changedFrom: settings);
                             await ref
                                 .read(notificationServiceProvider)
                                 .scheduleMorningBriefing(
@@ -494,6 +507,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         offsets: settings.dDayReminderOffsets,
                         onChanged: (offsets) => _save(
                           settings.copyWith(dDayReminderOffsets: offsets),
+                          changedFrom: settings,
                         ),
                         onCustom: () async {
                           final value = await _showNumberDialog(
@@ -509,6 +523,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             }.toList()..sort();
                             await _save(
                               settings.copyWith(dDayReminderOffsets: offsets),
+                              changedFrom: settings,
                             );
                           }
                         },
@@ -541,7 +556,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 .toList(),
                             onChanged: (language) {
                               if (language != null) {
-                                _save(settings.copyWith(language: language));
+                                _save(
+                                  settings.copyWith(language: language),
+                                  changedFrom: settings,
+                                );
                               }
                             },
                           ),
@@ -569,8 +587,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 values: AppThemeMode.values,
                                 selected: settings.themeMode,
                                 labelFor: context.l10n.themeName,
-                                onChanged: (mode) =>
-                                    _save(settings.copyWith(themeMode: mode)),
+                                onChanged: (mode) => _save(
+                                  settings.copyWith(themeMode: mode),
+                                  changedFrom: settings,
+                                ),
                               ),
                             ),
                           ],
@@ -622,12 +642,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 context.tr(startsOnMonday ? '월' : '일'),
                             onChanged: (value) => _save(
                               settings.copyWith(weekStartsOnMonday: value),
+                              changedFrom: settings,
                             ),
                           ),
                         ),
                       ),
                       const Divider(height: 1),
-                      SwitchListTile(
+                      _AnimatedSettingsSwitchListTile(
+                        tileKey: const ValueKey('show-lunar-dates-toggle'),
                         contentPadding: EdgeInsets.zero,
                         secondary: const _SettingsLeadingIcon(
                           Icons.nightlight_outlined,
@@ -637,14 +659,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         subtitle: _SettingsDescription(
                           context.tr('월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.'),
                         ),
-                        onChanged: (value) =>
-                            _save(settings.copyWith(showLunarDates: value)),
+                        onChanged: (value) => _save(
+                          settings.copyWith(showLunarDates: value),
+                          changedFrom: settings,
+                        ),
                       ),
                       if (supportsAdjacentMonthDateSetting(
                         defaultTargetPlatform,
                       )) ...[
                         const Divider(height: 1),
-                        SwitchListTile(
+                        _AnimatedSettingsSwitchListTile(
+                          tileKey: const ValueKey(
+                            'show-adjacent-month-dates-toggle',
+                          ),
                           contentPadding: EdgeInsets.zero,
                           secondary: const _SettingsLeadingIcon(
                             Icons.date_range_outlined,
@@ -673,6 +700,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   settings.copyWith(
                                     showAdjacentMonthDates: value,
                                   ),
+                                  changedFrom: settings,
                                 ),
                         ),
                       ],
@@ -698,6 +726,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                     ? false
                                     : settings.showAdjacentMonthDates,
                               ),
+                              changedFrom: settings,
                             ),
                           ),
                         ),
@@ -722,6 +751,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             onChanged: (value) {
                               _save(
                                 settings.copyWith(defaultCalendarView: value),
+                                changedFrom: settings,
                               );
                               ref
                                       .read(calendarViewModeProvider.notifier)
@@ -749,6 +779,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             ),
                             onChanged: (value) => _save(
                               settings.copyWith(weekDayLayoutMode: value),
+                              changedFrom: settings,
                             ),
                           ),
                         ),
@@ -775,6 +806,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               settings.copyWith(
                                 calendarEventTitleAlignment: value,
                               ),
+                              changedFrom: settings,
                             ),
                           ),
                         ),
@@ -782,8 +814,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       const Divider(height: 1),
                       _AppTextSizeSlider(
                         textSize: settings.appTextSize,
-                        onChanged: (value) =>
-                            _save(settings.copyWith(appTextSize: value)),
+                        onChanged: (value) => _save(
+                          settings.copyWith(appTextSize: value),
+                          changedFrom: settings,
+                        ),
                       ),
                     ],
                   ),
@@ -793,21 +827,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     children: [
                       ValueListenableBuilder<bool>(
                         valueListenable: analytics.enabledListenable,
-                        builder: (context, enabled, _) => SwitchListTile(
-                          key: const ValueKey('anonymous-analytics-toggle'),
-                          contentPadding: EdgeInsets.zero,
-                          secondary: const _SettingsLeadingIcon(
-                            Icons.insights_outlined,
-                          ),
-                          value: enabled,
-                          title: Text(context.tr('익명 사용성 분석 허용')),
-                          subtitle: _SettingsDescription(
-                            context.tr(
-                              '일정 내용, 검색어, 계정 정보 없이 화면과 기능 사용, 오류 범주, 성능 정보만 수집합니다.',
+                        builder: (context, enabled, _) =>
+                            _AnimatedSettingsSwitchListTile(
+                              tileKey: const ValueKey(
+                                'anonymous-analytics-toggle',
+                              ),
+                              contentPadding: EdgeInsets.zero,
+                              secondary: const _SettingsLeadingIcon(
+                                Icons.insights_outlined,
+                              ),
+                              value: enabled,
+                              title: Text(context.tr('익명 사용성 분석 허용')),
+                              subtitle: _SettingsDescription(
+                                context.tr(
+                                  '일정 내용, 검색어, 계정 정보 없이 화면과 기능 사용, 오류 범주, 성능 정보만 수집합니다.',
+                                ),
+                              ),
+                              onChanged: (value) => analytics.setEnabled(value),
                             ),
-                          ),
-                          onChanged: (value) => analytics.setEnabled(value),
-                        ),
                       ),
                       const Divider(height: 1),
                       ListTile(
@@ -823,7 +860,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         onTap: _deleteAnalyticsData,
                       ),
                       const Divider(height: 1),
-                      SwitchListTile(
+                      _AnimatedSettingsSwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         secondary: const _SettingsLeadingIcon(
                           Icons.lock_outline,
@@ -850,7 +887,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ),
                         if (settings.appLockMethod == AppLockMethod.appPin) ...[
                           const Divider(height: 1),
-                          SwitchListTile(
+                          _AnimatedSettingsSwitchListTile(
                             contentPadding: EdgeInsets.zero,
                             secondary: const _SettingsLeadingIcon(
                               Icons.fingerprint,
@@ -934,12 +971,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               settings.copyWith(
                                 calendarEventSortPriority: value,
                               ),
+                              changedFrom: settings,
                             ),
                           ),
                         ),
                       ),
-                      SwitchListTile(
-                        key: const ValueKey('holiday-background-setting'),
+                      _AnimatedSettingsSwitchListTile(
+                        tileKey: const ValueKey('holiday-background-setting'),
                         contentPadding: EdgeInsets.zero,
                         secondary: const _SettingsLeadingIcon(
                           Icons.format_color_fill_outlined,
@@ -953,6 +991,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           settings.copyWith(
                             calendarHolidayBackgroundEnabled: value,
                           ),
+                          changedFrom: settings,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -985,7 +1024,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   context.tr('개발 중입니다.'),
                                 ),
                               ),
-                              SwitchListTile(
+                              _AnimatedSettingsSwitchListTile(
                                 contentPadding: EdgeInsets.zero,
                                 secondary: const _SettingsLeadingIcon(
                                   Icons.psychology_outlined,
@@ -994,7 +1033,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 title: Text(context.tr('Gemini 사용')),
                                 onChanged: (_) {},
                               ),
-                              SwitchListTile(
+                              _AnimatedSettingsSwitchListTile(
                                 contentPadding: EdgeInsets.zero,
                                 secondary: const _SettingsLeadingIcon(
                                   Icons.shield_outlined,
@@ -1386,12 +1425,76 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _save(AppSettings settings, {bool backup = true}) async {
-    await ref.read(settingsRepositoryProvider).save(settings);
-    ref.read(appSettingsProvider.notifier).state = settings;
+  Future<void> _save(
+    AppSettings settings, {
+    required AppSettings changedFrom,
+    bool backup = true,
+  }) async {
+    final settingsNotifier = ref.read(appSettingsProvider.notifier);
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      // Windows shared_preferences rewrites its complete JSON file
+      // synchronously for every changed key. Keep that work outside the
+      // control-motion window, and publish only the newest persisted value.
+      final revision = ++_windowsSettingsSaveRevision;
+      setState(() => _pendingWindowsSettings = settings);
+      final repository = ref.read(settingsRepositoryProvider);
+      final mutationGeneration = repository.settingsMutationGeneration;
+      final backupService = ref.read(googleDriveSyncServiceProvider);
+      final motionReady = Future<void>.delayed(
+        _windowsSettingsPersistenceDelay,
+      );
+      var didPersist = false;
+      final saveOperation = _windowsSettingsSaveTail.then((_) async {
+        await motionReady;
+        if (mutationGeneration != repository.settingsMutationGeneration) {
+          return;
+        }
+        await repository.save(settings, changedFrom: changedFrom);
+        didPersist = true;
+      });
+      _windowsSettingsSaveTail = saveOperation.catchError((Object _) {});
+      try {
+        await saveOperation;
+      } on Object {
+        if (revision == _windowsSettingsSaveRevision) {
+          settingsNotifier.state = repository.load();
+          if (mounted) {
+            setState(() => _pendingWindowsSettings = null);
+          }
+        }
+        rethrow;
+      }
+      if (!didPersist) {
+        if (revision == _windowsSettingsSaveRevision) {
+          if (mounted) {
+            setState(() => _pendingWindowsSettings = null);
+          }
+        }
+        return;
+      }
+      if (backup) {
+        unawaited(backupService.queueSettingsBackup().catchError((_) {}));
+      }
+      if (revision != _windowsSettingsSaveRevision) {
+        return;
+      }
+      settingsNotifier.state = repository.load();
+      if (mounted && revision == _windowsSettingsSaveRevision) {
+        setState(() => _pendingWindowsSettings = null);
+      }
+      return;
+    } else {
+      await ref
+          .read(settingsRepositoryProvider)
+          .save(settings, changedFrom: changedFrom);
+      settingsNotifier.state = ref.read(settingsRepositoryProvider).load();
+    }
     if (backup) {
       unawaited(
-        ref.read(googleDriveSyncServiceProvider).backupNow().catchError((_) {}),
+        ref
+            .read(googleDriveSyncServiceProvider)
+            .queueSettingsBackup()
+            .catchError((_) {}),
       );
     }
   }
@@ -1407,6 +1510,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         appLockMethod: method,
         appLockBiometricsEnabled: false,
       ),
+      changedFrom: settings,
     );
   }
 
@@ -1416,12 +1520,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (confirmed != true) {
       return;
     }
+    await _save(
+      settings.copyWith(appLockEnabled: false, appLockBiometricsEnabled: false),
+      changedFrom: settings,
+    );
     if (settings.appLockMethod == AppLockMethod.appPin) {
       await repository.deleteAppLockPin();
     }
-    await _save(
-      settings.copyWith(appLockEnabled: false, appLockBiometricsEnabled: false),
-    );
   }
 
   Future<void> _changeAppLockMethod(
@@ -1438,13 +1543,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       return;
     }
     final repository = ref.read(settingsRepositoryProvider);
+    await _save(
+      settings.copyWith(appLockMethod: method, appLockBiometricsEnabled: false),
+      changedFrom: settings,
+    );
     if (settings.appLockMethod == AppLockMethod.appPin &&
         method != AppLockMethod.appPin) {
       await repository.deleteAppLockPin();
     }
-    await _save(
-      settings.copyWith(appLockMethod: method, appLockBiometricsEnabled: false),
-    );
   }
 
   Future<bool> _prepareLockMethod(AppLockMethod method) async {
@@ -1552,7 +1658,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (!confirmed) {
       return;
     }
-    await _save(settings.copyWith(appLockBiometricsEnabled: enabled));
+    await _save(
+      settings.copyWith(appLockBiometricsEnabled: enabled),
+      changedFrom: settings,
+    );
   }
 
   Future<bool> _confirmCurrentLockMethod(AppLockMethod method) async {
@@ -1657,6 +1766,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     ];
     await _save(
       settings.copyWith(categories: _normalizeCategories(categories)),
+      changedFrom: settings,
       backup: false,
     );
     _queueCategoryBackup();
@@ -1673,8 +1783,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     } else {
       hidden.add(category.id);
     }
-    await _save(settings.copyWith(hiddenCategoryIds: hidden.toList()));
-    await ref.read(appleWidgetServiceProvider).refresh();
+    await _save(
+      settings.copyWith(hiddenCategoryIds: hidden.toList()),
+      changedFrom: settings,
+    );
+    await ref.read(calendarWidgetServiceProvider).refresh();
   }
 
   Future<void> _reorderCategories(
@@ -1685,7 +1798,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final categories = [...settings.categories];
     final category = categories.removeAt(oldIndex);
     categories.insert(newIndex, category);
-    await _save(settings.copyWith(categories: categories));
+    await _save(
+      settings.copyWith(categories: categories),
+      changedFrom: settings,
+    );
   }
 
   Future<void> _editCategory(
@@ -1711,6 +1827,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         categories: _normalizeCategories(categories),
         hiddenCategoryIds: hiddenCategoryIds,
       ),
+      changedFrom: settings,
       backup: false,
     );
     await ref
@@ -1764,6 +1881,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             .where((id) => id != category.id)
             .toList(),
       ),
+      changedFrom: settings,
       backup: false,
     );
     _queueCategoryBackup();
@@ -2140,7 +2258,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       await ref.read(settingsRepositoryProvider).resetAll();
       ref.read(appSettingsProvider.notifier).state = AppSettings();
       unawaited(
-        ref.read(appleWidgetServiceProvider).refresh().catchError((_) {}),
+        ref.read(calendarWidgetServiceProvider).refresh().catchError((_) {}),
       );
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
@@ -2237,7 +2355,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       await ref.read(appleSignInServiceProvider).signOut();
       ref.read(appSettingsProvider.notifier).state = AppSettings();
       unawaited(
-        ref.read(appleWidgetServiceProvider).refresh().catchError((_) {}),
+        ref.read(calendarWidgetServiceProvider).refresh().catchError((_) {}),
       );
       if (mounted) {
         setState(() {
@@ -2426,6 +2544,179 @@ class _AppLockMethodSlider extends StatelessWidget {
   }
 }
 
+class _AnimatedSettingsSwitchListTile extends StatefulWidget {
+  const _AnimatedSettingsSwitchListTile({
+    this.tileKey,
+    required this.value,
+    required this.title,
+    required this.onChanged,
+    this.subtitle,
+    this.secondary,
+    this.contentPadding = EdgeInsets.zero,
+  });
+
+  final Key? tileKey;
+  final bool value;
+  final Widget title;
+  final Widget? subtitle;
+  final Widget? secondary;
+  final EdgeInsetsGeometry contentPadding;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  State<_AnimatedSettingsSwitchListTile> createState() =>
+      _AnimatedSettingsSwitchListTileState();
+}
+
+class _AnimatedSettingsSwitchListTileState
+    extends State<_AnimatedSettingsSwitchListTile> {
+  late final WidgetStatesController _statesController;
+  var _pointerPressed = false;
+  var _tilePressed = false;
+  int? _activePointer;
+  Offset? _pointerOrigin;
+
+  bool get _pressed =>
+      widget.onChanged != null &&
+      (_pointerPressed ||
+          (_tilePressed &&
+              !(_activePointer != null && _pointerOrigin == null)));
+
+  @override
+  void initState() {
+    super.initState();
+    _statesController = WidgetStatesController()..addListener(_handleStates);
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedSettingsSwitchListTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onChanged == null) {
+      _activePointer = null;
+      _pointerOrigin = null;
+      _pointerPressed = false;
+      _tilePressed = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _statesController
+      ..removeListener(_handleStates)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final switchOverlay = WidgetStateProperty.resolveWith<Color?>((states) {
+      if (states.contains(WidgetState.pressed)) {
+        return colorScheme.primary.withValues(alpha: 0.24);
+      }
+      if (states.contains(WidgetState.hovered)) {
+        return colorScheme.primary.withValues(alpha: 0.12);
+      }
+      if (states.contains(WidgetState.focused)) {
+        return colorScheme.primary.withValues(alpha: 0.16);
+      }
+      return null;
+    });
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: widget.onChanged == null ? null : _handlePointerDown,
+      onPointerMove: widget.onChanged == null ? null : _handlePointerMove,
+      onPointerUp: widget.onChanged == null ? null : _handlePointerEnd,
+      onPointerCancel: widget.onChanged == null ? null : _handlePointerEnd,
+      child: AnimatedScale(
+        key: const ValueKey('settings-switch-press-scale'),
+        scale: _pressed ? 0.985 : 1,
+        duration: _pressed
+            ? const Duration(milliseconds: 75)
+            : const Duration(milliseconds: 170),
+        curve: _pressed ? Curves.easeOutCubic : Curves.easeOutBack,
+        child: AnimatedContainer(
+          key: const ValueKey('settings-switch-press-surface'),
+          duration: _pressed
+              ? const Duration(milliseconds: 75)
+              : const Duration(milliseconds: 170),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: _pressed
+                ? colorScheme.primary.withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
+            child: SwitchListTile(
+              key: widget.tileKey,
+              statesController: _statesController,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding: widget.contentPadding,
+              secondary: widget.secondary,
+              value: widget.value,
+              title: widget.title,
+              subtitle: widget.subtitle,
+              overlayColor: switchOverlay,
+              hoverColor: colorScheme.primary.withValues(alpha: 0.05),
+              onChanged: widget.onChanged,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleStates() {
+    final pressed = _statesController.value.contains(WidgetState.pressed);
+    if (mounted && pressed != _tilePressed) {
+      setState(() => _tilePressed = pressed);
+    }
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    if (!mounted ||
+        _activePointer != null ||
+        (event.buttons & kPrimaryButton) == 0) {
+      return;
+    }
+    _activePointer = event.pointer;
+    _pointerOrigin = event.position;
+    _setPointerPressed(true);
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    final origin = _pointerOrigin;
+    if (event.pointer != _activePointer || origin == null) {
+      return;
+    }
+    if ((event.position - origin).distance > kTouchSlop) {
+      _pointerOrigin = null;
+      _setPointerPressed(false);
+    }
+  }
+
+  void _handlePointerEnd(PointerEvent event) {
+    if (event.pointer != _activePointer) {
+      return;
+    }
+    _activePointer = null;
+    _pointerOrigin = null;
+    _setPointerPressed(false);
+  }
+
+  void _setPointerPressed(bool pressed) {
+    if (mounted && _pointerPressed != pressed) {
+      setState(() => _pointerPressed = pressed);
+    }
+  }
+}
+
 class _ThreeWayCapsule<T> extends StatefulWidget {
   const _ThreeWayCapsule({
     super.key,
@@ -2448,8 +2739,14 @@ class _ThreeWayCapsule<T> extends StatefulWidget {
 
 class _ThreeWayCapsuleState<T> extends State<_ThreeWayCapsule<T>> {
   T? _dragValue;
+  T? _pressedValue;
+  int? _activePointer;
+  Offset? _pointerOrigin;
+  bool? _pointerDragIsHorizontal;
 
-  T get _visibleValue => _dragValue ?? widget.selected;
+  T get _visibleValue => _dragValue ?? _pressedValue ?? widget.selected;
+
+  bool get _interactionActive => _dragValue != null || _pressedValue != null;
 
   @override
   Widget build(BuildContext context) {
@@ -2457,80 +2754,178 @@ class _ThreeWayCapsuleState<T> extends State<_ThreeWayCapsule<T>> {
     final colorScheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     return LayoutBuilder(
-      builder: (context, constraints) => GestureDetector(
+      builder: (context, constraints) => Listener(
         behavior: HitTestBehavior.opaque,
-        onTapUp: (details) =>
-            _commitAt(details.localPosition.dx, constraints.maxWidth),
-        onHorizontalDragStart: (details) =>
-            _previewAt(details.localPosition.dx, constraints.maxWidth),
-        onHorizontalDragUpdate: (details) =>
-            _previewAt(details.localPosition.dx, constraints.maxWidth),
-        onHorizontalDragEnd: (_) {
-          final value = _dragValue;
-          setState(() => _dragValue = null);
-          if (value != null && _isEnabled(value)) {
-            widget.onChanged(value);
-          }
-        },
-        onHorizontalDragCancel: () => setState(() => _dragValue = null),
-        child: Container(
-          height: height,
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            color: dark
-                ? colorScheme.surfaceContainerHigh
-                : const Color(0xffeef2f7),
-            borderRadius: BorderRadius.circular(height / 2),
-            border: Border.all(color: colorScheme.outlineVariant),
-          ),
-          child: Stack(
-            children: [
-              AnimatedAlign(
-                duration: const Duration(milliseconds: 150),
-                curve: Curves.easeOutCubic,
-                alignment: _alignmentFor(_visibleValue),
-                child: FractionallySizedBox(
-                  widthFactor: 1 / widget.values.length,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(height / 2),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x1a0f172a),
-                          blurRadius: 6,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
+        onPointerDown: (details) =>
+            _handlePointerDown(details, constraints.maxWidth),
+        onPointerMove: _handlePointerMove,
+        onPointerUp: _handlePointerEnd,
+        onPointerCancel: _handlePointerEnd,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (details) {
+            if (_pointerDragIsHorizontal == true) {
+              _previewAt(details.localPosition.dx, constraints.maxWidth);
+            }
+          },
+          onHorizontalDragUpdate: (details) {
+            if (_pointerDragIsHorizontal == true) {
+              _previewAt(details.localPosition.dx, constraints.maxWidth);
+            }
+          },
+          onHorizontalDragEnd: (_) {
+            final value = _dragValue;
+            if (_pointerDragIsHorizontal == true &&
+                value != null &&
+                _isEnabled(value)) {
+              widget.onChanged(value);
+            }
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _dragValue = null;
+              _pressedValue = null;
+              _pointerDragIsHorizontal = null;
+            });
+          },
+          onHorizontalDragCancel: () {
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _dragValue = null;
+              _pressedValue = null;
+              _pointerDragIsHorizontal = null;
+            });
+          },
+          child: Container(
+            height: height,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: dark
+                  ? colorScheme.surfaceContainerHigh
+                  : const Color(0xffeef2f7),
+              borderRadius: BorderRadius.circular(height / 2),
+              border: Border.all(color: colorScheme.outlineVariant),
+            ),
+            child: Stack(
+              children: [
+                AnimatedAlign(
+                  key: const ValueKey('settings-capsule-selection-indicator'),
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  alignment: _alignmentFor(_visibleValue),
+                  child: AnimatedScale(
+                    key: const ValueKey(
+                      'settings-capsule-selection-press-scale',
                     ),
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  for (final value in widget.values)
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          widget.labelFor(value),
-                          maxLines: 1,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: !_isEnabled(value)
-                                    ? Theme.of(context).disabledColor
-                                    : value == _visibleValue
-                                    ? colorScheme.primary
-                                    : colorScheme.onSurfaceVariant,
-                                fontWeight: value == _visibleValue
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                              ),
+                    scale: _interactionActive ? 0.93 : 1,
+                    duration: _interactionActive
+                        ? const Duration(milliseconds: 75)
+                        : const Duration(milliseconds: 160),
+                    curve: _interactionActive
+                        ? Curves.easeOutCubic
+                        : Curves.easeOutBack,
+                    child: FractionallySizedBox(
+                      widthFactor: 1 / widget.values.length,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(height / 2),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x1a0f172a),
+                              blurRadius: 6,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                ],
-              ),
-            ],
+                  ),
+                ),
+                Material(
+                  type: MaterialType.transparency,
+                  child: Row(
+                    children: [
+                      for (final (index, value) in widget.values.indexed)
+                        Expanded(
+                          child: Semantics(
+                            button: true,
+                            selected: value == widget.selected,
+                            enabled: _isEnabled(value),
+                            inMutuallyExclusiveGroup: true,
+                            label: widget.labelFor(value),
+                            onTap: _isEnabled(value)
+                                ? () => _commitValue(value)
+                                : null,
+                            child: InkWell(
+                              key: ValueKey('settings-capsule-option-$index'),
+                              excludeFromSemantics: true,
+                              borderRadius: BorderRadius.circular(height / 2),
+                              overlayColor: WidgetStateProperty.resolveWith((
+                                states,
+                              ) {
+                                if (states.contains(WidgetState.pressed)) {
+                                  return colorScheme.primary.withValues(
+                                    alpha: 0.18,
+                                  );
+                                }
+                                if (states.contains(WidgetState.hovered)) {
+                                  return colorScheme.primary.withValues(
+                                    alpha: 0.08,
+                                  );
+                                }
+                                if (states.contains(WidgetState.focused)) {
+                                  return colorScheme.primary.withValues(
+                                    alpha: 0.12,
+                                  );
+                                }
+                                return null;
+                              }),
+                              onHighlightChanged: _isEnabled(value)
+                                  ? (highlighted) => _handleHighlightChange(
+                                      value,
+                                      highlighted,
+                                    )
+                                  : null,
+                              onTap: _isEnabled(value)
+                                  ? () => _commitValue(value)
+                                  : null,
+                              child: Center(
+                                child: AnimatedDefaultTextStyle(
+                                  duration: const Duration(milliseconds: 180),
+                                  curve: Curves.easeOutCubic,
+                                  style:
+                                      (Theme.of(context).textTheme.labelSmall ??
+                                              const TextStyle())
+                                          .copyWith(
+                                            color: !_isEnabled(value)
+                                                ? Theme.of(
+                                                    context,
+                                                  ).disabledColor
+                                                : value == _visibleValue
+                                                ? colorScheme.primary
+                                                : colorScheme.onSurfaceVariant,
+                                            fontWeight: value == _visibleValue
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                          ),
+                                  child: Text(
+                                    widget.labelFor(value),
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -2539,17 +2934,84 @@ class _ThreeWayCapsuleState<T> extends State<_ThreeWayCapsule<T>> {
 
   bool _isEnabled(T value) => widget.enabledFor?.call(value) ?? true;
 
-  void _previewAt(double dx, double width) {
-    final value = _valueAt(dx, width);
-    if (_isEnabled(value) && value != _dragValue) {
-      setState(() => _dragValue = value);
+  void _handlePointerDown(PointerDownEvent event, double width) {
+    if (!mounted ||
+        _activePointer != null ||
+        (event.buttons & kPrimaryButton) == 0) {
+      return;
+    }
+    final value = _valueAt(event.localPosition.dx, width);
+    if (!_isEnabled(value)) {
+      return;
+    }
+    _activePointer = event.pointer;
+    _pointerOrigin = event.position;
+    _pointerDragIsHorizontal = null;
+    _setPressedValue(value);
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    final origin = _pointerOrigin;
+    if (event.pointer != _activePointer || origin == null) {
+      return;
+    }
+    final delta = event.position - origin;
+    if (delta.distance > kTouchSlop) {
+      _pointerDragIsHorizontal = delta.dx.abs() > delta.dy.abs();
+      _pointerOrigin = null;
+      _clearPressedValue();
     }
   }
 
-  void _commitAt(double dx, double width) {
+  void _handlePointerEnd(PointerEvent event) {
+    if (event.pointer != _activePointer) {
+      return;
+    }
+    _activePointer = null;
+    _pointerOrigin = null;
+    _clearPressedValue();
+  }
+
+  void _handleHighlightChange(T value, bool highlighted) {
+    if (!highlighted) {
+      _clearPressedValue(value);
+      return;
+    }
+    // Tap highlight can arrive after a parent drag has already exceeded the
+    // pointer slop. Do not let that delayed highlight re-arm a cancelled press.
+    if (_activePointer == null || _pointerOrigin != null) {
+      _setPressedValue(value);
+    }
+  }
+
+  void _previewAt(double dx, double width) {
     final value = _valueAt(dx, width);
+    if (_isEnabled(value) && value != _dragValue) {
+      setState(() {
+        _dragValue = value;
+        _pressedValue = null;
+      });
+    }
+  }
+
+  void _setPressedValue(T value) {
+    if (mounted && _isEnabled(value) && value != _pressedValue) {
+      setState(() => _pressedValue = value);
+    }
+  }
+
+  void _commitValue(T value) {
     if (_isEnabled(value)) {
       widget.onChanged(value);
+    }
+    _clearPressedValue();
+  }
+
+  void _clearPressedValue([T? value]) {
+    if (mounted &&
+        _pressedValue != null &&
+        (value == null || _pressedValue == value)) {
+      setState(() => _pressedValue = null);
     }
   }
 

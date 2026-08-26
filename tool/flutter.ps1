@@ -50,8 +50,13 @@ if (-not (Test-Path $flutter)) {
 
 $env:PUB_CACHE = Join-Path $toolRoot 'PubCache'
 $env:GRADLE_USER_HOME = Join-Path $toolRoot 'GradleCache'
-$env:JAVA_HOME = 'C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot'
+$env:JAVA_HOME = Select-ExistingPath @(
+  $env:JAVA_HOME,
+  'C:\Program Files\Android\Android Studio\jbr',
+  'C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot'
+) 'bin\java.exe'
 $env:ANDROID_HOME = Select-ExistingPath @(
+  (Join-Path $projectRoot 'work\android-sdk'),
   (Join-Path $toolRoot 'AndroidSdk'),
   (Join-Path $driveRoot 'AndroidSdk'),
   'D:\AndroidSdk'

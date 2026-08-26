@@ -3,6 +3,7 @@
 ## 릴리스 기준
 
 - 앱 표시 버전 및 빌드: `3.3.1 (3.3.1)`
+- Android 버전 이름 및 코드: `3.3.1 (331)`
 - Apple 앱 번들 ID: `com.littlebit0.daily`
 - Apple 위젯 번들 ID: `com.littlebit0.daily.widgets`
 - 비교 기준: `3.1.0`
@@ -30,6 +31,23 @@
   보기, 달력과 AI 아이콘을 더 명확한 형태로 교체했습니다.
 - macOS 월간 및 주간·일간 목록/스케줄의 트랙패드 페이지 이동 회귀를
   수정했습니다.
+- Apple 전용 Siri 기능을 제외한 공통 온보딩과 계정·설정 UI를 Android와
+  Windows에 맞춰 적용하고, 신규 설치에서 익명 분석 선택 단계가 반복되던 문제를
+  수정했습니다.
+- Android의 고주사율 화면과 터치 입력, 삼성 생체 인증 반복 요청, 월간 이동 시
+  월 표시와 인접한 달 날짜 표시를 보정했습니다.
+- Android 월간·오늘 일정·D-day 홈 화면 위젯을 새 디자인으로 정리하고 위젯에서
+  Todo 완료 상태를 바로 변경할 수 있도록 했습니다.
+- Windows 트레이에 월간·오늘 일정·D-day를 확인하고 Todo를 변경할 수 있는 미니
+  캘린더를 추가했습니다.
+- Windows 월간·주간·일간 보기에서 마우스 휠과 가로 휠 페이지 이동을 보정하고,
+  주간·일간 스케줄의 세로 이동을 월간 보기와 같은 완화 애니메이션으로
+  통일했습니다.
+- Windows 설정 저장이 UI isolate를 막아 애니메이션 프레임이 약 0.3~0.5초
+  정지하던 문제를 수정했습니다. 변경 키만 직렬 저장하고 눌림 모션 뒤에
+  반영하며, 빠른 연속 입력과 동기화·복원 경합에서도 최신 설정을 보존합니다.
+- Windows 앱 이름과 아이콘을 DailyCalendar로 통일하고, 단일 설치 프로그램과
+  GitHub 최신 릴리스 기반 자동 업데이트를 지원합니다.
 - 선택형 익명 사용성 분석은 기본 비활성화로 제공하며 사용자가 동의한
   Release 빌드에서만 운영 집계 서버로 전송합니다. 일정 내용, 검색어, 계정,
   광고 식별자와 영구 기기 식별자는 분석에 포함하지 않습니다.
@@ -38,10 +56,12 @@
 
 - `git diff --check`
 - `./tool/flutter.sh analyze --no-pub`
-- `./tool/flutter.sh test --no-pub` 전체 250개
+- `./tool/flutter.ps1 test --no-pub --concurrency=1` 전체 288개
 - `python3 -m unittest test/tool/analytics_receiver_test.py` 전체 4개
 - iOS/macOS Release 산출물에 운영 분석 HTTPS 주소 포함 여부 확인
 - iOS/macOS 앱과 위젯 버전 및 빌드 `3.3.1 (3.3.1)` 확인
+- Android Release APK 및 Windows Release 설치 프로그램·ZIP 빌드 확인
+- Windows Profile/AOT 테스트판에서 설정 토글 6회 측정 시 느린 프레임 0건 확인
 
 ## GitHub 배포 파일
 
@@ -49,6 +69,9 @@ GitHub Actions는 `v3.3.1` 릴리스에서 다음 공개 검증용 파일을 생
 
 - `daily-ios-3.3.1-unsigned.ipa`
 - `daily-macos-3.3.1-unsigned.dmg`
+- `daily-android-3.3.1.apk`
+- `daily-windows-3.3.1-setup.exe`
+- `daily-windows-3.3.1.zip`
 
 GitHub의 unsigned IPA와 DMG는 App Store 제출 파일이 아닙니다. Transporter
 제출용 서명 IPA/PKG는 로컬 `dist/transporter-upload/3.3.1`에만 생성합니다.
@@ -60,3 +83,5 @@ GitHub의 unsigned IPA와 DMG는 App Store 제출 파일이 아닙니다. Transp
 - 동의 후 허용된 익명 집계만 서버에 반영되는지 확인
 - Apple·Google·로컬 계정 진입과 계정 설정 작업 확인
 - 실제 iPhone/iPad와 Mac에서 Todo, 위젯, Siri, 검색·필터와 일정 편집 확인
+- 실제 Android에서 터치·고주사율·생체 인증·홈 화면 위젯 확인
+- Windows 설치·자동 업데이트, 트레이 미니 캘린더와 마우스 페이지 이동 확인

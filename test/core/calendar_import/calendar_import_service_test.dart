@@ -1,9 +1,21 @@
 import 'package:daily/core/calendar_import/calendar_import_models.dart';
 import 'package:daily/core/calendar_import/calendar_import_service.dart';
+import 'package:daily/core/calendar_import/google_calendar_source.dart';
+import 'package:daily/core/calendar_import/native_calendar_source.dart';
+import 'package:daily/core/notifications/notification_service.dart';
+import 'package:daily/core/settings/app_settings.dart';
+import 'package:daily/core/settings/settings_repository.dart';
+import 'package:daily/core/sync/google_drive_auth_service.dart';
+import 'package:daily/core/sync/sync_service.dart';
+import 'package:daily/features/events/application/event_command_service.dart';
+import 'package:daily/features/events/domain/event_repository.dart';
 import 'package:daily/features/events/domain/recurrence_rule.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('CalendarImportService.externalEventId', () {
     ExternalCalendarEvent event({
       String sourceId = 'event-1',
@@ -96,4 +108,110 @@ void main() {
       expect(rule.until, DateTime.utc(2026, 7, 31).toLocal());
     });
   });
+
+  test(
+    'imported category save preserves a concurrent unrelated setting change',
+    () async {
+      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = _ConcurrentImportSettingsRepository(
+        preferences: preferences,
+      )..injectThemeChangeBeforeNextSave();
+      final eventRepository = _UnusedEventRepository();
+      final service = CalendarImportService(
+        nativeSource: _EmptyNativeCalendarSource(),
+        googleSource: GoogleCalendarSource(
+          authService: GoogleDriveAuthService(useDesktopOAuth: false),
+        ),
+        eventRepository: eventRepository,
+        eventCommandService: EventCommandService(
+          repository: eventRepository,
+          settingsRepository: settingsRepository,
+          notificationService: _UnusedNotificationService(),
+          syncService: _UnusedSyncService(),
+        ),
+        settingsRepository: settingsRepository,
+      );
+      const calendar = ImportableCalendar(
+        id: 'work-calendar',
+        title: 'Work',
+        provider: CalendarImportProvider.samsung,
+        colorValue: 0xff123456,
+      );
+
+      final result = await service.importCalendars(const [calendar]);
+
+      expect(result.imported, 0);
+      expect(result.failed, 0);
+      expect(settingsRepository.capturedChangedFrom, isNotNull);
+      expect(settingsRepository.load().themeMode, AppThemeMode.dark);
+      expect(
+        settingsRepository.load().categories.any(
+          (category) =>
+              category.id == CalendarImportService.importedCategoryId(calendar),
+        ),
+        isTrue,
+      );
+    },
+  );
+}
+
+class _EmptyNativeCalendarSource extends NativeCalendarSource {
+  @override
+  Future<List<ExternalCalendarEvent>> loadEvents(
+    Iterable<ImportableCalendar> calendars,
+  ) async => const [];
+}
+
+class _ConcurrentImportSettingsRepository extends SettingsRepository {
+  _ConcurrentImportSettingsRepository({required super.preferences});
+
+  var _injectThemeChange = false;
+  AppSettings? capturedChangedFrom;
+
+  void injectThemeChangeBeforeNextSave() {
+    capturedChangedFrom = null;
+    _injectThemeChange = true;
+  }
+
+  @override
+  Future<void> save(
+    AppSettings settings, {
+    bool markSyncPending = true,
+    AppSettings? changedFrom,
+  }) async {
+    if (_injectThemeChange) {
+      _injectThemeChange = false;
+      capturedChangedFrom = changedFrom;
+      final concurrentBase = load();
+      await super.save(
+        concurrentBase.copyWith(themeMode: AppThemeMode.dark),
+        markSyncPending: false,
+        changedFrom: concurrentBase,
+      );
+    }
+    await super.save(
+      settings,
+      markSyncPending: markSyncPending,
+      changedFrom: changedFrom,
+    );
+  }
+}
+
+class _UnusedEventRepository implements EventRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('${invocation.memberName} was not expected');
+}
+
+class _UnusedNotificationService implements NotificationService {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('${invocation.memberName} was not expected');
+}
+
+class _UnusedSyncService implements SyncService {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('${invocation.memberName} was not expected');
 }

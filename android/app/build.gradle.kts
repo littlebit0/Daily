@@ -32,8 +32,8 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        // Android requires an integer versionCode. 301 represents Daily 3.0.1.
-        versionCode = 301
+        // Android requires a monotonically increasing integer versionCode.
+        versionCode = 331
         versionName = flutter.versionName
     }
 

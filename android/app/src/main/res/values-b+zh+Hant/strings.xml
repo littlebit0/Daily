@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_month_description">DailyCalendar 月曆</string>
+    <string name="widget_today_description">DailyCalendar 今日行程</string>
+    <string name="widget_dday_description">DailyCalendar D-day 行程</string>
+    <string name="widget_month_title">月曆</string>
+    <string name="widget_today_title">今日行程</string>
+    <string name="widget_dday_title">D-day</string>
+    <string name="widget_no_today_events">今天沒有行程</string>
+    <string name="widget_no_ddays">沒有 D-day 行程</string>
+    <string name="widget_open_app">開啟 DailyCalendar 以載入小工具資料</string>
+    <string name="widget_toggle_todo">切換完成狀態</string>
+    <string name="widget_more_count">另有 %1$d 項</string>
+</resources>

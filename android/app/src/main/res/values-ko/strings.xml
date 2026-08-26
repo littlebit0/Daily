@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_month_description">DailyCalendar 월간 달력</string>
+    <string name="widget_today_description">DailyCalendar 오늘 일정</string>
+    <string name="widget_dday_description">DailyCalendar D-day 일정</string>
+    <string name="widget_month_title">월간 달력</string>
+    <string name="widget_today_title">오늘 일정</string>
+    <string name="widget_dday_title">D-day</string>
+    <string name="widget_no_today_events">오늘 등록된 일정이 없습니다</string>
+    <string name="widget_no_ddays">등록된 D-day 일정이 없습니다</string>
+    <string name="widget_open_app">DailyCalendar를 열어 위젯 데이터를 불러오세요</string>
+    <string name="widget_toggle_todo">완료 상태 변경</string>
+    <string name="widget_more_count">외 %1$d개</string>
+</resources>

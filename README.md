@@ -29,12 +29,17 @@ DailyCalendar는 월간, 주간, 일간 및 연간 보기로 일정을 관리하
 | iPhone / iPad | App Store 무료 배포 중 | App Store의 `DailyCalendar` |
 | iOS 테스트 | GitHub 공개 검증용 미서명 파일 | [daily-ios-3.3.1-unsigned.ipa](https://github.com/littlebit0/DailyCalendar/releases/download/v3.3.1/daily-ios-3.3.1-unsigned.ipa) |
 | macOS 테스트 | GitHub 공개 검증용 미서명 파일 | [daily-macos-3.3.1-unsigned.dmg](https://github.com/littlebit0/DailyCalendar/releases/download/v3.3.1/daily-macos-3.3.1-unsigned.dmg) |
-| Android / Windows | 소스 지원, 3.3.1 실기기 검증 진행 중 | 검증 완료 후 릴리스 제공 |
+| Android | GitHub 설치용 APK | [daily-android-3.3.1.apk](https://github.com/littlebit0/DailyCalendar/releases/download/v3.3.1/daily-android-3.3.1.apk) |
+| Windows | 설치 프로그램 및 휴대용 ZIP | [설치 프로그램](https://github.com/littlebit0/DailyCalendar/releases/download/v3.3.1/daily-windows-3.3.1-setup.exe) · [ZIP](https://github.com/littlebit0/DailyCalendar/releases/download/v3.3.1/daily-windows-3.3.1.zip) |
 
 > GitHub의 IPA와 DMG는 App Store 제출 파일이 아닙니다. 미서명 IPA는 별도
 > 서명 없이는 iPhone에 직접 설치할 수 없으며, 재서명 과정에서 Sign in with
 > Apple 같은 entitlement가 유지되지 않을 수 있습니다. 일반 사용자는 App Store
 > 설치본을 권장합니다.
+
+Windows는 `setup.exe` 설치를 권장합니다. 설치형 Release 앱은 시작할 때 최신
+GitHub 릴리스를 확인하며 새 Windows 설치 프로그램이 있으면 자동 업데이트를
+진행합니다.
 
 ## 주요 기능
 
@@ -54,6 +59,8 @@ DailyCalendar는 월간, 주간, 일간 및 연간 보기로 일정을 관리하
 - 일정별 복수 알림과 아침 브리핑
 - iOS 26 이상 일정별 시스템 알람
 - iPhone, iPad 및 macOS의 오늘 일정·주간·월간·D-day 위젯
+- Android 월간·오늘 일정·D-day 홈 화면 위젯과 위젯 Todo 체크
+- Windows 트레이 미니 캘린더와 일정 Todo 체크
 - 위젯 Todo 체크와 앱 테마에 따른 자동·화이트·다크 표시
 - iPhone 및 iPad 잠금화면 위젯
 - 일정 변경 시 알림, 알람과 위젯 즉시 갱신
@@ -92,12 +99,13 @@ DailyCalendar는 월간, 주간, 일간 및 연간 보기로 일정을 관리하
 | Google Drive AppData 동기화 | O | O | O | O |
 | Sign in with Apple | O | O | - | - |
 | Siri / App Intents | O | O | - | - |
-| Apple 위젯 | O | O | - | - |
+| 홈 화면 위젯·미니 캘린더 | O | O | O | O |
 | 앱 잠금 | O | O | O | O |
 
 공유 Flutter 코드가 네 플랫폼의 사용자 경험을 유지합니다. Android와 Windows의
-3.3.1 배포 파일은 각 실제 OS에서 계정, 동기화, 알림과 UI 회귀 검증을 마친 뒤
-제공할 예정입니다.
+3.3.1 배포 파일은 GitHub Releases에서 받을 수 있으며 Android는 홈 화면 위젯,
+고주사율·터치 입력과 생체 인증을, Windows는 트레이 미니 캘린더, 마우스 이동,
+설정 애니메이션과 자동 업데이트 설치 흐름을 함께 지원합니다.
 
 ## 데이터와 개인정보 보호
 
@@ -185,9 +193,10 @@ Google OAuth 및 Apple 서명 값은 저장소에 포함하지 않습니다. 로
 3.3.1 기준 검증 결과:
 
 - Flutter 정적 분석 통과
-- 전체 Flutter 자동화 테스트 250개 통과
+- 전체 Flutter 자동화 테스트 288개 통과
 - 분석·버그 제보 서버 자동화 테스트 4개 통과
-- macOS Debug 및 iOS Simulator Debug 빌드 통과
+- Android Release APK 및 Windows Release 설치 프로그램·ZIP 빌드 통과
+- Windows Profile/AOT 테스트판 실제 실행 및 설정 프레임 측정 통과
 - iOS/macOS 앱과 위젯 버전 `3.3.1 (3.3.1)` 확인
 
 ## 문서

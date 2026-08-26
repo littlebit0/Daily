@@ -34,6 +34,7 @@ migrate_working_dir/
 /build*
 /coverage/
 /dist/
+/work/
 
 # Symbolication related
 app.*.symbols

@@ -1,15 +1,14 @@
 #include "flutter_window.h"
 
-#include <ctime>
 #include <commctrl.h>
-#include <iomanip>
 #include <optional>
-#include <sstream>
 #include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
 #include <flutter/standard_method_codec.h>
+#include "app_identity.h"
 #include "resource.h"
+#include "windows_widget_bridge.h"
 
 namespace {
 
@@ -46,6 +45,9 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   RegisterMapLauncherChannel();
+  windows_widget_bridge_ = std::make_unique<WindowsWidgetBridge>(
+      flutter_controller_->engine()->messenger(), GetHandle(),
+      [this]() { RestoreFromTray(); });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -108,7 +110,7 @@ void FlutterWindow::OpenMapChooser(
   config.cbSize = sizeof(config);
   config.hwndParent = GetHandle();
   config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
-  config.pszWindowTitle = L"DailyCalendar";
+  config.pszWindowTitle = daily::app_identity::kDisplayName;
   config.pszMainInstruction = L"지도에서 열기";
   config.pszContent = L"선택한 지도 서비스의 웹사이트가 기본 브라우저에서 열립니다.";
   config.cButtons = ARRAYSIZE(buttons);
@@ -130,7 +132,8 @@ void FlutterWindow::OpenMapChooser(
     const int fallback = MessageBoxW(
         GetHandle(),
         L"Yes: Kakao Map\nNo: Naver Map\nCancel: Close",
-        L"DailyCalendar", MB_YESNOCANCEL | MB_ICONQUESTION);
+        daily::app_identity::kDisplayName,
+        MB_YESNOCANCEL | MB_ICONQUESTION);
     selected = fallback == IDYES ? 1001 : fallback == IDNO ? 1002 : IDCANCEL;
   }
   if (common_controls != nullptr) {
@@ -151,6 +154,7 @@ void FlutterWindow::OpenMapChooser(
 
 void FlutterWindow::OnDestroy() {
   RemoveTrayIcon();
+  windows_widget_bridge_.reset();
 
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -236,7 +240,7 @@ void FlutterWindow::AddTrayIcon() {
   notify_icon_data_.uCallbackMessage = kTrayIconMessage;
   notify_icon_data_.hIcon =
       LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
-  wcscpy_s(notify_icon_data_.szTip, L"DailyCalendar");
+  wcscpy_s(notify_icon_data_.szTip, daily::app_identity::kDisplayName);
 
   tray_icon_added_ = Shell_NotifyIcon(NIM_ADD, &notify_icon_data_) == TRUE;
   if (tray_icon_added_) {
@@ -276,7 +280,8 @@ void FlutterWindow::ShowTrayMenu() {
     return;
   }
 
-  AppendMenu(menu, MF_STRING, kTrayOpenCommand, L"Open DailyCalendar");
+  AppendMenu(menu, MF_STRING, kTrayOpenCommand,
+             daily::app_identity::kOpenTrayLabel);
   AppendMenu(menu, MF_STRING, kTrayMiniCalendarCommand, L"Mini Calendar");
   AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenu(menu, MF_STRING, kTrayExitCommand, L"Exit");
@@ -302,68 +307,7 @@ void FlutterWindow::ExitFromTray() {
 }
 
 void FlutterWindow::ShowMiniCalendar() {
-  HWND hwnd = GetHandle();
-  if (!hwnd) {
-    return;
+  if (windows_widget_bridge_) {
+    windows_widget_bridge_->ShowMiniCalendar();
   }
-
-  MessageBox(hwnd, BuildMiniCalendarText().c_str(), L"DailyCalendar Mini Calendar",
-             MB_OK | MB_ICONINFORMATION);
-}
-
-std::wstring FlutterWindow::BuildMiniCalendarText() {
-  std::time_t now_time = std::time(nullptr);
-  std::tm now = {};
-  localtime_s(&now, &now_time);
-
-  const int year = now.tm_year + 1900;
-  const int month = now.tm_mon + 1;
-  const int today = now.tm_mday;
-  const int first_weekday = FirstWeekday(year, month);
-  const int days_in_month = DaysInMonth(year, month);
-
-  std::wstringstream stream;
-  stream << year << L"." << std::setw(2) << std::setfill(L'0') << month
-         << L"\n\n";
-  stream << L"Sun Mon Tue Wed Thu Fri Sat\n";
-
-  for (int i = 0; i < first_weekday; ++i) {
-    stream << L"    ";
-  }
-
-  for (int day = 1; day <= days_in_month; ++day) {
-    if (day == today) {
-      stream << L"[" << std::setw(2) << std::setfill(L' ') << day << L"]";
-    } else {
-      stream << L" " << std::setw(2) << std::setfill(L' ') << day << L" ";
-    }
-    if ((first_weekday + day) % 7 == 0) {
-      stream << L"\n";
-    }
-  }
-
-  stream << L"\n\nOpen DailyCalendar to view and add schedules.";
-  return stream.str();
-}
-
-int FlutterWindow::FirstWeekday(int year, int month) {
-  std::tm first = {};
-  first.tm_year = year - 1900;
-  first.tm_mon = month - 1;
-  first.tm_mday = 1;
-  std::mktime(&first);
-  return first.tm_wday;
-}
-
-int FlutterWindow::DaysInMonth(int year, int month) {
-  static const int days[] = {31, 28, 31, 30, 31, 30,
-                             31, 31, 30, 31, 30, 31};
-  if (month == 2 && IsLeapYear(year)) {
-    return 29;
-  }
-  return days[month - 1];
-}
-
-bool FlutterWindow::IsLeapYear(int year) {
-  return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
 }

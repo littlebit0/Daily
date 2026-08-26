@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "utils.cpp"
   "win32_window.cpp"
+  "windows_widget_bridge.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   "Runner.rc"
   "runner.exe.manifest"
@@ -19,6 +20,13 @@ add_executable(${BINARY_NAME} WIN32
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
+
+# Debug and Profile are side-by-side test editions. Profile keeps the test
+# identity while using Flutter's AOT-optimized runtime for frame profiling.
+target_compile_definitions(${BINARY_NAME} PRIVATE
+  "$<$<CONFIG:Debug>:DAILY_TEST_EDITION>"
+  "$<$<CONFIG:Profile>:DAILY_TEST_EDITION>"
+)
 
 # Add preprocessor definitions for the build version.
 if("${FLUTTER_VERSION_BUILD}" STREQUAL "")
@@ -37,6 +45,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "ole32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

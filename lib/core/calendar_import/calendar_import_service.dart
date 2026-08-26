@@ -152,7 +152,10 @@ class CalendarImportService {
                   settings.categories[index].colorValue,
         );
     if (changed) {
-      await _settingsRepository.save(settings.copyWith(categories: categories));
+      await _settingsRepository.save(
+        settings.copyWith(categories: categories),
+        changedFrom: settings,
+      );
     }
     return imported;
   }

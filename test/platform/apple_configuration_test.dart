@@ -2,16 +2,20 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+Future<String> _readNormalized(String path) async {
+  return (await File(path).readAsString()).replaceAll('\r\n', '\n');
+}
+
 void main() {
   test('iOS declares why Daily uses Face ID', () async {
-    final plist = await File('ios/Runner/Info.plist').readAsString();
+    final plist = await _readNormalized('ios/Runner/Info.plist');
 
     expect(plist, contains('<key>NSFaceIDUsageDescription</key>'));
     expect(plist, contains('Daily 앱 잠금을 안전하게 해제하기 위해 Face ID를 사용합니다.'));
   });
 
   test('iOS unlocks the full dynamic ProMotion refresh-rate range', () async {
-    final plist = await File('ios/Runner/Info.plist').readAsString();
+    final plist = await _readNormalized('ios/Runner/Info.plist');
 
     expect(
       plist,
@@ -21,8 +25,8 @@ void main() {
 
   test('Apple runners do not force a fixed application frame rate', () async {
     final sources = await Future.wait([
-      File('ios/Runner/AppDelegate.swift').readAsString(),
-      File('macos/Runner/AppDelegate.swift').readAsString(),
+      _readNormalized('ios/Runner/AppDelegate.swift'),
+      _readNormalized('macos/Runner/AppDelegate.swift'),
     ]);
     final runnerSource = sources.join('\n');
 
@@ -33,9 +37,7 @@ void main() {
   test(
     'Apple widgets follow Daily theme settings and expose checkbox Todo actions',
     () async {
-      final source = await File(
-        'apple_widgets/DailyWidgets.swift',
-      ).readAsString();
+      final source = await _readNormalized('apple_widgets/DailyWidgets.swift');
 
       expect(source, contains('@Environment(\\.colorScheme)'));
       expect(source, contains('switch themeMode'));
@@ -87,11 +89,12 @@ void main() {
 
   test('Daily coalesces rapid Apple widget theme refreshes', () async {
     final sources = await Future.wait([
-      File('lib/core/widgets/apple_widget_service.dart').readAsString(),
-      File('lib/app/daily_app.dart').readAsString(),
+      _readNormalized('lib/core/widgets/apple_widget_service.dart'),
+      _readNormalized('lib/core/widgets/calendar_widget_service.dart'),
+      _readNormalized('lib/app/daily_app.dart'),
     ]);
-    final serviceSource = sources[0];
-    final appSource = sources[1];
+    final serviceSource = '${sources[0]}\n${sources[1]}';
+    final appSource = sources[2];
 
     expect(
       serviceSource,
@@ -110,8 +113,8 @@ void main() {
 
   test('Apple runners receive live widget Todo action signals', () async {
     final sources = await Future.wait([
-      File('ios/Runner/AppDelegate.swift').readAsString(),
-      File('macos/Runner/MainFlutterWindow.swift').readAsString(),
+      _readNormalized('ios/Runner/AppDelegate.swift'),
+      _readNormalized('macos/Runner/MainFlutterWindow.swift'),
     ]);
 
     for (final source in sources) {
@@ -125,9 +128,7 @@ void main() {
   test(
     'Signal is shipped as an automatically discoverable App Shortcut',
     () async {
-      final source = await File(
-        'apple_siri/DailySiriIntents.swift',
-      ).readAsString();
+      final source = await _readNormalized('apple_siri/DailySiriIntents.swift');
 
       expect(source, contains('intent: DailySignalCommandIntent()'));
       expect(source, contains('"\\(.applicationName)에서 시그널 실행"'));

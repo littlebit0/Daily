@@ -70,7 +70,25 @@ void main() {
     expect(quickTodoColumnCountForPlatform(TargetPlatform.macOS, 560), 1);
     expect(quickTodoColumnCountForPlatform(TargetPlatform.macOS, 700), 2);
     expect(quickTodoColumnCountForPlatform(TargetPlatform.macOS, 1000), 3);
+    expect(quickTodoColumnCountForPlatform(TargetPlatform.windows, 560), 1);
+    expect(quickTodoColumnCountForPlatform(TargetPlatform.windows, 700), 2);
+    expect(quickTodoColumnCountForPlatform(TargetPlatform.windows, 1000), 3);
   });
+
+  test(
+    'calendar pointer navigation covers supported phone and desktop OSes',
+    () {
+      expect(supportsCalendarPointerNavigation(TargetPlatform.android), isTrue);
+      expect(supportsCalendarPointerNavigation(TargetPlatform.iOS), isTrue);
+      expect(supportsCalendarPointerNavigation(TargetPlatform.macOS), isTrue);
+      expect(supportsCalendarPointerNavigation(TargetPlatform.windows), isTrue);
+      expect(supportsCalendarPointerNavigation(TargetPlatform.linux), isFalse);
+      expect(
+        supportsCalendarPointerNavigation(TargetPlatform.fuchsia),
+        isFalse,
+      );
+    },
+  );
 
   test(
     'macOS and Windows use desktop text scales instead of iPhone scales',
@@ -115,6 +133,67 @@ void main() {
     expect(supportsAdjacentMonthDateSetting(TargetPlatform.windows), isTrue);
     expect(supportsAdjacentMonthDateSetting(TargetPlatform.linux), isFalse);
   });
+
+  testWidgets(
+    'Android horizontal month navigation uses the continuous month label style',
+    (tester) async {
+      tester.view.physicalSize = const Size(430, 932);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      SharedPreferences.setMockInitialValues({
+        'onboardingCompleted': true,
+        'defaultCalendarView': 'month',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      await settingsRepository.save(
+        settingsRepository.load().copyWith(
+          monthNavigationMode: MonthNavigationMode.horizontal,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(_FakeNotification()),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+            eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+            googleDriveAuthServiceProvider.overrideWithValue(
+              _FakeGoogleDriveAuthService(),
+            ),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final indicator = find.byKey(
+        const ValueKey('android-horizontal-month-indicator'),
+      );
+      final label = find.descendant(of: indicator, matching: find.byType(Text));
+      final text = tester.widget<Text>(label);
+
+      expect(indicator, findsOneWidget);
+      expect(label, findsOneWidget);
+      expect(text.style?.fontSize, 34);
+      expect(text.style?.fontWeight, FontWeight.w800);
+      expect(
+        text.style?.color,
+        Theme.of(tester.element(indicator)).colorScheme.onSurface,
+      );
+      expect(
+        find.descendant(of: indicator, matching: find.byType(Divider)),
+        findsOneWidget,
+      );
+
+      debugDefaultTargetPlatformOverride = null;
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   test('theme mode remains selected after settings reload', () async {
     SharedPreferences.setMockInitialValues({});
@@ -857,6 +936,91 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  for (final platform in <TargetPlatform>[
+    TargetPlatform.android,
+    TargetPlatform.windows,
+  ]) {
+    testWidgets(
+      'new ${platform.name} onboarding does not repeat analytics consent after permission',
+      (tester) async {
+        tester.view.physicalSize = platform == TargetPlatform.android
+            ? const Size(430, 932)
+            : const Size(1280, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        debugDefaultTargetPlatformOverride = platform;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final settingsRepository = SettingsRepository(preferences: preferences);
+        final analytics = _FakeProductAnalytics(consentPromptCompleted: false);
+        final permissionCompleter = Completer<void>();
+        final notificationService = _FakeNotification(
+          initializeCompleter: permissionCompleter,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              settingsRepositoryProvider.overrideWithValue(settingsRepository),
+              productAnalyticsProvider.overrideWithValue(analytics),
+              notificationServiceProvider.overrideWithValue(
+                notificationService,
+              ),
+              alarmServiceProvider.overrideWithValue(
+                const UnsupportedAlarmService(),
+              ),
+              syncServiceProvider.overrideWithValue(_FakeSync()),
+              eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+              googleDriveAuthServiceProvider.overrideWithValue(
+                _FakeGoogleDriveAuthService(account: null),
+              ),
+            ],
+            child: const DailyApp(),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('오늘을 더\n가볍게 정리하세요.'), findsOneWidget);
+        await tester.tap(find.text('계속'));
+        await tester.pumpAndSettle();
+        expect(find.text('익명 분석 허용'), findsOneWidget);
+
+        await tester.tap(find.text('나중에'));
+        await tester.pumpAndSettle();
+        expect(analytics.completeConsentPromptCalls, 1);
+        expect(analytics.consentPromptCompleted, isTrue);
+        expect(find.text('익명 분석 허용'), findsNothing);
+        expect(find.text('알림 및 알람 허용'), findsOneWidget);
+
+        await tester.tap(find.text('알림 및 알람 허용'));
+        await tester.pump();
+        expect(notificationService.initializeCalls, 1);
+        expect(find.text('알림과 알람을\n준비할까요?'), findsOneWidget);
+        expect(find.text('익명 분석 허용'), findsNothing);
+
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        expect(find.text('익명 분석 허용'), findsNothing);
+
+        permissionCompleter.complete();
+        await tester.pumpAndSettle();
+        expect(find.text('로컬로 시작'), findsOneWidget);
+        expect(find.text('익명 분석 허용'), findsNothing);
+        expect(analytics.completeConsentPromptCalls, 1);
+
+        debugDefaultTargetPlatformOverride = null;
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   testWidgets('existing users choose analytics consent before calendar opens', (
     tester,
@@ -1952,6 +2116,167 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets(
+    'Windows mouse wheel bursts move week day and month one page at a time',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1440, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(_FakeNotification()),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+            eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+            googleDriveAuthServiceProvider.overrideWithValue(
+              _FakeGoogleDriveAuthService(),
+            ),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DailyApp)),
+      );
+      final startDate = container.read(selectedDateProvider);
+
+      Future<void> sendMouseWheel(Finder region, Offset delta) async {
+        await tester.sendEventToBinding(
+          PointerScrollEvent(
+            kind: PointerDeviceKind.mouse,
+            position: tester.getCenter(region),
+            scrollDelta: delta,
+          ),
+        );
+      }
+
+      container.read(calendarViewModeProvider.notifier).state =
+          CalendarViewMode.week;
+      await tester.pumpAndSettle();
+      final weekNavigation = find.byKey(
+        const ValueKey('week-pointer-navigation'),
+      );
+      await sendMouseWheel(weekNavigation, const Offset(120, 0));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(selectedDateProvider),
+        DateTime(startDate.year, startDate.month, startDate.day + 7),
+      );
+      await sendMouseWheel(weekNavigation, const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(container.read(selectedDateProvider), startDate);
+
+      container.read(calendarViewModeProvider.notifier).state =
+          CalendarViewMode.day;
+      await tester.pumpAndSettle();
+      final dayNavigation = find.byKey(
+        const ValueKey('day-pointer-navigation'),
+      );
+      await sendMouseWheel(dayNavigation, const Offset(120, 0));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(selectedDateProvider),
+        DateTime(startDate.year, startDate.month, startDate.day + 1),
+      );
+      await sendMouseWheel(dayNavigation, const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(container.read(selectedDateProvider), startDate);
+
+      container.read(appSettingsProvider.notifier).state = container
+          .read(appSettingsProvider)
+          .copyWith(weekDayLayoutMode: WeekDayLayoutMode.schedule);
+      await tester.pumpAndSettle();
+      final scheduleTimeScroll = find
+          .byKey(const ValueKey('schedule-time-scroll'))
+          .first;
+      final scheduleScrollable = tester.widget<SingleChildScrollView>(
+        scheduleTimeScroll,
+      );
+      final scheduleOffsetBeforeWheel = scheduleScrollable.controller!.offset;
+      await sendMouseWheel(scheduleTimeScroll, const Offset(0, 120));
+      await tester.pumpAndSettle();
+      expect(container.read(selectedDateProvider), startDate);
+      expect(
+        scheduleScrollable.controller!.offset,
+        greaterThan(scheduleOffsetBeforeWheel),
+      );
+
+      container.read(calendarViewModeProvider.notifier).state =
+          CalendarViewMode.month;
+      await tester.pumpAndSettle();
+      final monthNavigation = find.byKey(
+        const ValueKey('month-pointer-navigation'),
+      );
+      final startMonth = container.read(visibleMonthProvider);
+
+      for (var index = 0; index < 4; index++) {
+        await sendMouseWheel(monthNavigation, const Offset(0, 30));
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      await tester.pumpAndSettle();
+      expect(
+        container.read(visibleMonthProvider),
+        DateTime(startMonth.year, startMonth.month + 1),
+      );
+
+      final monthPageView = tester.widget<PageView>(
+        find.descendant(of: monthNavigation, matching: find.byType(PageView)),
+      );
+      final pageBeforeHorizontalTilt = monthPageView.controller!.page!;
+      for (var index = 0; index < 4; index++) {
+        await sendMouseWheel(monthNavigation, const Offset(30, 0));
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(
+        monthPageView.controller!.page,
+        closeTo(pageBeforeHorizontalTilt, 0.001),
+      );
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(
+        monthPageView.controller!.page,
+        greaterThan(pageBeforeHorizontalTilt),
+      );
+      expect(
+        container.read(visibleMonthProvider),
+        DateTime(startMonth.year, startMonth.month + 1),
+        reason:
+            'Windows must not rebuild the calendar provider tree while the '
+            'page transition is still animating.',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        container.read(visibleMonthProvider),
+        DateTime(startMonth.year, startMonth.month + 2),
+      );
+      await sendMouseWheel(monthNavigation, const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(visibleMonthProvider),
+        DateTime(startMonth.year, startMonth.month + 1),
+      );
+
+      await sendMouseWheel(monthNavigation, const Offset(120, 0));
+      await tester.trackpadFling(monthNavigation, const Offset(-240, 0), 1200);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(visibleMonthProvider),
+        DateTime(startMonth.year, startMonth.month + 2),
+      );
+
+      debugDefaultTargetPlatformOverride = null;
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('app lock covers Settings immediately after backgrounding', (
     tester,
   ) async {
@@ -2376,6 +2701,451 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    'Windows settings controls animate while persistence is still pending',
+    (tester) async {
+      tester.view.physicalSize = const Size(900, 2600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+      FlutterSecureStorage.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = _DelayedSettingsRepository(
+        preferences: preferences,
+      );
+      final authService = _FakeGoogleDriveAuthService(account: null);
+      final notificationService = _FakeNotification();
+      final eventRepository = _FakeEventRepository();
+      final driveSyncService = _FakeGoogleDriveSyncService(
+        authService: authService,
+        eventRepository: eventRepository,
+        notificationService: notificationService,
+        settingsRepository: settingsRepository,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(notificationService),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+            eventRepositoryProvider.overrideWithValue(eventRepository),
+            googleDriveAuthServiceProvider.overrideWithValue(authService),
+            googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+          ],
+          child: const MaterialApp(home: SettingsPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('appearance-settings-navigation')),
+      );
+      await tester.pumpAndSettle();
+
+      final settingsContext = tester.element(find.byType(SettingsPage));
+      final container = ProviderScope.containerOf(settingsContext);
+      final themeControl = find.byKey(const ValueKey('app-theme-mode-slider'));
+      final indicator = find.descendant(
+        of: themeControl,
+        matching: find.byKey(
+          const ValueKey('settings-capsule-selection-indicator'),
+        ),
+      );
+      final renderedIndicator = find.descendant(
+        of: indicator,
+        matching: find.byType(Align),
+      );
+      final indicatorPressScale = find.descendant(
+        of: indicator,
+        matching: find.byKey(
+          const ValueKey('settings-capsule-selection-press-scale'),
+        ),
+      );
+      final renderedIndicatorPressScale = find.descendant(
+        of: indicatorPressScale,
+        matching: find.byType(ScaleTransition),
+      );
+      final darkThemeOption = find.descendant(
+        of: themeControl,
+        matching: find.byKey(const ValueKey('settings-capsule-option-2')),
+      );
+      expect(indicator, findsOneWidget);
+      expect(renderedIndicator, findsOneWidget);
+      expect(indicatorPressScale, findsOneWidget);
+      expect(renderedIndicatorPressScale, findsOneWidget);
+      expect(darkThemeOption, findsOneWidget);
+      expect(
+        find.descendant(of: themeControl, matching: find.byType(InkWell)),
+        findsNWidgets(3),
+      );
+      final darkThemeSemantics = tester
+          .widgetList<Semantics>(
+            find.ancestor(
+              of: darkThemeOption,
+              matching: find.byType(Semantics),
+            ),
+          )
+          .singleWhere(
+            (widget) => widget.properties.inMutuallyExclusiveGroup == true,
+          );
+      expect(darkThemeSemantics.properties.selected, isFalse);
+      expect(darkThemeSemantics.properties.button, isTrue);
+      expect(
+        tester
+            .widget<Align>(renderedIndicator)
+            .alignment
+            .resolve(TextDirection.ltr)
+            .x,
+        -1,
+      );
+
+      final themeRect = tester.getRect(themeControl);
+      final themeGesture = await tester.startGesture(
+        Offset(themeRect.right - themeRect.width / 6, themeRect.center.dy),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+
+      final pressedScale16 = tester
+          .widget<ScaleTransition>(renderedIndicatorPressScale)
+          .scale
+          .value;
+      final pressedX16 = tester
+          .widget<Align>(renderedIndicator)
+          .alignment
+          .resolve(TextDirection.ltr)
+          .x;
+      expect(pressedScale16, greaterThan(0.93));
+      expect(pressedScale16, lessThan(1));
+      expect(pressedX16, greaterThan(-1));
+      expect(pressedX16, lessThan(1));
+
+      await tester.pump(const Duration(milliseconds: 34));
+      final pressedScale50 = tester
+          .widget<ScaleTransition>(renderedIndicatorPressScale)
+          .scale
+          .value;
+      final pressedX50 = tester
+          .widget<Align>(renderedIndicator)
+          .alignment
+          .resolve(TextDirection.ltr)
+          .x;
+      expect(pressedScale50, greaterThanOrEqualTo(0.93));
+      expect(pressedScale50, lessThan(pressedScale16));
+      expect(pressedX50, greaterThan(pressedX16));
+      expect(pressedX50, lessThan(1));
+
+      await themeGesture.up();
+      await tester.pump();
+
+      expect(settingsRepository.saveCalls, 0);
+      expect(
+        container.read(appSettingsProvider).themeMode,
+        AppThemeMode.system,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      final midAnimationX = tester
+          .widget<Align>(renderedIndicator)
+          .alignment
+          .resolve(TextDirection.ltr)
+          .x;
+      final releasedScale50 = tester
+          .widget<ScaleTransition>(renderedIndicatorPressScale)
+          .scale
+          .value;
+      expect(midAnimationX, greaterThan(pressedX50));
+      expect(midAnimationX, lessThan(1));
+      expect(releasedScale50, greaterThan(pressedScale50));
+
+      await tester.pump(const Duration(milliseconds: 189));
+      expect(settingsRepository.saveCalls, 0);
+      expect(
+        tester
+            .widget<Align>(renderedIndicator)
+            .alignment
+            .resolve(TextDirection.ltr)
+            .x,
+        1,
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(settingsRepository.saveCalls, 1);
+      expect(settingsRepository.hasPendingSave, isTrue);
+
+      settingsRepository.releasePendingSave();
+      await tester.pumpAndSettle();
+      expect(container.read(appSettingsProvider).themeMode, AppThemeMode.dark);
+      final selectedThemeSemantics = tester
+          .widgetList<Semantics>(
+            find.ancestor(
+              of: darkThemeOption,
+              matching: find.byType(Semantics),
+            ),
+          )
+          .singleWhere(
+            (widget) => widget.properties.inMutuallyExclusiveGroup == true,
+          );
+      expect(selectedThemeSemantics.properties.selected, isTrue);
+
+      final cancelledThemeGesture = await tester.startGesture(
+        tester.getCenter(darkThemeOption),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      final cancelledThemePressedScale = tester
+          .widget<ScaleTransition>(renderedIndicatorPressScale)
+          .scale
+          .value;
+      expect(cancelledThemePressedScale, lessThan(1));
+      await cancelledThemeGesture.moveBy(const Offset(0, kTouchSlop + 8));
+      await tester.pump();
+      expect(tester.widget<AnimatedScale>(indicatorPressScale).scale, 1);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(
+        tester.widget<ScaleTransition>(renderedIndicatorPressScale).scale.value,
+        greaterThan(cancelledThemePressedScale),
+      );
+      await cancelledThemeGesture.up();
+      await tester.pumpAndSettle();
+      expect(settingsRepository.saveCalls, 1);
+
+      final secondaryThemeGesture = await tester.startGesture(
+        tester.getCenter(darkThemeOption),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryButton,
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        tester.widget<ScaleTransition>(renderedIndicatorPressScale).scale.value,
+        1,
+      );
+      await secondaryThemeGesture.up();
+      await tester.pumpAndSettle();
+      expect(settingsRepository.saveCalls, 1);
+
+      settingsRepository.blockNextSave();
+      final dragThemeRect = tester.getRect(themeControl);
+      final horizontalThemeGesture = await tester.startGesture(
+        Offset(
+          dragThemeRect.right - dragThemeRect.width / 6,
+          dragThemeRect.center.dy,
+        ),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await horizontalThemeGesture.moveTo(dragThemeRect.center);
+      await tester.pump();
+      await horizontalThemeGesture.up();
+      await tester.pump();
+      expect(settingsRepository.saveCalls, 1);
+      await tester.pump(const Duration(milliseconds: 239));
+      expect(settingsRepository.saveCalls, 1);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(settingsRepository.saveCalls, 2);
+      expect(settingsRepository.hasPendingSave, isTrue);
+      expect(container.read(appSettingsProvider).themeMode, AppThemeMode.dark);
+      settingsRepository.releasePendingSave();
+      await tester.pumpAndSettle();
+      expect(container.read(appSettingsProvider).themeMode, AppThemeMode.light);
+
+      final lunarToggle = find.byKey(const ValueKey('show-lunar-dates-toggle'));
+      final lunarPressScale = find.ancestor(
+        of: lunarToggle,
+        matching: find.byKey(const ValueKey('settings-switch-press-scale')),
+      );
+      final renderedLunarPressScale = find.descendant(
+        of: lunarPressScale,
+        matching: find.byType(ScaleTransition),
+      );
+      expect(lunarPressScale, findsOneWidget);
+      expect(renderedLunarPressScale, findsOneWidget);
+      expect(tester.widget<SwitchListTile>(lunarToggle).value, isTrue);
+      final cancelledLunarGesture = await tester.startGesture(
+        tester.getCenter(lunarToggle),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      final cancelledLunarPressedScale = tester
+          .widget<ScaleTransition>(renderedLunarPressScale)
+          .scale
+          .value;
+      expect(cancelledLunarPressedScale, lessThan(1));
+      await cancelledLunarGesture.moveBy(const Offset(0, kTouchSlop + 8));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(
+        tester.widget<ScaleTransition>(renderedLunarPressScale).scale.value,
+        greaterThan(cancelledLunarPressedScale),
+      );
+      await cancelledLunarGesture.up();
+      await tester.pumpAndSettle();
+      expect(settingsRepository.saveCalls, 2);
+      expect(tester.widget<SwitchListTile>(lunarToggle).value, isTrue);
+
+      settingsRepository.blockNextSave();
+      final lunarGesture = await tester.startGesture(
+        tester.getCenter(lunarToggle),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+
+      final lunarPressedScale16 = tester
+          .widget<ScaleTransition>(renderedLunarPressScale)
+          .scale
+          .value;
+      expect(lunarPressedScale16, greaterThan(0.985));
+      expect(lunarPressedScale16, lessThan(1));
+
+      await tester.pump(const Duration(milliseconds: 34));
+      final lunarPressedScale50 = tester
+          .widget<ScaleTransition>(renderedLunarPressScale)
+          .scale
+          .value;
+      expect(lunarPressedScale50, greaterThanOrEqualTo(0.985));
+      expect(lunarPressedScale50, lessThan(lunarPressedScale16));
+
+      await lunarGesture.up();
+      await tester.pump();
+
+      expect(settingsRepository.saveCalls, 2);
+      expect(container.read(appSettingsProvider).showLunarDates, isTrue);
+      expect(tester.widget<SwitchListTile>(lunarToggle).value, isFalse);
+      await tester.pump(const Duration(milliseconds: 50));
+      final lunarReleasedScale50 = tester
+          .widget<ScaleTransition>(renderedLunarPressScale)
+          .scale
+          .value;
+      expect(lunarReleasedScale50, greaterThan(lunarPressedScale50));
+      await tester.pump(const Duration(milliseconds: 189));
+      expect(settingsRepository.saveCalls, 2);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(settingsRepository.saveCalls, 3);
+      expect(settingsRepository.hasPendingSave, isTrue);
+
+      final weekStartControl = find.byKey(const ValueKey('week-start-toggle'));
+      final weekStartRect = tester.getRect(weekStartControl);
+      Object? saveError;
+      await runZonedGuarded<Future<void>>(
+        () => tester.tapAt(
+          Offset(
+            weekStartRect.right - weekStartRect.width / 4,
+            weekStartRect.center.dy,
+          ),
+        ),
+        (error, _) => saveError = error,
+      );
+      await tester.pump();
+      expect(settingsRepository.saveCalls, 3);
+
+      settingsRepository.releasePendingSave();
+      settingsRepository.blockNextSave();
+      settingsRepository.failNextSave();
+      await tester.pump(const Duration(milliseconds: 240));
+      expect(settingsRepository.saveCalls, 4);
+      expect(container.read(appSettingsProvider).showLunarDates, isTrue);
+      expect(container.read(appSettingsProvider).weekStartsOnMonday, isFalse);
+      expect(settingsRepository.hasPendingSave, isTrue);
+
+      settingsRepository.releasePendingSave();
+      await tester.pump();
+      expect(saveError, isA<StateError>());
+      await tester.pumpAndSettle();
+      expect(container.read(appSettingsProvider).weekStartsOnMonday, isFalse);
+      expect(settingsRepository.load().weekStartsOnMonday, isFalse);
+      expect(tester.widget<SwitchListTile>(lunarToggle).value, isFalse);
+      final disposeGesture = await tester.startGesture(
+        tester.getCenter(lunarToggle),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await disposeGesture.up();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
+
+  testWidgets(
+    'Windows lunar toggle persists the latest value after two rapid saves',
+    (tester) async {
+      final (container, settingsRepository) =
+          await _pumpWindowsAppearanceSettings(tester);
+      final lunarToggle = find.byKey(const ValueKey('show-lunar-dates-toggle'));
+
+      expect(tester.widget<SwitchListTile>(lunarToggle).value, isTrue);
+      await tester.tap(lunarToggle);
+      await tester.pump();
+      expect(tester.widget<SwitchListTile>(lunarToggle).value, isFalse);
+
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(lunarToggle);
+      await tester.pump();
+      expect(tester.widget<SwitchListTile>(lunarToggle).value, isTrue);
+
+      await tester.pump(const Duration(milliseconds: 139));
+      expect(settingsRepository.saveCalls, 0);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(settingsRepository.saveCalls, 1);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(settingsRepository.saveCalls, 1);
+
+      settingsRepository.releasePendingSave();
+      await tester.pumpAndSettle();
+
+      expect(settingsRepository.saveCalls, 2);
+      expect(settingsRepository.load().showLunarDates, isTrue);
+      expect(container.read(appSettingsProvider).showLunarDates, isTrue);
+      expect(tester.widget<SwitchListTile>(lunarToggle).value, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
+
+  testWidgets(
+    'Windows delayed save publishes settings merged with an external change',
+    (tester) async {
+      final (container, settingsRepository) =
+          await _pumpWindowsAppearanceSettings(tester);
+      final lunarToggle = find.byKey(const ValueKey('show-lunar-dates-toggle'));
+
+      await tester.tap(lunarToggle);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 240));
+      expect(settingsRepository.saveCalls, 1);
+
+      final externalBase = settingsRepository.load();
+      await settingsRepository.saveWithoutDelay(
+        externalBase.copyWith(weekStartsOnMonday: true),
+        markSyncPending: false,
+        changedFrom: externalBase,
+      );
+      expect(settingsRepository.load().showLunarDates, isTrue);
+      expect(settingsRepository.load().weekStartsOnMonday, isTrue);
+
+      settingsRepository.releasePendingSave();
+      await tester.pumpAndSettle();
+
+      final persisted = settingsRepository.load();
+      final published = container.read(appSettingsProvider);
+      expect(persisted.showLunarDates, isFalse);
+      expect(persisted.weekStartsOnMonday, isTrue);
+      expect(published.showLunarDates, isFalse);
+      expect(published.weekStartsOnMonday, isTrue);
+      expect(tester.widget<SwitchListTile>(lunarToggle).value, isFalse);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
 
   testWidgets('settings rows keep icons and layout at large text', (
     tester,
@@ -3482,6 +4252,112 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    'calendar filter save preserves a concurrent unrelated setting change',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1440, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      SharedPreferences.setMockInitialValues({
+        'onboardingCompleted': true,
+        'defaultCalendarView': CalendarViewMode.month.name,
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = _ConcurrentCalendarSettingsRepository(
+        preferences: preferences,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(_FakeNotification()),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+            eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+            googleDriveAuthServiceProvider.overrideWithValue(
+              _FakeGoogleDriveAuthService(),
+            ),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DailyApp)),
+      );
+
+      settingsRepository.injectThemeChangeBeforeNextSave();
+      await tester.tap(find.byIcon(Icons.tune_rounded).first);
+      await tester.pumpAndSettle();
+      final ddaySwitch = find.descendant(
+        of: find.byType(SwitchListTile).first,
+        matching: find.byType(Switch),
+      );
+      expect(ddaySwitch, findsOneWidget);
+      await tester.tap(ddaySwitch);
+      await tester.pumpAndSettle();
+
+      expect(settingsRepository.capturedChangedFrom, isNotNull);
+      expect(settingsRepository.capturedChangedFrom!.calendarDdayOnly, isFalse);
+      expect(settingsRepository.load().calendarDdayOnly, isTrue);
+      expect(settingsRepository.load().themeMode, AppThemeMode.dark);
+      expect(container.read(appSettingsProvider).themeMode, AppThemeMode.dark);
+
+      debugDefaultTargetPlatformOverride = null;
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+}
+
+Future<(ProviderContainer, _DelayedSettingsRepository)>
+_pumpWindowsAppearanceSettings(WidgetTester tester) async {
+  tester.view.physicalSize = const Size(900, 2600);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+  addTearDown(() => debugDefaultTargetPlatformOverride = null);
+  SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+  FlutterSecureStorage.setMockInitialValues({});
+  final preferences = await SharedPreferences.getInstance();
+  final settingsRepository = _DelayedSettingsRepository(
+    preferences: preferences,
+  );
+  final authService = _FakeGoogleDriveAuthService(account: null);
+  final notificationService = _FakeNotification();
+  final eventRepository = _FakeEventRepository();
+  final driveSyncService = _FakeGoogleDriveSyncService(
+    authService: authService,
+    eventRepository: eventRepository,
+    notificationService: notificationService,
+    settingsRepository: settingsRepository,
+  );
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        settingsRepositoryProvider.overrideWithValue(settingsRepository),
+        notificationServiceProvider.overrideWithValue(notificationService),
+        syncServiceProvider.overrideWithValue(_FakeSync()),
+        eventRepositoryProvider.overrideWithValue(eventRepository),
+        googleDriveAuthServiceProvider.overrideWithValue(authService),
+        googleDriveSyncServiceProvider.overrideWithValue(driveSyncService),
+      ],
+      child: const MaterialApp(home: SettingsPage()),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(const ValueKey('appearance-settings-navigation')),
+  );
+  await tester.pumpAndSettle();
+
+  final container = ProviderScope.containerOf(
+    tester.element(find.byType(SettingsPage)),
+  );
+  return (container, settingsRepository);
 }
 
 Future<void> _openAccountSettings(WidgetTester tester) async {
@@ -3568,6 +4444,101 @@ class _FakeGoogleDriveAuthService extends GoogleDriveAuthService {
   }
 }
 
+class _DelayedSettingsRepository extends SettingsRepository {
+  _DelayedSettingsRepository({required super.preferences});
+
+  var _saveGate = Completer<void>();
+  var _failNextSave = false;
+  var saveCalls = 0;
+
+  bool get hasPendingSave => !_saveGate.isCompleted;
+
+  void releasePendingSave() {
+    if (!_saveGate.isCompleted) {
+      _saveGate.complete();
+    }
+  }
+
+  void blockNextSave() {
+    if (!_saveGate.isCompleted) {
+      throw StateError('The current settings save is still pending.');
+    }
+    _saveGate = Completer<void>();
+  }
+
+  void failNextSave() {
+    _failNextSave = true;
+  }
+
+  Future<void> saveWithoutDelay(
+    AppSettings settings, {
+    bool markSyncPending = true,
+    AppSettings? changedFrom,
+  }) {
+    return super.save(
+      settings,
+      markSyncPending: markSyncPending,
+      changedFrom: changedFrom,
+    );
+  }
+
+  @override
+  Future<void> save(
+    AppSettings settings, {
+    bool markSyncPending = true,
+    AppSettings? changedFrom,
+  }) async {
+    saveCalls += 1;
+    final gate = _saveGate;
+    final shouldFail = _failNextSave;
+    _failNextSave = false;
+    await gate.future;
+    if (shouldFail) {
+      throw StateError('settings save failed');
+    }
+    await super.save(
+      settings,
+      markSyncPending: markSyncPending,
+      changedFrom: changedFrom,
+    );
+  }
+}
+
+class _ConcurrentCalendarSettingsRepository extends SettingsRepository {
+  _ConcurrentCalendarSettingsRepository({required super.preferences});
+
+  var _injectThemeChange = false;
+  AppSettings? capturedChangedFrom;
+
+  void injectThemeChangeBeforeNextSave() {
+    capturedChangedFrom = null;
+    _injectThemeChange = true;
+  }
+
+  @override
+  Future<void> save(
+    AppSettings settings, {
+    bool markSyncPending = true,
+    AppSettings? changedFrom,
+  }) async {
+    if (_injectThemeChange) {
+      _injectThemeChange = false;
+      capturedChangedFrom = changedFrom;
+      final concurrentBase = load();
+      await super.save(
+        concurrentBase.copyWith(themeMode: AppThemeMode.dark),
+        markSyncPending: false,
+        changedFrom: concurrentBase,
+      );
+    }
+    await super.save(
+      settings,
+      markSyncPending: markSyncPending,
+      changedFrom: changedFrom,
+    );
+  }
+}
+
 class _FakeGoogleDriveSyncService extends GoogleDriveSyncService {
   _FakeGoogleDriveSyncService({
     required super.authService,
@@ -3581,6 +4552,9 @@ class _FakeGoogleDriveSyncService extends GoogleDriveSyncService {
   var syncNowCalls = 0;
   var syncPendingChangesNowCalls = 0;
   var restoreNowCalls = 0;
+
+  @override
+  Future<void> queueSettingsBackup() async {}
 
   @override
   Future<void> startListeningOnly({bool flushPendingChanges = true}) async {
@@ -3615,10 +4589,12 @@ class _FakeNotification implements NotificationService {
   _FakeNotification({
     this.failCancelEventReminder = false,
     this.failCancelMorningBriefing = false,
+    this.initializeCompleter,
   });
 
   final bool failCancelEventReminder;
   final bool failCancelMorningBriefing;
+  final Completer<void>? initializeCompleter;
   var cancelMorningBriefingCalls = 0;
   var initializeCalls = 0;
   final scheduledEventIds = <String>[];
@@ -3645,6 +4621,7 @@ class _FakeNotification implements NotificationService {
   @override
   Future<void> initialize() async {
     initializeCalls += 1;
+    await initializeCompleter?.future;
   }
 
   @override
@@ -3696,6 +4673,7 @@ class _FakeProductAnalytics implements ProductAnalytics {
   final ValueNotifier<bool> _consentPromptCompleted = ValueNotifier<bool>(true);
   final records = <AnalyticsRecord>[];
   var deleteCalls = 0;
+  var completeConsentPromptCalls = 0;
 
   @override
   bool get consentPromptCompleted => _consentPromptCompleted.value;
@@ -3715,6 +4693,7 @@ class _FakeProductAnalytics implements ProductAnalytics {
 
   @override
   Future<void> completeConsentPrompt({required bool enabled}) async {
+    completeConsentPromptCalls += 1;
     await setEnabled(enabled);
     _consentPromptCompleted.value = true;
   }

@@ -71,6 +71,22 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+        DailyAndroidWidgetBridge.register(
+            applicationContext,
+            flutterEngine.dartExecutor.binaryMessenger,
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        requestHighestSupportedRefreshRate()
+        DailyWidgetUpdater.refreshAll(applicationContext)
+        DailyAndroidWidgetBridge.notifyPendingTodoActions(applicationContext)
+    }
+
+    override fun onDestroy() {
+        DailyAndroidWidgetBridge.unregister()
+        super.onDestroy()
     }
 
     override fun onRequestPermissionsResult(

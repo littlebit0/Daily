@@ -72,6 +72,18 @@ IDI_APP_ICON            ICON                    "resources\\app_icon.ico"
 #define VERSION_AS_STRING "1.1.0"
 #endif
 
+#ifdef DAILY_TEST_EDITION
+#define DAILY_FILE_DESCRIPTION "DailyCalendar Test"
+#define DAILY_INTERNAL_NAME "DailyCalendar Test"
+#define DAILY_ORIGINAL_FILENAME "DailyCalendar Test.exe"
+#define DAILY_PRODUCT_NAME "DailyCalendar Test"
+#else
+#define DAILY_FILE_DESCRIPTION "DailyCalendar"
+#define DAILY_INTERNAL_NAME "DailyCalendar"
+#define DAILY_ORIGINAL_FILENAME "DailyCalendar.exe"
+#define DAILY_PRODUCT_NAME "DailyCalendar"
+#endif
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION VERSION_AS_NUMBER
  PRODUCTVERSION VERSION_AS_NUMBER
@@ -90,12 +102,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "littlebit0" "\0"
-            VALUE "FileDescription", "DailyCalendar" "\0"
+            VALUE "FileDescription", DAILY_FILE_DESCRIPTION "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "DailyCalendar" "\0"
+            VALUE "InternalName", DAILY_INTERNAL_NAME "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 littlebit0. All rights reserved." "\0"
-            VALUE "OriginalFilename", "DailyCalendar.exe" "\0"
-            VALUE "ProductName", "DailyCalendar" "\0"
+            VALUE "OriginalFilename", DAILY_ORIGINAL_FILENAME "\0"
+            VALUE "ProductName", DAILY_PRODUCT_NAME "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

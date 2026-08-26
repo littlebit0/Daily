@@ -28,7 +28,7 @@ import '../settings/settings_repository.dart';
 import '../sync/google_drive_auth_service.dart';
 import '../sync/google_drive_sync_service.dart';
 import '../sync/sync_service.dart';
-import '../widgets/apple_widget_service.dart';
+import '../widgets/calendar_widget_service.dart';
 
 class CalendarRange {
   const CalendarRange(this.start, this.end);
@@ -67,14 +67,18 @@ final eventRepositoryProvider = Provider<EventRepository>((ref) {
   return DriftEventRepository(ref.watch(databaseProvider));
 });
 
-final appleWidgetServiceProvider = Provider<AppleWidgetService>((ref) {
-  final service = AppleWidgetService(
+final calendarWidgetServiceProvider = Provider<CalendarWidgetService>((ref) {
+  final service = CalendarWidgetService(
     eventRepository: ref.watch(eventRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
   );
   ref.onDispose(service.dispose);
   return service;
 });
+
+/// Temporary source-compatibility alias for extensions that still reference
+/// the pre-parity provider name.
+final appleWidgetServiceProvider = calendarWidgetServiceProvider;
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   return LocalNotificationService(
@@ -109,7 +113,7 @@ final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
     alarmService: ref.watch(alarmServiceProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     analytics: ref.watch(productAnalyticsProvider),
-    onEventsChanged: ref.watch(appleWidgetServiceProvider).refresh,
+    onEventsChanged: ref.watch(calendarWidgetServiceProvider).refresh,
   );
   ref.onDispose(service.dispose);
   return service;
@@ -149,7 +153,7 @@ final eventCommandServiceProvider = Provider<EventCommandService>((ref) {
     alarmService: ref.watch(alarmServiceProvider),
     syncService: ref.watch(syncServiceProvider),
     analytics: ref.watch(productAnalyticsProvider),
-    onEventsChanged: ref.watch(appleWidgetServiceProvider).refresh,
+    onEventsChanged: ref.watch(calendarWidgetServiceProvider).refresh,
   );
 });
 
@@ -190,8 +194,8 @@ final calendarViewModeProvider = StateProvider<CalendarViewMode>((ref) {
 
 final calendarSearchQueryProvider = StateProvider<String>((ref) => '');
 
-final eventsInRangeProvider =
-    StreamProvider.family<List<CalendarEvent>, CalendarRange>((ref, range) {
+final eventsInRangeProvider = StreamProvider.autoDispose
+    .family<List<CalendarEvent>, CalendarRange>((ref, range) {
       final settings = ref.watch(appSettingsProvider);
       final holidays = ref
           .watch(koreanHolidayServiceProvider)

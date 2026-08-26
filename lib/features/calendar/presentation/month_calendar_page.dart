@@ -20,6 +20,7 @@ import '../../../core/localization/app_localizations.dart';
 import '../../../core/siri/signal_voice_service.dart';
 import '../../../core/theme/daily_ui.dart';
 import '../../../core/theme/event_completion_style.dart';
+import '../../../core/widgets/smooth_mouse_wheel_scroll_controller.dart';
 import '../../events/application/event_command_service.dart';
 import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
@@ -51,10 +52,17 @@ int quickTodoColumnCountForPlatform(TargetPlatform platform, double width) {
   if (platform == TargetPlatform.iOS) {
     return 2;
   }
-  if (platform == TargetPlatform.macOS) {
+  if (platform == TargetPlatform.macOS || platform == TargetPlatform.windows) {
     return ((width + 12) / 292).floor().clamp(1, 4).toInt();
   }
   return width >= 720 ? 2 : 1;
+}
+
+bool supportsCalendarPointerNavigation(TargetPlatform platform) {
+  return platform == TargetPlatform.android ||
+      platform == TargetPlatform.iOS ||
+      platform == TargetPlatform.macOS ||
+      platform == TargetPlatform.windows;
 }
 
 class _BottomBarUiState {
@@ -134,7 +142,7 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     final eventsAsync = ref.watch(eventsInRangeProvider(range));
     final wide = MediaQuery.sizeOf(context).width >= 880;
     final platform = Theme.of(context).platform;
-    final desktop = _usesMacDesktopExperience(platform);
+    final desktop = _usesDesktopCalendarLayout(platform);
     final showAndroidHorizontalMonthIndicator =
         platform == TargetPlatform.android &&
         viewMode == CalendarViewMode.month &&
@@ -171,7 +179,10 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
                     onLlmPressed: _toggleAiPanel,
                   ),
                   if (showAndroidHorizontalMonthIndicator)
-                    _AndroidHorizontalMonthIndicator(month: month),
+                    _MonthBoundaryLabel(
+                      key: const ValueKey('android-horizontal-month-indicator'),
+                      month: month,
+                    ),
                   Expanded(
                     child: _OrderedCalendarSwitcher(
                       order: _calendarContentOrder(
@@ -1225,7 +1236,7 @@ class _SignalVoicePanelState extends ConsumerState<_SignalVoicePanel>
       if (result.success) {
         ref.invalidate(eventsInRangeProvider);
         ref.invalidate(eventsForSelectedDateProvider);
-        unawaited(ref.read(appleWidgetServiceProvider).refresh());
+        unawaited(ref.read(calendarWidgetServiceProvider).refresh());
       }
       setState(() {
         _conversation = '';
@@ -1827,10 +1838,12 @@ class _WeekPageViewState extends State<_WeekPageView> {
   late final PageController _controller;
   late final DateTime _anchorDate;
   var _currentPage = _initialPage;
+  var _reportedPage = _initialPage;
   var _applyingExternalDate = false;
   var _externalAnimationRevision = 0;
+  var _settleCommitRevision = 0;
   DateTime? _lastPointerWeekMoveAt;
-  final _mouseWheelNavigation = _QueuedPointerPageNavigation();
+  final _mouseWheelNavigation = _MouseWheelPageNavigation();
 
   @override
   void initState() {
@@ -1855,6 +1868,7 @@ class _WeekPageViewState extends State<_WeekPageView> {
 
   @override
   void dispose() {
+    _mouseWheelNavigation.reset();
     _controller.dispose();
     super.dispose();
   }
@@ -1865,38 +1879,78 @@ class _WeekPageViewState extends State<_WeekPageView> {
       key: const ValueKey('week-pointer-navigation'),
       behavior: HitTestBehavior.opaque,
       onPointerSignal: _handlePointerSignal,
-      child: PageView.builder(
-        controller: _controller,
-        allowImplicitScrolling: true,
-        physics: _calendarPagePhysics(context),
-        onPageChanged: (index) {
-          if (_applyingExternalDate || index == _currentPage) {
-            return;
-          }
-          final delta = index - _currentPage;
-          _currentPage = index;
-          widget.onWeekDelta(delta);
-        },
-        itemBuilder: (context, index) {
-          final pageDate = _anchorDate.add(
-            Duration(days: (index - _initialPage) * 7),
-          );
-          return _CalendarWeekPage(
-            selectedDate: pageDate,
-            settings: widget.settings,
-            searchQuery: widget.searchQuery,
-            showAllDayScheduleEvents: widget.showAllDayScheduleEvents,
-            onShowAllDayScheduleEventsChanged:
-                widget.onShowAllDayScheduleEventsChanged,
-            onDateSelected: widget.onDateSelected,
-          );
-        },
+      onPointerPanZoomStart: (_) => _mouseWheelNavigation.reset(),
+      child: NotificationListener<ScrollEndNotification>(
+        onNotification: _handlePageScrollEnd,
+        child: PageView.builder(
+          controller: _controller,
+          allowImplicitScrolling: true,
+          physics: _calendarPagePhysics(context),
+          onPageChanged: (index) {
+            if (_applyingExternalDate || index == _currentPage) {
+              return;
+            }
+            final delta = index - _currentPage;
+            _currentPage = index;
+            if (!_defersPageStateCommitUntilScrollEnd(context)) {
+              _reportedPage = index;
+              widget.onWeekDelta(delta);
+            }
+          },
+          itemBuilder: (context, index) {
+            final pageDate = _anchorDate.add(
+              Duration(days: (index - _initialPage) * 7),
+            );
+            return _windowsMouseWheelSignalRegion(
+              context,
+              onPointerSignal: _handlePointerSignal,
+              child: _CalendarWeekPage(
+                selectedDate: pageDate,
+                settings: widget.settings,
+                searchQuery: widget.searchQuery,
+                showAllDayScheduleEvents: widget.showAllDayScheduleEvents,
+                onShowAllDayScheduleEventsChanged:
+                    widget.onShowAllDayScheduleEventsChanged,
+                onDateSelected: widget.onDateSelected,
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
+  bool _handlePageScrollEnd(ScrollEndNotification notification) {
+    if (notification.depth != 0 ||
+        !_defersPageStateCommitUntilScrollEnd(context)) {
+      return false;
+    }
+    final revision = ++_settleCommitRevision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          revision != _settleCommitRevision ||
+          _applyingExternalDate ||
+          !_controller.hasClients ||
+          _controller.position.isScrollingNotifier.value) {
+        return;
+      }
+      final page = _controller.page;
+      if (page == null || (page - page.round()).abs() > 0.001) {
+        return;
+      }
+      _currentPage = page.round();
+      if (_reportedPage == _currentPage) {
+        return;
+      }
+      final delta = _currentPage - _reportedPage;
+      _reportedPage = _currentPage;
+      widget.onWeekDelta(delta);
+    });
+    return false;
+  }
+
   void _handlePointerSignal(PointerSignalEvent event) {
-    final navigationDelta = _desktopPageNavigationDelta(
+    final navigationDelta = _pointerPageNavigationDelta(
       context,
       event,
       allowVerticalMouseWheel:
@@ -1907,14 +1961,33 @@ class _WeekPageViewState extends State<_WeekPageView> {
     }
     final scroll = event as PointerScrollEvent;
     final direction = navigationDelta > 0 ? 1 : -1;
+    if (_isWindowsMouseWheel(context, scroll)) {
+      GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+        if (!mounted || !_controller.hasClients) {
+          return;
+        }
+        event.respond(allowPlatformDefault: false);
+        _mouseWheelNavigation.scheduleWindowsBurst(
+          controller: _controller,
+          currentPage: _currentPage,
+          axis: _primaryMouseWheelAxis(scroll),
+          direction: direction,
+        );
+      });
+      return;
+    }
     if (scroll.kind == PointerDeviceKind.mouse) {
-      _mouseWheelNavigation.animate(
+      _mouseWheelNavigation.animateUncoalesced(
         controller: _controller,
         currentPage: _currentPage,
         direction: direction,
       );
       return;
     }
+    _navigateFromTrackpad(direction);
+  }
+
+  void _navigateFromTrackpad(int direction) {
     final now = DateTime.now();
     final lastMoveAt = _lastPointerWeekMoveAt;
     if (lastMoveAt != null &&
@@ -1934,9 +2007,11 @@ class _WeekPageViewState extends State<_WeekPageView> {
 
   void _animateToExternalPage(int targetPage) {
     _mouseWheelNavigation.reset();
+    _settleCommitRevision += 1;
     final revision = ++_externalAnimationRevision;
     _applyingExternalDate = true;
     _currentPage = targetPage;
+    _reportedPage = targetPage;
     unawaited(
       _controller
           .animateToPage(
@@ -2078,10 +2153,12 @@ class _DayPageViewState extends State<_DayPageView> {
   late final PageController _controller;
   late final DateTime _anchorDate;
   var _currentPage = _initialPage;
+  var _reportedPage = _initialPage;
   var _applyingExternalDate = false;
   var _externalAnimationRevision = 0;
+  var _settleCommitRevision = 0;
   DateTime? _lastPointerDayMoveAt;
-  final _mouseWheelNavigation = _QueuedPointerPageNavigation();
+  final _mouseWheelNavigation = _MouseWheelPageNavigation();
 
   @override
   void initState() {
@@ -2106,6 +2183,7 @@ class _DayPageViewState extends State<_DayPageView> {
 
   @override
   void dispose() {
+    _mouseWheelNavigation.reset();
     _controller.dispose();
     super.dispose();
   }
@@ -2116,38 +2194,78 @@ class _DayPageViewState extends State<_DayPageView> {
       key: const ValueKey('day-pointer-navigation'),
       behavior: HitTestBehavior.opaque,
       onPointerSignal: _handlePointerSignal,
-      child: PageView.builder(
-        controller: _controller,
-        allowImplicitScrolling: true,
-        physics: _calendarPagePhysics(context),
-        onPageChanged: (index) {
-          if (_applyingExternalDate || index == _currentPage) {
-            return;
-          }
-          final delta = index - _currentPage;
-          _currentPage = index;
-          widget.onDayDelta(delta);
-        },
-        itemBuilder: (context, index) {
-          final pageDate = _anchorDate.add(
-            Duration(days: index - _initialPage),
-          );
-          return _CalendarDayPage(
-            date: pageDate,
-            settings: widget.settings,
-            searchQuery: widget.searchQuery,
-            showAllDayScheduleEvents: widget.showAllDayScheduleEvents,
-            onShowAllDayScheduleEventsChanged:
-                widget.onShowAllDayScheduleEventsChanged,
-            onDateSelected: widget.onDateSelected,
-          );
-        },
+      onPointerPanZoomStart: (_) => _mouseWheelNavigation.reset(),
+      child: NotificationListener<ScrollEndNotification>(
+        onNotification: _handlePageScrollEnd,
+        child: PageView.builder(
+          controller: _controller,
+          allowImplicitScrolling: true,
+          physics: _calendarPagePhysics(context),
+          onPageChanged: (index) {
+            if (_applyingExternalDate || index == _currentPage) {
+              return;
+            }
+            final delta = index - _currentPage;
+            _currentPage = index;
+            if (!_defersPageStateCommitUntilScrollEnd(context)) {
+              _reportedPage = index;
+              widget.onDayDelta(delta);
+            }
+          },
+          itemBuilder: (context, index) {
+            final pageDate = _anchorDate.add(
+              Duration(days: index - _initialPage),
+            );
+            return _windowsMouseWheelSignalRegion(
+              context,
+              onPointerSignal: _handlePointerSignal,
+              child: _CalendarDayPage(
+                date: pageDate,
+                settings: widget.settings,
+                searchQuery: widget.searchQuery,
+                showAllDayScheduleEvents: widget.showAllDayScheduleEvents,
+                onShowAllDayScheduleEventsChanged:
+                    widget.onShowAllDayScheduleEventsChanged,
+                onDateSelected: widget.onDateSelected,
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
+  bool _handlePageScrollEnd(ScrollEndNotification notification) {
+    if (notification.depth != 0 ||
+        !_defersPageStateCommitUntilScrollEnd(context)) {
+      return false;
+    }
+    final revision = ++_settleCommitRevision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          revision != _settleCommitRevision ||
+          _applyingExternalDate ||
+          !_controller.hasClients ||
+          _controller.position.isScrollingNotifier.value) {
+        return;
+      }
+      final page = _controller.page;
+      if (page == null || (page - page.round()).abs() > 0.001) {
+        return;
+      }
+      _currentPage = page.round();
+      if (_reportedPage == _currentPage) {
+        return;
+      }
+      final delta = _currentPage - _reportedPage;
+      _reportedPage = _currentPage;
+      widget.onDayDelta(delta);
+    });
+    return false;
+  }
+
   void _handlePointerSignal(PointerSignalEvent event) {
-    final navigationDelta = _desktopPageNavigationDelta(
+    final navigationDelta = _pointerPageNavigationDelta(
       context,
       event,
       allowVerticalMouseWheel:
@@ -2158,14 +2276,33 @@ class _DayPageViewState extends State<_DayPageView> {
     }
     final scroll = event as PointerScrollEvent;
     final direction = navigationDelta > 0 ? 1 : -1;
+    if (_isWindowsMouseWheel(context, scroll)) {
+      GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+        if (!mounted || !_controller.hasClients) {
+          return;
+        }
+        event.respond(allowPlatformDefault: false);
+        _mouseWheelNavigation.scheduleWindowsBurst(
+          controller: _controller,
+          currentPage: _currentPage,
+          axis: _primaryMouseWheelAxis(scroll),
+          direction: direction,
+        );
+      });
+      return;
+    }
     if (scroll.kind == PointerDeviceKind.mouse) {
-      _mouseWheelNavigation.animate(
+      _mouseWheelNavigation.animateUncoalesced(
         controller: _controller,
         currentPage: _currentPage,
         direction: direction,
       );
       return;
     }
+    _navigateFromTrackpad(direction);
+  }
+
+  void _navigateFromTrackpad(int direction) {
     final now = DateTime.now();
     final lastMoveAt = _lastPointerDayMoveAt;
     if (lastMoveAt != null &&
@@ -2185,9 +2322,11 @@ class _DayPageViewState extends State<_DayPageView> {
 
   void _animateToExternalPage(int targetPage) {
     _mouseWheelNavigation.reset();
+    _settleCommitRevision += 1;
     final revision = ++_externalAnimationRevision;
     _applyingExternalDate = true;
     _currentPage = targetPage;
+    _reportedPage = targetPage;
     unawaited(
       _controller
           .animateToPage(
@@ -2309,7 +2448,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   static const _initialPage = 12000;
 
   late final PageController _controller;
-  _SmoothMouseWheelScrollController? _verticalController;
+  SmoothMouseWheelScrollController? _verticalController;
   double? _verticalItemExtent;
   Size? _verticalHostSize;
   double? _verticalStableItemExtent;
@@ -2318,10 +2457,11 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   var _reportedPage = _initialPage;
   var _applyingExternalMonth = false;
   var _externalAnimationRevision = 0;
+  var _settleCommitRevision = 0;
   var _verticalExtentRevision = 0;
   var _preservingVerticalExtent = false;
   DateTime? _lastPointerMonthMoveAt;
-  final _mouseWheelNavigation = _QueuedPointerPageNavigation();
+  final _mouseWheelNavigation = _MouseWheelPageNavigation();
   final Map<int, RenderBox> _continuousGridBoxes = {};
   final ValueNotifier<(DateTime?, DateTime?)> _continuousRangeNotifier =
       ValueNotifier((null, null));
@@ -2356,6 +2496,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
 
   @override
   void dispose() {
+    _mouseWheelNavigation.reset();
     _controller.dispose();
     _verticalController?.dispose();
     _continuousRangeNotifier.dispose();
@@ -2495,31 +2636,71 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
       key: const ValueKey('month-pointer-navigation'),
       behavior: HitTestBehavior.opaque,
       onPointerSignal: _handlePointerSignal,
-      child: PageView.builder(
-        controller: _controller,
-        allowImplicitScrolling: true,
-        physics: _calendarPagePhysics(context),
-        onPageChanged: (index) {
-          if (_applyingExternalMonth || index == _currentPage) {
-            return;
-          }
-          final delta = index - _currentPage;
-          _currentPage = index;
-          widget.onMonthDelta(delta);
-        },
-        itemBuilder: (context, index) {
-          final pageMonth = _monthForPage(index);
-          return _CalendarMonthPage(
-            month: pageMonth,
-            selectedDate: widget.selectedDate,
-            settings: widget.settings,
-            searchQuery: widget.searchQuery,
-            externalEventDragActive: widget.externalEventDragActive,
-            onDateSelected: widget.onDateSelected,
-          );
-        },
+      onPointerPanZoomStart: (_) => _mouseWheelNavigation.reset(),
+      child: NotificationListener<ScrollEndNotification>(
+        onNotification: _handleHorizontalPageScrollEnd,
+        child: PageView.builder(
+          controller: _controller,
+          allowImplicitScrolling: true,
+          physics: _calendarPagePhysics(context),
+          onPageChanged: (index) {
+            if (_applyingExternalMonth || index == _currentPage) {
+              return;
+            }
+            final delta = index - _currentPage;
+            _currentPage = index;
+            if (!_defersPageStateCommitUntilScrollEnd(context)) {
+              _reportedPage = index;
+              widget.onMonthDelta(delta);
+            }
+          },
+          itemBuilder: (context, index) {
+            final pageMonth = _monthForPage(index);
+            return _windowsMouseWheelSignalRegion(
+              context,
+              onPointerSignal: _handlePointerSignal,
+              child: _CalendarMonthPage(
+                month: pageMonth,
+                selectedDate: widget.selectedDate,
+                settings: widget.settings,
+                searchQuery: widget.searchQuery,
+                externalEventDragActive: widget.externalEventDragActive,
+                onDateSelected: widget.onDateSelected,
+              ),
+            );
+          },
+        ),
       ),
     );
+  }
+
+  bool _handleHorizontalPageScrollEnd(ScrollEndNotification notification) {
+    if (notification.depth != 0 ||
+        !_defersPageStateCommitUntilScrollEnd(context)) {
+      return false;
+    }
+    final revision = ++_settleCommitRevision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          revision != _settleCommitRevision ||
+          _applyingExternalMonth ||
+          !_controller.hasClients ||
+          _controller.position.isScrollingNotifier.value) {
+        return;
+      }
+      final page = _controller.page;
+      if (page == null || (page - page.round()).abs() > 0.001) {
+        return;
+      }
+      _currentPage = page.round();
+      if (_reportedPage == _currentPage) {
+        return;
+      }
+      final delta = _currentPage - _reportedPage;
+      _reportedPage = _currentPage;
+      widget.onMonthDelta(delta);
+    });
+    return false;
   }
 
   void _handleContinuousPointerDown(PointerDownEvent event) {
@@ -2687,7 +2868,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
-    if (!_usesMacDesktopExperience(Theme.of(context).platform) ||
+    if (!supportsCalendarPointerNavigation(Theme.of(context).platform) ||
         event is! PointerScrollEvent ||
         !_controller.hasClients) {
       return;
@@ -2701,14 +2882,33 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
       return;
     }
     final direction = primaryDelta > 0 ? 1 : -1;
+    if (_isWindowsMouseWheel(context, event)) {
+      GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+        if (!mounted || !_controller.hasClients) {
+          return;
+        }
+        event.respond(allowPlatformDefault: false);
+        _mouseWheelNavigation.scheduleWindowsBurst(
+          controller: _controller,
+          currentPage: _currentPage,
+          axis: _primaryMouseWheelAxis(event),
+          direction: direction,
+        );
+      });
+      return;
+    }
     if (event.kind == PointerDeviceKind.mouse) {
-      _mouseWheelNavigation.animate(
+      _mouseWheelNavigation.animateUncoalesced(
         controller: _controller,
         currentPage: _currentPage,
         direction: direction,
       );
       return;
     }
+    _navigateFromTrackpad(direction);
+  }
+
+  void _navigateFromTrackpad(int direction) {
     final now = DateTime.now();
     final lastMoveAt = _lastPointerMonthMoveAt;
     if (lastMoveAt != null &&
@@ -2728,6 +2928,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
 
   void _animateToExternalPage(int targetPage) {
     _mouseWheelNavigation.reset();
+    _settleCommitRevision += 1;
     final revision = ++_externalAnimationRevision;
     _applyingExternalMonth = true;
     _currentPage = targetPage;
@@ -2753,7 +2954,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
     );
   }
 
-  _SmoothMouseWheelScrollController _verticalControllerFor(double itemExtent) {
+  SmoothMouseWheelScrollController _verticalControllerFor(double itemExtent) {
     final current = _verticalController;
     final previousExtent = _verticalItemExtent;
     if (current != null && previousExtent == itemExtent) {
@@ -2763,7 +2964,7 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
         current != null && previousExtent != null && current.hasClients
         ? current.offset / previousExtent
         : _currentPage.toDouble();
-    final replacement = _SmoothMouseWheelScrollController(
+    final replacement = SmoothMouseWheelScrollController(
       initialScrollOffset: logicalPage * itemExtent,
       keepScrollOffset: false,
     );
@@ -2814,34 +3015,117 @@ class _MonthPageViewState extends ConsumerState<_MonthPageView> {
   }
 }
 
-class _SmoothMouseWheelScrollController extends ScrollController {
-  _SmoothMouseWheelScrollController({
-    super.initialScrollOffset,
-    super.keepScrollOffset,
-  });
+enum _MouseWheelAxis { horizontal, vertical }
 
-  @override
-  ScrollPosition createScrollPosition(
-    ScrollPhysics physics,
-    ScrollContext context,
-    ScrollPosition? oldPosition,
-  ) {
-    return _SmoothMouseWheelScrollPosition(
-      physics: physics,
-      context: context,
-      initialPixels: initialScrollOffset,
-      keepScrollOffset: keepScrollOffset,
-      oldPosition: oldPosition,
-      debugLabel: debugLabel,
+class _MouseWheelPageNavigation {
+  // Windows can split one physical wheel detent into a short burst of pointer
+  // signals. Let that burst settle before starting one adjacent-page animation.
+  static const _burstQuietPeriod = Duration(milliseconds: 48);
+  static const _animationDuration = Duration(milliseconds: 240);
+
+  Timer? _burstTimer;
+  int? _burstDirection;
+  _MouseWheelAxis? _burstAxis;
+  final List<int> _pendingDirections = [];
+  var _animationActive = false;
+  var _revision = 0;
+  int? _uncoalescedTargetPage;
+  var _uncoalescedAnimationRevision = 0;
+
+  void scheduleWindowsBurst({
+    required PageController controller,
+    required int currentPage,
+    required _MouseWheelAxis axis,
+    required int direction,
+  }) {
+    if (!controller.hasClients || direction == 0) {
+      return;
+    }
+    if (_burstDirection != null &&
+        (_burstAxis != axis || _burstDirection != direction.sign)) {
+      _commitBurst(
+        controller: controller,
+        fallbackPage: currentPage,
+        revision: _revision,
+      );
+    }
+    _burstAxis = axis;
+    _burstDirection = direction.sign;
+    _burstTimer?.cancel();
+    final revision = _revision;
+    _burstTimer = Timer(_burstQuietPeriod, () {
+      if (revision != _revision) {
+        return;
+      }
+      _commitBurst(
+        controller: controller,
+        fallbackPage: currentPage,
+        revision: revision,
+      );
+    });
+  }
+
+  void _commitBurst({
+    required PageController controller,
+    required int fallbackPage,
+    required int revision,
+  }) {
+    final burstDirection = _burstDirection;
+    _burstTimer?.cancel();
+    _burstTimer = null;
+    _burstDirection = null;
+    _burstAxis = null;
+    if (revision != _revision || burstDirection == null) {
+      return;
+    }
+    _pendingDirections.add(burstDirection);
+    _animateNext(
+      controller: controller,
+      fallbackPage: fallbackPage,
+      revision: revision,
     );
   }
-}
 
-class _QueuedPointerPageNavigation {
-  int? _targetPage;
-  var _animationRevision = 0;
+  void _animateNext({
+    required PageController controller,
+    required int fallbackPage,
+    required int revision,
+  }) {
+    if (revision != _revision ||
+        _animationActive ||
+        _pendingDirections.isEmpty) {
+      return;
+    }
+    if (!controller.hasClients) {
+      _pendingDirections.clear();
+      return;
+    }
+    _animationActive = true;
+    final direction = _pendingDirections.removeAt(0);
+    final visiblePage = controller.page ?? fallbackPage.toDouble();
+    final targetPage = visiblePage.round() + direction;
+    unawaited(
+      controller
+          .animateToPage(
+            targetPage,
+            duration: _animationDuration,
+            curve: Curves.easeOutCubic,
+          )
+          .whenComplete(() {
+            if (revision != _revision) {
+              return;
+            }
+            _animationActive = false;
+            _animateNext(
+              controller: controller,
+              fallbackPage: targetPage,
+              revision: revision,
+            );
+          }),
+    );
+  }
 
-  void animate({
+  void animateUncoalesced({
     required PageController controller,
     required int currentPage,
     required int direction,
@@ -2850,9 +3134,10 @@ class _QueuedPointerPageNavigation {
       return;
     }
     final visiblePage = controller.page ?? currentPage.toDouble();
-    final targetPage = (_targetPage ?? visiblePage.round()) + direction.sign;
-    _targetPage = targetPage;
-    final revision = ++_animationRevision;
+    final targetPage =
+        (_uncoalescedTargetPage ?? visiblePage.round()) + direction.sign;
+    _uncoalescedTargetPage = targetPage;
+    final revision = ++_uncoalescedAnimationRevision;
     final pendingDistance = (targetPage - visiblePage).abs();
     final duration = Duration(
       milliseconds: (140 + math.min(pendingDistance, 4) * 20).round(),
@@ -2865,61 +3150,28 @@ class _QueuedPointerPageNavigation {
             curve: Curves.easeOutCubic,
           )
           .whenComplete(() {
-            if (revision == _animationRevision) {
-              _targetPage = null;
+            if (revision == _uncoalescedAnimationRevision) {
+              _uncoalescedTargetPage = null;
             }
           }),
     );
   }
 
   void reset() {
-    _animationRevision += 1;
-    _targetPage = null;
+    _revision += 1;
+    _burstTimer?.cancel();
+    _burstTimer = null;
+    _burstDirection = null;
+    _burstAxis = null;
+    _pendingDirections.clear();
+    _animationActive = false;
+    _uncoalescedAnimationRevision += 1;
+    _uncoalescedTargetPage = null;
   }
 }
 
 ScrollPhysics _calendarPagePhysics(BuildContext context) {
   return const _ResponsiveMonthPagePhysics();
-}
-
-class _SmoothMouseWheelScrollPosition extends ScrollPositionWithSingleContext {
-  _SmoothMouseWheelScrollPosition({
-    required super.physics,
-    required super.context,
-    super.initialPixels,
-    super.keepScrollOffset,
-    super.oldPosition,
-    super.debugLabel,
-  });
-
-  double? _wheelTarget;
-  var _animationRevision = 0;
-
-  @override
-  void pointerScroll(double delta) {
-    if (delta == 0) {
-      super.pointerScroll(delta);
-      return;
-    }
-    final baseTarget = _wheelTarget ?? pixels;
-    final target = (baseTarget + delta).clamp(minScrollExtent, maxScrollExtent);
-    if (target == pixels) {
-      return;
-    }
-    final revision = ++_animationRevision;
-    _wheelTarget = target;
-    unawaited(
-      animateTo(
-        target,
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-      ).whenComplete(() {
-        if (revision == _animationRevision) {
-          _wheelTarget = null;
-        }
-      }),
-    );
-  }
 }
 
 class _ResponsiveMonthPagePhysics extends PageScrollPhysics {
@@ -2938,32 +3190,8 @@ class _ResponsiveMonthPagePhysics extends PageScrollPhysics {
   );
 }
 
-class _AndroidHorizontalMonthIndicator extends StatelessWidget {
-  const _AndroidHorizontalMonthIndicator({required this.month});
-
-  final DateTime month;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Padding(
-      key: const ValueKey('android-horizontal-month-indicator'),
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Text(
-        DateFormat.MMMM(
-          Localizations.localeOf(context).toLanguageTag(),
-        ).format(month),
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
 class _MonthBoundaryLabel extends StatelessWidget {
-  const _MonthBoundaryLabel({required this.month});
+  const _MonthBoundaryLabel({super.key, required this.month});
 
   final DateTime month;
 
@@ -2992,12 +3220,48 @@ class _MonthBoundaryLabel extends StatelessWidget {
   }
 }
 
-double? _desktopPageNavigationDelta(
+Widget _windowsMouseWheelSignalRegion(
+  BuildContext context, {
+  required void Function(PointerSignalEvent) onPointerSignal,
+  required Widget child,
+}) {
+  if (Theme.of(context).platform != TargetPlatform.windows) {
+    return child;
+  }
+  // This Listener is inside PageView's Scrollable, so it wins pointer-signal
+  // resolution before PageView can also apply horizontal pixel scrolling.
+  return Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerSignal: (event) {
+      if (event.kind == PointerDeviceKind.mouse) {
+        onPointerSignal(event);
+      }
+    },
+    child: child,
+  );
+}
+
+bool _isWindowsMouseWheel(BuildContext context, PointerScrollEvent event) {
+  return Theme.of(context).platform == TargetPlatform.windows &&
+      event.kind == PointerDeviceKind.mouse;
+}
+
+bool _defersPageStateCommitUntilScrollEnd(BuildContext context) {
+  return Theme.of(context).platform == TargetPlatform.windows;
+}
+
+_MouseWheelAxis _primaryMouseWheelAxis(PointerScrollEvent event) {
+  return event.scrollDelta.dx.abs() >= event.scrollDelta.dy.abs()
+      ? _MouseWheelAxis.horizontal
+      : _MouseWheelAxis.vertical;
+}
+
+double? _pointerPageNavigationDelta(
   BuildContext context,
   PointerSignalEvent event, {
   required bool allowVerticalMouseWheel,
 }) {
-  if (!_usesMacDesktopExperience(Theme.of(context).platform) ||
+  if (!supportsCalendarPointerNavigation(Theme.of(context).platform) ||
       event is! PointerScrollEvent) {
     return null;
   }
@@ -3016,7 +3280,7 @@ double? _desktopPageNavigationDelta(
   return null;
 }
 
-bool _usesMacDesktopExperience(TargetPlatform platform) {
+bool _usesDesktopCalendarLayout(TargetPlatform platform) {
   return platform == TargetPlatform.macOS || platform == TargetPlatform.windows;
 }
 
@@ -3341,8 +3605,9 @@ class _CalendarMonthPage extends ConsumerWidget {
     final updatedSettings = settings.copyWith(
       calendarManualEventOrders: manualOrders,
     );
-    await ref.read(settingsRepositoryProvider).save(updatedSettings);
-    ref.read(appSettingsProvider.notifier).state = updatedSettings;
+    final settingsRepository = ref.read(settingsRepositoryProvider);
+    await settingsRepository.save(updatedSettings, changedFrom: settings);
+    ref.read(appSettingsProvider.notifier).state = settingsRepository.load();
     await ref.read(syncServiceProvider).queueSettingsBackup();
   }
 
@@ -3639,8 +3904,9 @@ Future<void> _saveCalendarManualOrderAfterDrop(
   final updatedSettings = settings.copyWith(
     calendarManualEventOrders: manualOrders,
   );
-  await ref.read(settingsRepositoryProvider).save(updatedSettings);
-  ref.read(appSettingsProvider.notifier).state = updatedSettings;
+  final settingsRepository = ref.read(settingsRepositoryProvider);
+  await settingsRepository.save(updatedSettings, changedFrom: settings);
+  ref.read(appSettingsProvider.notifier).state = settingsRepository.load();
   await ref.read(syncServiceProvider).queueSettingsBackup();
 }
 
@@ -3806,7 +4072,7 @@ class _CalendarHeader extends ConsumerWidget {
     final compact = MediaQuery.sizeOf(context).width < 680;
     final platform = Theme.of(context).platform;
     final ios = platform == TargetPlatform.iOS;
-    final desktop = _usesMacDesktopExperience(platform);
+    final desktop = _usesDesktopCalendarLayout(platform);
     final locale = Localizations.localeOf(context).toLanguageTag();
     final settings = ref.watch(appSettingsProvider);
     final label = calendarPeriodLabel(
@@ -4193,14 +4459,19 @@ class _CalendarHeader extends ConsumerWidget {
                         title: Text(context.tr('D-day 일정만 보기')),
                         onChanged: (value) async {
                           setState(() => ddayOnly = value);
-                          final updated = ref
-                              .read(appSettingsProvider)
-                              .copyWith(calendarDdayOnly: value);
-                          await ref
-                              .read(settingsRepositoryProvider)
-                              .save(updated);
+                          final currentSettings = ref.read(appSettingsProvider);
+                          final updated = currentSettings.copyWith(
+                            calendarDdayOnly: value,
+                          );
+                          final settingsRepository = ref.read(
+                            settingsRepositoryProvider,
+                          );
+                          await settingsRepository.save(
+                            updated,
+                            changedFrom: currentSettings,
+                          );
                           ref.read(appSettingsProvider.notifier).state =
-                              updated;
+                              settingsRepository.load();
                         },
                       ),
                       SwitchListTile(
@@ -4212,14 +4483,19 @@ class _CalendarHeader extends ConsumerWidget {
                         title: Text(context.tr('공휴일 표시')),
                         onChanged: (value) async {
                           setState(() => showHolidays = value);
-                          final updated = ref
-                              .read(appSettingsProvider)
-                              .copyWith(calendarShowHolidays: value);
-                          await ref
-                              .read(settingsRepositoryProvider)
-                              .save(updated);
+                          final currentSettings = ref.read(appSettingsProvider);
+                          final updated = currentSettings.copyWith(
+                            calendarShowHolidays: value,
+                          );
+                          final settingsRepository = ref.read(
+                            settingsRepositoryProvider,
+                          );
+                          await settingsRepository.save(
+                            updated,
+                            changedFrom: currentSettings,
+                          );
                           ref.read(appSettingsProvider.notifier).state =
-                              updated;
+                              settingsRepository.load();
                         },
                       ),
                     ],
@@ -4268,16 +4544,21 @@ class _CalendarHeader extends ConsumerWidget {
                                     hidden.add(category.id);
                                   }
                                 });
-                                final updated = ref
-                                    .read(appSettingsProvider)
-                                    .copyWith(
-                                      hiddenCategoryIds: hidden.toList(),
-                                    );
-                                await ref
-                                    .read(settingsRepositoryProvider)
-                                    .save(updated);
+                                final currentSettings = ref.read(
+                                  appSettingsProvider,
+                                );
+                                final updated = currentSettings.copyWith(
+                                  hiddenCategoryIds: hidden.toList(),
+                                );
+                                final settingsRepository = ref.read(
+                                  settingsRepositoryProvider,
+                                );
+                                await settingsRepository.save(
+                                  updated,
+                                  changedFrom: currentSettings,
+                                );
                                 ref.read(appSettingsProvider.notifier).state =
-                                    updated;
+                                    settingsRepository.load();
                               },
                             ),
                         ],
@@ -5139,7 +5420,7 @@ class _YearOverviewPageState extends State<_YearOverviewPage> {
   @override
   Widget build(BuildContext context) {
     final vertical = widget.navigationMode == MonthNavigationMode.vertical;
-    final desktop = _usesMacDesktopExperience(Theme.of(context).platform);
+    final desktop = _usesDesktopCalendarLayout(Theme.of(context).platform);
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(

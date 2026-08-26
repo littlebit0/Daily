@@ -38,6 +38,7 @@ void main() {
       allEvents: events,
     );
 
+    expect(snapshot['localeTag'], 'ko');
     expect(snapshot['themeMode'], AppThemeMode.system.name);
     expect(snapshot['weekTitle'], '7월 26일 - 8월 1일');
 

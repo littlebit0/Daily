@@ -8,6 +8,241 @@ profiles, keystore passwords, or private keys to this file.
 Historical app-version notes below `2.0.0` were intentionally removed on
 2026-06-06 at the user's request.
 
+## 2026-08-27 Windows Schedule and Settings Motion Fix
+
+- Windows week/day schedule time scrolling now uses the same shared
+  `SmoothMouseWheelScrollController` and `ScrollPosition` as the vertical
+  month calendar. Mouse-wheel targets accumulate during the existing 160 ms
+  `easeOutCubic` transition, clamp at the time-axis boundaries, and handle an
+  immediate reverse input without leaving a stale animation target. Vertical
+  schedule scrolling does not change the selected day or week.
+- The shared controller was extracted to
+  `lib/core/widgets/smooth_mouse_wheel_scroll_controller.dart`. Vertical month
+  navigation keeps its previous initial offset, extent replacement, and
+  disposal behavior. Schedule views select the smooth controller only on
+  Windows; other platforms keep the ordinary `ScrollController`, touch/trackpad
+  behavior, and the 07:00 initial position.
+- The Windows settings controls had not lost their animation widgets. Their
+  selected values were only published after roughly 30 asynchronous
+  SharedPreferences writes, so the first visual frame was delayed until disk
+  persistence completed. `SettingsPage` now keeps a Windows-only pending UI
+  value so the existing 150 ms capsule `AnimatedAlign` and Material switch
+  transitions begin immediately.
+- Windows whole-settings saves are serialized. The global settings provider,
+  native calendar-widget listeners, and backups receive successful values in
+  input order; a failed newest save clears the pending UI and returns to the
+  last successfully persisted provider value. Non-Windows save ordering and
+  settings behavior are unchanged.
+- Verification passed focused schedule/controller tests (14 schedule tests,
+  including accumulated, reverse, boundary, date-invariance, and non-Windows
+  cases), the Windows settings mid-animation/queued-save/rollback test, the
+  existing Windows page-wheel test, full Flutter analysis, all 272 Flutter
+  tests, formatting, and `git diff --check`.
+- The isolated `%LOCALAPPDATA%\Programs\DailyCalendar Test\DailyCalendar
+  Test.exe` was rebuilt and reinstalled as Profile/AOT (`IsDebug=false`,
+  `data/app.so` present, no `kernel_blob.bin`). GUI smoke testing confirmed the
+  week schedule time axis scrolls and the week-start capsule and lunar switch
+  change visibly; both test settings were restored. The test app is left open
+  on the Screen and Calendar settings page for physical testing.
+- Production `C:\Program Files\Daily\DailyCalendar.exe` remained stopped and
+  unchanged with SHA-256
+  `7F986A716C0D6F7E7A980CA00055AD0B1E56C2B3D2BA8A457EE1DFAB0D0B58A6`.
+  These changes have not been committed or pushed.
+
+## 2026-08-27 Windows Calendar Profile/AOT Performance Fix
+
+- The previously installed `DailyCalendar Test` was a Flutter Debug/JIT
+  bundle: it contained a roughly 91 MB `kernel_blob.bin`, had no `app.so`, and
+  exactly matched the Debug build. Its calendar frame rate was therefore not
+  representative of the distributed Windows app.
+- Windows horizontal month, week, and day PageViews now keep page changes
+  local while an animation is running. The selected-date and visible-month
+  providers are committed once after the outer PageView has fully settled.
+  Nested schedule scroll notifications are ignored, and a post-frame
+  scrolling/revision check prevents provider rebuilds between queued wheel
+  animations. Other platforms retain their previous midpoint commit timing.
+- `eventsInRangeProvider` is now `autoDispose.family`, so Drift range streams
+  for calendar pages that have actually left the PageView cache are cancelled
+  instead of accumulating for the entire app session.
+- Debug and Profile builds both compile with `DAILY_TEST_EDITION` and use the
+  isolated `DailyCalendar Test` window, executable metadata, widget directory,
+  application-support directory, notification AUMID, and notification GUID.
+  Release continues to use the production `DailyCalendar` identities.
+- `tool/run_windows_test.ps1` now defaults to Profile but accepts explicit
+  `-BuildMode Debug` or `-BuildMode Profile`. For Profile it requires
+  `data/app.so`, rejects `kernel_blob.bin`, requires `IsDebug=false`, and keeps
+  the existing exact-path, production-hash, staging, backup, and rollback
+  guards. Windows auto-update and the production analytics endpoint remain
+  Release-only.
+- The current side-by-side installation is the Profile/AOT bundle at
+  `%LOCALAPPDATA%\Programs\DailyCalendar Test\DailyCalendar Test.exe`. It is
+  running as `DailyCalendar Test`, reports `IsDebug=false`, contains `app.so`,
+  and has no Debug kernel blob. Production
+  `C:\Program Files\Daily\DailyCalendar.exe` remained stopped and unchanged;
+  its verified SHA-256 is
+  `7F986A716C0D6F7E7A980CA00055AD0B1E56C2B3D2BA8A457EE1DFAB0D0B58A6`.
+- Verification passed Flutter analysis, all 269 Flutter tests, focused
+  Windows wheel/provider-settle tests, test/production identity tests, updater
+  tests, PowerShell parser validation, Profile build/install checks, an actual
+  Release AOT build with unchanged `DailyCalendar` metadata, and GUI smoke
+  navigation for next/previous week plus next/previous month by mouse wheel.
+  The app is left open on the August 2026 horizontal month view for physical
+  mouse/display testing.
+- These changes have not been committed or pushed.
+
+## 2026-08-27 Android Horizontal Month Label Parity
+
+- Compact Android phones using horizontal month navigation now reuse the
+  vertical continuous-calendar `_MonthBoundaryLabel` instead of a separate
+  small `labelLarge` caption. Both modes therefore show the localized month at
+  34 px, weight 800, using the normal surface color and the same trailing
+  divider.
+- The Android-only visibility rule and the existing
+  `android-horizontal-month-indicator` test key remain unchanged. Windows and
+  Apple layouts do not gain this extra compact-phone label.
+- Widget coverage verifies the shared typography, color, and divider at a
+  430x932 Android viewport.
+
+## 2026-08-27 Windows Mouse Wheel Calendar Paging
+
+- Horizontal month mode plus the week/day PageViews now normalize Windows
+  mouse-wheel input into adjacent-page transitions. A short burst of raw
+  vertical-wheel or horizontal-tilt signals from one physical detent produces
+  one previous/next page animation, and separate bursts are animated in order
+  instead of repeatedly retargeting the same animation.
+- A Windows-only Listener inside each PageView item claims mouse pointer
+  signals before PageView's own horizontal pixel scrolling can process them.
+  This prevents the default pixel jump from cancelling or competing with the
+  custom page animation. Nested vertical schedule scrolling still wins signal
+  resolution and continues to scroll time without changing the day/week.
+- Trackpad pan/zoom drag and fling remain on the existing PageView gesture
+  path. Starting a trackpad gesture cancels a pending Windows wheel burst so a
+  delayed wheel transition cannot fire during the gesture. macOS and other
+  platforms retain their previous mouse/trackpad handling.
+- Regression coverage sends real Windows pointer signals for horizontal week
+  and day navigation, split vertical and horizontal month-wheel bursts,
+  PageView pixel-scroll suppression, nested schedule scrolling, reverse tilt,
+  and pending-wheel cancellation by a trackpad fling. The existing macOS
+  PageView/trackpad integration test remains unchanged in behavior.
+- Final integration verification passed `flutter analyze --no-pub`, all 64
+  widget tests, and all 268 Flutter tests.
+
+## 2026-08-27 Android/Windows Local Test Install
+
+- `Daily_API_35` now uses host GPU rendering and a 120 Hz virtual display.
+  The previous emulator app and its test-only data were removed, the 3.3.1
+  Release APK was installed cleanly, and
+  `com.littlebit0.dailycalendar/.MainActivity` was launched successfully.
+- The isolated Windows Debug edition was installed at
+  `%LOCALAPPDATA%\Programs\DailyCalendar Test\DailyCalendar Test.exe` with a
+  current-user Start Menu shortcut named `DailyCalendar Test`. Its running
+  window, ProductName, FileDescription, and InternalName all identify it as
+  `DailyCalendar Test`; its application-support directory is separate from
+  production.
+- Production `C:\Program Files\Daily\DailyCalendar.exe` remained version
+  `3.0.1+302`, was not launched, and its timestamp/hash were preserved by the
+  test installer check.
+- After the calendar paging, Android month-label, and onboarding fixes, the
+  current Release APK was installed with `adb install -r` so emulator data was
+  preserved. The isolated Windows Debug bundle was rebuilt and reinstalled.
+  Android resumed in `MainActivity` at 120 Hz and `DailyCalendar Test` resumed
+  from its separate current-user install; production Daily remained stopped.
+- Verification: Flutter analysis passed, the 8 focused Windows test-identity,
+  updater, and installation-configuration tests passed, Debug built with the
+  test identity, Release built with the unchanged `DailyCalendar` identity,
+  and `git diff --check` passed.
+
+## 2026-08-26 Windows Side-by-Side Debug Test Edition
+
+- Windows Debug builds use the isolated visible identity
+  `DailyCalendar Test` for the executable version resource, Flutter window,
+  tray tooltip/menu, native dialogs, and Flutter application title. Windows
+  Release builds keep the production identity `DailyCalendar` unchanged.
+- Debug notification initialization uses app name `DailyCalendar Test`, AUMID
+  `Personal.Daily.Calendar.Test`, and GUID
+  `0734c50a-0934-4e91-ad45-58f8d2ea41d5`. Release keeps its existing app name
+  `DailyCalendar`, AUMID `Personal.Daily.Calendar`, and GUID
+  `4c124e1f-e041-4f68-aa1e-9ee8ec1a4fb7`.
+- The Windows native widget bridge stores Debug actions under
+  `%LOCALAPPDATA%\DailyCalendar Test`; Release continues to use
+  `%LOCALAPPDATA%\DailyCalendar`. The executable ProductName separation also
+  gives Flutter application-support data a separate Debug directory.
+- The Windows automatic updater is enabled only for Release builds. Debug and
+  profile builds return before checking or installing an update.
+- `tool/run_windows_test.ps1` explicitly builds Debug, verifies the Debug
+  executable identity, stages the bundle under
+  `%LOCALAPPDATA%\Programs\DailyCalendar Test`, renames only the copied entry
+  executable to `DailyCalendar Test.exe`, and creates the current-user Start
+  Menu shortcut `DailyCalendar Test.lnk`. The script validates exact targets,
+  rejects reparse-point test directories, refuses targets under
+  `C:\Program Files\Daily`, preserves a previous test bundle transactionally,
+  refuses to replace a running test bundle, and verifies the production
+  executable hash did not change. Use `-NoLaunch` when installation without an
+  automatic launch is desired.
+- Production `C:\Program Files\Daily` must never be used as a Debug target.
+  Building/tests alone do not install or launch either edition.
+
+## 2026-08-26 Cross-Platform Calendar Widget Contract
+
+- The shared Flutter owner for calendar surfaces is now
+  `CalendarWidgetService` in
+  `lib/core/widgets/calendar_widget_service.dart`. It builds one localized
+  schedule/Todo/theme snapshot for Apple WidgetKit, Android home widgets, and
+  the Windows calendar surface. `AppleWidgetService`,
+  `AppleWidgetSnapshotBuilder`, and `AppleWidgetTodoAction` remain as thin
+  compatibility names, so the existing Apple behavior and native contract are
+  preserved without editing Apple platform files.
+- Platform channels use the same method and payload contract:
+  - iOS/macOS: `daily/apple_widgets` (unchanged)
+  - Android: `daily/android_widgets`
+  - Windows: `daily/windows_widgets`
+  - Flutter -> native: `updateSnapshot(Map)`, `pendingTodoActions()`, and
+    `acknowledgeTodoActions({tokens: List<String>})`
+  - native -> Flutter: `todoActionsChanged`
+- A pending Todo action is `{token, eventId, completed}`. Native surfaces must
+  return the base `eventId`, not an occurrence-only display ID. Flutter applies
+  actions through `EventCommandService`, acknowledges missing/deleted events
+  and successful actions, stops at the first mutation failure, refreshes the
+  surface, records the allowlisted widget analytic, and invalidates visible
+  calendar streams. Queued actions are checked at app start and resume as well
+  as after the native callback.
+- The shared snapshot keys remain compatible with Apple:
+  `generatedAt`, `localeTag`, `themeMode`, `monthTitle`, `weekTitle`,
+  `weekStartsOnMonday`, `monthDays`, `todayTitle`, `todayEvents`,
+  `todayRemainingCount`, `scheduleEvents`, and `ddays`. Event rows keep both
+  display `id` and base `eventId`, plus completion, color, timing, and all-day
+  state where applicable. `localeTag` is the locale already resolved from the
+  Daily language setting, so Android and Windows native surfaces must use it
+  for weekday labels, empty states, and other native-only copy instead of
+  independently selecting the OS language. Existing Apple native decoders
+  ignore this additive field and remain compatible.
+- Widget refreshes are no longer Apple-gated. Startup, resume, event mutation,
+  Drive restore, category/settings reset, sign-out, and theme changes target
+  the current OS channel. Siri/App Intents/Signal voice remain Apple-specific.
+- Android/iOS/macOS/Windows now pass the common pointer-page-navigation gate;
+  touch physics are unchanged. Windows quick-Todo columns use the same
+  width-adaptive desktop calculation as macOS. The Windows notification
+  initialization display name is `DailyCalendar`; the existing internal
+  AppUserModelID and GUID remain unchanged for compatibility.
+- This shared change does not alter the existing 120 Hz/touch tuning,
+  biometric flow, adjacent-month dates, Drive v2 model, Windows updater, or
+  installer.
+- Verification on Windows:
+  - `flutter analyze --no-pub`: passed with no issues.
+  - `flutter test --no-pub`: all 258 tests passed.
+  - Android debug Kotlin compilation and APK assembly passed.
+  - `flutter build apk --release --no-pub`: produced the 3.3.1
+    `DailyCalendar` phone-only APK.
+  - `flutter build windows --release --no-pub`: produced
+    `DailyCalendar.exe`; the native runner also passed `/W4 /WX` with no
+    warnings or errors.
+- The PowerShell Flutter wrapper now discovers the repository-local Android
+  SDK and Android Studio JDK used by this Windows workspace. This keeps the
+  already-installed Android toolchain usable without hard-coding a missing JDK.
+- Apple native files were intentionally not changed. A later Mac/iPhone build
+  should still smoke-test the preserved `daily/apple_widgets` bridge after
+  pulling this shared refactor.
+
 ## 2026-08-17 App Store Transporter 3.1.0 Build
 
 - Raised the shared visible app version and every iOS/macOS app and widget
@@ -4595,3 +4830,90 @@ Historical app-version notes below `2.0.0` were intentionally removed on
   - `./tool/flutter.sh analyze --no-pub` 통과
   - `./tool/flutter.sh test --no-pub -r compact` 전체 250개 통과
   - `python3 -m unittest test/tool/analytics_receiver_test.py` 전체 4개 통과
+
+### 2026-08-27 Android/Windows 초기 온보딩 분석 동의 반복 수정
+
+- 신규 설치 온보딩에서 익명 분석 선택이 저장될 때 최상위 `MaterialApp` key까지
+  함께 바뀌어 진행 중인 `WelcomePage`가 재생성되고 단계 상태가 초기화되던 문제를
+  수정했다.
+- 온보딩이 끝나기 전에는 앱 shell key를 고정하고, 이미 온보딩을 마친 기존
+  사용자의 일회성 분석 동의 게이트에서만 동의 완료 상태에 따라 shell을
+  전환한다. 따라서 소개 → 익명 분석 선택 → 알림·알람 권한 → 계정 선택 순서가
+  Android와 Windows에서 한 번씩만 진행된다.
+- Android/Windows 각각에서 알림 초기화가 대기 중인 상태와 앱 inactive/resumed
+  복귀를 재현하는 위젯 회귀 테스트를 추가했다. Apple 온보딩의 Siri 추가 단계와
+  기존 사용자 분석 동의 게이트는 변경하지 않았으며, 공유 shell 변경이므로 다음
+  Apple 작업 시 신규 설치 온보딩 순서만 수동 확인한다.
+- 검증:
+  - 온보딩 및 기존 사용자 분석 동의 집중 위젯 테스트 4개 통과
+  - `./tool/flutter.ps1 analyze --no-pub` 통과
+  - `./tool/flutter.ps1 test --no-pub -r compact` 전체 267개 통과
+  - `git diff --check -- lib/app/daily_app.dart test/widget_test.dart` 통과
+
+### 2026-08-27 Windows 설정 눌림 애니메이션 및 스크롤 보정
+
+- Windows 주간·일간 스케줄 시간축의 마우스 휠 이동은 월간 상하 스크롤과 같은
+  공용 완화 컨트롤러를 사용하도록 맞췄다.
+- Windows 설정 저장 중에도 컨트롤이 즉시 움직이도록 화면에는 pending 설정을
+  먼저 반영하고, 전체 설정 저장은 직렬화했다. 저장 실패 시 마지막 확정값으로
+  되돌리고 이전 저장이 뒤늦게 최신 선택을 덮어쓰지 않도록 revision을 관리한다.
+- 첫 보정 뒤에도 사용자에게 버튼 눌림이 보이지 않았던 원인은 공용
+  `_ThreeWayCapsule`이 선택값 이동만 애니메이션하고 실제 pointer-down 상태를
+  갖지 않았기 때문이었다.
+  - pointer-down 즉시 선택 pill을 미리 이동하고 0.93배로 축소한다.
+  - 눌림 75ms, 복귀 160ms, 선택 이동 220ms를 사용한다.
+  - 각 선택지에 Material InkWell 상태 레이어와 글자 색·굵기 전환을 적용한다.
+  - 키보드 highlight와 선택/상호배타 semantics를 함께 제공한다.
+- 모든 설정 `SwitchListTile`은 공용 눌림 래퍼를 사용한다. 눌렀을 때 타일을
+  0.985배로 축소하고 배경·switch overlay를 강조하며, 둥근 Material clip으로
+  잉크가 타일 밖으로 번지지 않게 했다.
+- 버튼 위에서 세로 스크롤을 시작할 때 수평 드래그가 잘못 선택되는 문제를
+  막기 위해 touch slop 이후 실제 이동 축을 판별한다. 수평 이동만 캡슐 선택으로
+  처리하고 세로 이동은 눌림을 취소한다. 우·중클릭은 눌림으로 처리하지 않으며,
+  화면 전환 중 pointer-up에도 dispose된 State를 갱신하지 않는다.
+- 검증:
+  - 16ms/50ms 실제 렌더 배율과 선택 위치를 검사하는 Windows 설정 위젯 테스트 통과
+  - 같은 선택 재클릭, 수평 드래그, 세로 스크롤 취소, 우클릭 무반응, switch
+    눌림·취소, dispose 중 pointer-up, semantics 선택 상태 회귀 테스트 통과
+  - `./tool/flutter.ps1 analyze` 통과
+  - `./tool/flutter.ps1 test` 전체 272개 통과
+  - Profile/AOT 테스트판을
+    `%LOCALAPPDATA%\Programs\DailyCalendar Test\DailyCalendar Test.exe`에 재설치하고
+    실행했다. `app.so`가 있고 Debug `kernel_blob.bin`은 없으며 `IsDebug=false`이다.
+  - GUI에서 테마 캡슐과 음력 switch의 눌림 강조를 확인하고 원래 값(자동/끔)으로
+    복구했다. 앱은 `화면 및 달력` 설정 화면에 열어 두었다.
+  - 배포판 `C:\Program Files\Daily\DailyCalendar.exe`의 SHA-256은
+    `7F986A716C0D6F7E7A980CA00055AD0B1E56C2B3D2BA8A457EE1DFAB0D0B58A6`로 유지됐다.
+- 이번 작업은 커밋하거나 푸시하지 않았다.
+
+### 2026-08-27 Windows 설정 프레임 정지 원인 및 저장 보정
+
+- 설정 버튼 애니메이션이 빠진 것처럼 보였던 직접 원인은 Windows
+  `shared_preferences_windows 2.4.1`이 각 setter마다 약 54KB의 전체 JSON을 UI
+  isolate에서 동기 재작성하면서 중간 프레임을 막은 것이었다. 수정 전 수집된 느린
+  프레임 16건은 중앙값 397.5ms, 평균 424.8ms, 최대 558ms였다.
+- `SettingsRepository.save`를 전체 약 40개 키 재저장에서 실제 변경 키만 쓰도록
+  바꿨다. 일반 설정 1개는 동기 전체 파일 쓰기가 pending 상태에 따라 2회 또는
+  3회로 줄었다. 이전 reminder/text-size 마이그레이션과 privacy legacy key 정리는
+  유지했다.
+- Windows 설정 화면은 값을 즉시 화면에 반영한 뒤 눌림·토글 모션이 끝나는
+  240ms 후 저장한다. 페이지별 저장 tail, 저장소 전역 mutation queue,
+  generation과 `changedFrom` 기반 필드 병합으로 빠른 연속 입력·외부 변경·reset·
+  Google Drive 복원이 서로 덮어쓰지 않게 했다. 성공한 각 저장은 백업을 예약하고,
+  앱 잠금 해제/방식 변경은 설정 저장 후 PIN을 삭제한다.
+- reset에서 누락됐던 기본 reminder 목록, theme, month navigation, language 키를
+  함께 지운다. 원격 설정 복원은 같은 mutation queue 안에서 pending/revision/
+  generation을 원자적으로 확인한다.
+- 검증:
+  - `flutter analyze` 통과
+  - 전체 테스트 `flutter test --concurrency=1` 288개 통과
+  - Profile/AOT 테스트판에서 약 54KB 설정 파일과 200개 분석 큐를 유지하고 음력
+    토글을 6회 측정했다. revision은 34→40으로 정확히 증가했고 원래 값 `false`,
+    분석 동의 `true`가 유지됐다.
+  - 같은 측정 구간의 `slow_interaction_detected`는 0건이었다. 기존 397.5ms 중앙값,
+    558ms 최대 정지는 재현되지 않았고 클릭 직후 눌림·토글 중간 프레임이 실제
+    화면에 표시됐다.
+  - 배포판 `C:\Program Files\Daily\DailyCalendar.exe`의 SHA-256은
+    `7F986A716C0D6F7E7A980CA00055AD0B1E56C2B3D2BA8A457EE1DFAB0D0B58A6`로 유지됐다.
+- Profile 테스트판은 `화면 및 달력` 설정 화면에 열어 두었고 음력 설정은 측정 전
+  값인 꺼짐으로 복구했다. 이번 작업은 커밋하거나 푸시하지 않았다.

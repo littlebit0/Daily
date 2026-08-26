@@ -11,6 +11,8 @@
 
 #include "win32_window.h"
 
+class WindowsWidgetBridge;
+
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
  public:
@@ -32,10 +34,6 @@ class FlutterWindow : public Win32Window {
   void ShowTrayMenu();
   void ShowMiniCalendar();
   void ExitFromTray();
-  std::wstring BuildMiniCalendarText();
-  int FirstWeekday(int year, int month);
-  int DaysInMonth(int year, int month);
-  bool IsLeapYear(int year);
   void RegisterMapLauncherChannel();
   void OpenMapChooser(
       const flutter::MethodCall<flutter::EncodableValue>& call,
@@ -48,6 +46,7 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       map_launcher_channel_;
+  std::unique_ptr<WindowsWidgetBridge> windows_widget_bridge_;
 
   NOTIFYICONDATA notify_icon_data_ = {};
   bool tray_icon_added_ = false;

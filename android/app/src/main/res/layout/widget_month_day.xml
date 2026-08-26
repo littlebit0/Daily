@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_item_root"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingTop="1dp">
+
+    <TextView
+        android:id="@+id/widget_day_number"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:gravity="center"
+        android:maxLines="1"
+        android:textColor="#FF111827"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_day_event"
+        android:layout_width="match_parent"
+        android:layout_height="18dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingStart="1dp"
+        android:paddingEnd="1dp"
+        android:textColor="#FF2563EB"
+        android:textSize="8sp" />
+</LinearLayout>

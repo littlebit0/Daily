@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_month_description">DailyCalendar 月間カレンダー</string>
+    <string name="widget_today_description">DailyCalendar 今日の予定</string>
+    <string name="widget_dday_description">DailyCalendar D-day 予定</string>
+    <string name="widget_month_title">月間カレンダー</string>
+    <string name="widget_today_title">今日の予定</string>
+    <string name="widget_dday_title">D-day</string>
+    <string name="widget_no_today_events">今日の予定はありません</string>
+    <string name="widget_no_ddays">D-day の予定はありません</string>
+    <string name="widget_open_app">DailyCalendarを開いてウィジェットデータを読み込んでください</string>
+    <string name="widget_toggle_todo">完了状態を切り替える</string>
+    <string name="widget_more_count">他%1$d件</string>
+</resources>

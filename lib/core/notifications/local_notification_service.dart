@@ -10,10 +10,45 @@ import '../../features/events/domain/calendar_event.dart';
 import '../../features/events/domain/event_repository.dart';
 import '../settings/app_settings.dart';
 import '../localization/app_localizations.dart';
+import '../platform/windows_build_identity.dart';
 import '../settings/settings_repository.dart';
 import '../time/korea_time.dart';
 import 'notification_service.dart';
 import 'reminder_delivery_plan.dart';
+
+@immutable
+class WindowsNotificationIdentity {
+  const WindowsNotificationIdentity({
+    required this.appName,
+    required this.appUserModelId,
+    required this.guid,
+  });
+
+  final String appName;
+  final String appUserModelId;
+  final String guid;
+}
+
+const windowsProductionNotificationIdentity = WindowsNotificationIdentity(
+  appName: 'DailyCalendar',
+  appUserModelId: 'Personal.Daily.Calendar',
+  guid: '4c124e1f-e041-4f68-aa1e-9ee8ec1a4fb7',
+);
+
+const windowsTestNotificationIdentity = WindowsNotificationIdentity(
+  appName: 'DailyCalendar Test',
+  appUserModelId: 'Personal.Daily.Calendar.Test',
+  guid: '0734c50a-0934-4e91-ad45-58f8d2ea41d5',
+);
+
+@visibleForTesting
+WindowsNotificationIdentity windowsNotificationIdentityForBuild({
+  required bool isTestEdition,
+}) {
+  return isTestEdition
+      ? windowsTestNotificationIdentity
+      : windowsProductionNotificationIdentity;
+}
 
 class LocalNotificationService implements NotificationService {
   LocalNotificationService({
@@ -33,8 +68,6 @@ class LocalNotificationService implements NotificationService {
   static const _nativeNotificationChannel = MethodChannel(
     'daily/native_notifications',
   );
-  static const _windowsAppUserModelId = 'Personal.Daily.Calendar';
-  static const _windowsGuid = '4c124e1f-e041-4f68-aa1e-9ee8ec1a4fb7';
   static const _dueReminderGrace = Duration(minutes: 2);
   static const _commonReminderMinutes = [0, 5, 10, 15, 30, 60, 1440];
   static const _commonDdayOffsets = [
@@ -75,12 +108,15 @@ class LocalNotificationService implements NotificationService {
       requestSoundPermission: true,
     );
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const windows = WindowsInitializationSettings(
-      appName: 'Daily',
-      appUserModelId: _windowsAppUserModelId,
-      guid: _windowsGuid,
+    final windowsIdentity = windowsNotificationIdentityForBuild(
+      isTestEdition: isWindowsTestEdition,
     );
-    const settings = InitializationSettings(
+    final windows = WindowsInitializationSettings(
+      appName: windowsIdentity.appName,
+      appUserModelId: windowsIdentity.appUserModelId,
+      guid: windowsIdentity.guid,
+    );
+    final settings = InitializationSettings(
       android: android,
       iOS: darwin,
       macOS: darwin,

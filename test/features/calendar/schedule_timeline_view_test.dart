@@ -1,12 +1,103 @@
 import 'package:daily/features/calendar/widgets/schedule_timeline_view.dart';
 import 'package:daily/core/settings/app_settings.dart';
 import 'package:daily/core/theme/event_completion_style.dart';
+import 'package:daily/core/widgets/smooth_mouse_wheel_scroll_controller.dart';
 import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_category.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'Windows mouse wheel smoothly accumulates time-axis scroll without changing the day',
+    (tester) async {
+      DateTime? selectedDate;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
+          home: Scaffold(
+            body: ScheduleTimelineView(
+              days: [DateTime(2026, 8, 27)],
+              events: const [],
+              selectedDate: DateTime(2026, 8, 27),
+              use24HourTime: true,
+              showAllDayEvents: true,
+              holidayBackgroundEnabled: true,
+              holidayColorValue: EventCategory.holiday.colorValue,
+              onShowAllDayEventsChanged: (_) {},
+              onDateSelected: (date) => selectedDate = date,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final timeScroll = find.byKey(const ValueKey('schedule-time-scroll'));
+      final controller = tester
+          .widget<SingleChildScrollView>(timeScroll)
+          .controller!;
+      final initialOffset = controller.offset;
+      controller.position.pointerScroll(120);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      expect(controller.offset, greaterThan(initialOffset));
+      expect(controller.offset, lessThan(initialOffset + 120));
+
+      controller.position.pointerScroll(120);
+      await tester.pumpAndSettle();
+
+      expect(controller.offset, closeTo(initialOffset + 240, 0.1));
+
+      controller.position.pointerScroll(120);
+      await tester.pump(const Duration(milliseconds: 40));
+      controller.position.pointerScroll(-120);
+      await tester.pumpAndSettle();
+
+      expect(controller.offset, closeTo(initialOffset + 240, 0.1));
+
+      controller.jumpTo(controller.position.maxScrollExtent - 40);
+      controller.position.pointerScroll(120);
+      await tester.pumpAndSettle();
+
+      expect(controller.offset, controller.position.maxScrollExtent);
+      expect(selectedDate, isNull);
+    },
+  );
+
+  testWidgets('non-Windows schedule keeps the default scroll controller', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.android),
+        home: Scaffold(
+          body: ScheduleTimelineView(
+            days: [DateTime(2026, 8, 27)],
+            events: const [],
+            selectedDate: DateTime(2026, 8, 27),
+            use24HourTime: true,
+            showAllDayEvents: true,
+            holidayBackgroundEnabled: true,
+            holidayColorValue: EventCategory.holiday.colorValue,
+            onShowAllDayEventsChanged: (_) {},
+            onDateSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final controller = tester
+        .widget<SingleChildScrollView>(
+          find.byKey(const ValueKey('schedule-time-scroll')),
+        )
+        .controller!;
+
+    expect(controller, isNot(isA<SmoothMouseWheelScrollController>()));
+    expect(controller.offset, 7 * 64);
+  });
+
   testWidgets('all-day area is absent when there are no all-day events', (
     tester,
   ) async {
