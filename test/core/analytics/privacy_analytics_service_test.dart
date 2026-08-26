@@ -36,9 +36,51 @@ void main() {
     await service.flush();
 
     expect(service.enabled, isFalse);
+    expect(service.consentPromptCompleted, isFalse);
     expect(service.pendingEventCount, 0);
     expect(requests, 0);
   });
+
+  test(
+    'consent choice is persisted without enabling declined analytics',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final service = PrivacyAnalyticsService(
+        preferences: preferences,
+        environmentLoader: () async => environment,
+      );
+      addTearDown(service.dispose);
+
+      await service.initialize();
+      await service.completeConsentPrompt(enabled: false);
+
+      expect(service.enabled, isFalse);
+      expect(service.consentPromptCompleted, isTrue);
+      expect(
+        preferences.getBool('anonymousAnalyticsConsentPromptCompletedV1'),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'an existing explicit analytics preference counts as consent history',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'anonymousAnalyticsEnabled': true,
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final service = PrivacyAnalyticsService(
+        preferences: preferences,
+        environmentLoader: () async => environment,
+      );
+      addTearDown(service.dispose);
+
+      expect(service.enabled, isTrue);
+      expect(service.consentPromptCompleted, isTrue);
+    },
+  );
 
   test(
     'environment lookup failure never blocks analytics initialization',

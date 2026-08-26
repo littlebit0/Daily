@@ -204,10 +204,13 @@ const analyticsInteractionValues = <String>{
 
 abstract interface class ProductAnalytics {
   ValueListenable<bool> get enabledListenable;
+  ValueListenable<bool> get consentPromptCompletedListenable;
   bool get enabled;
+  bool get consentPromptCompleted;
   int get pendingEventCount;
 
   Future<void> initialize();
+  Future<void> completeConsentPrompt({required bool enabled});
   Future<void> setEnabled(bool enabled);
   Future<void> deletePendingData();
   Future<void> record(AnalyticsRecord record);
@@ -219,6 +222,16 @@ class NoopProductAnalytics implements ProductAnalytics {
   const NoopProductAnalytics();
 
   static final ValueNotifier<bool> _disabled = ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> _consentCompleted = ValueNotifier<bool>(
+    true,
+  );
+
+  @override
+  bool get consentPromptCompleted => true;
+
+  @override
+  ValueListenable<bool> get consentPromptCompletedListenable =>
+      _consentCompleted;
 
   @override
   bool get enabled => false;
@@ -228,6 +241,9 @@ class NoopProductAnalytics implements ProductAnalytics {
 
   @override
   int get pendingEventCount => 0;
+
+  @override
+  Future<void> completeConsentPrompt({required bool enabled}) async {}
 
   @override
   Future<void> deletePendingData() async {}

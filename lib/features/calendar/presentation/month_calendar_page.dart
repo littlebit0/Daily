@@ -18,6 +18,7 @@ import '../../../core/calendar/calendar_period_label.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/siri/signal_voice_service.dart';
+import '../../../core/theme/daily_ui.dart';
 import '../../../core/theme/event_completion_style.dart';
 import '../../events/application/event_command_service.dart';
 import '../../events/domain/calendar_event.dart';
@@ -669,71 +670,91 @@ class _MonthCalendarPageState extends ConsumerState<MonthCalendarPage> {
     final eventsAsync = ref.watch(eventsInRangeProvider(range));
 
     return ColoredBox(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
-        child: eventsAsync.when(
-          data: (events) {
-            final visibleEvents = _filterVisibleEvents(events, settings, query);
-            final groups = _quickTodoGroups(visibleEvents, settings);
-            return ListView(
-              children: [
-                Text(
-                  context.tr('빠른 보기'),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+      color: DailyUi.pageBackground(context),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1240),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              DailyUi.isDesktop ? 24 : 16,
+              DailyUi.isDesktop ? 22 : 16,
+              DailyUi.isDesktop ? 24 : 16,
+              18,
+            ),
+            child: eventsAsync.when(
+              data: (events) {
+                final visibleEvents = _filterVisibleEvents(
+                  events,
+                  settings,
+                  query,
+                );
+                final groups = _quickTodoGroups(visibleEvents, settings);
+                final monthLabel = DateFormat.yMMMM(
+                  Localizations.localeOf(context).toLanguageTag(),
+                ).format(currentMonth);
+                return ListView(
+                  key: const ValueKey('quick-view-list'),
+                  children: [
+                    DailyPageTitle(
+                      title: context.tr('빠른 보기'),
+                      subtitle: context.tr(
+                        '{month} · 일정 {count}개',
+                        args: {
+                          'month': monthLabel,
+                          'count': visibleEvents.length,
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    if (groups.isEmpty)
+                      _QuickTodoEmptyState(message: context.tr('일정이 없습니다.'))
+                    else
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          const spacing = 12.0;
+                          final columns = _quickTodoColumnCount(
+                            constraints.maxWidth,
+                          );
+                          final cardWidth =
+                              (constraints.maxWidth - spacing * (columns - 1)) /
+                              columns;
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: spacing,
+                            children: [
+                              for (final group in groups)
+                                SizedBox(
+                                  width: cardWidth,
+                                  child: _QuickTodoCategoryCard(
+                                    group: group,
+                                    onCompletedChanged: (event, completed) =>
+                                        ref
+                                            .read(eventCommandServiceProvider)
+                                            .setCompleted(event, completed),
+                                    onOpen: (event) =>
+                                        _showQuickEventDetails(context, event),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                  ],
+                );
+              },
+              error: (error, stackTrace) => DailyInfoCallout(
+                icon: Icons.error_outline_rounded,
+                color: DailyUi.destructive,
+                text: context.tr(
+                  '일정을 불러오지 못했습니다. ({error})',
+                  args: {'error': error},
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  DateFormat.yMMMM(
-                    Localizations.localeOf(context).toLanguageTag(),
-                  ).format(currentMonth),
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-                const SizedBox(height: 16),
-                if (groups.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 28),
-                    child: Center(child: Text(context.tr('일정이 없습니다.'))),
-                  )
-                else
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      const spacing = 12.0;
-                      final columns = _quickTodoColumnCount(
-                        constraints.maxWidth,
-                      );
-                      final cardWidth =
-                          (constraints.maxWidth - spacing * (columns - 1)) /
-                          columns;
-                      return Wrap(
-                        spacing: spacing,
-                        runSpacing: spacing,
-                        children: [
-                          for (final group in groups)
-                            SizedBox(
-                              width: cardWidth,
-                              child: _QuickTodoCategoryCard(
-                                group: group,
-                                onCompletedChanged: (event, completed) => ref
-                                    .read(eventCommandServiceProvider)
-                                    .setCompleted(event, completed),
-                                onOpen: (event) =>
-                                    _showQuickEventDetails(context, event),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-              ],
-            );
-          },
-          error: (error, stackTrace) => Text('$error'),
-          loading: () => const SizedBox(
-            height: 140,
-            child: Center(child: CircularProgressIndicator()),
+              ),
+              loading: () => const SizedBox(
+                height: 140,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
           ),
         ),
       ),
@@ -1300,7 +1321,6 @@ class _SignalVoicePanelState extends ConsumerState<_SignalVoicePanel>
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final listening = _state == _SignalVoiceState.listening;
     final processing = _state == _SignalVoiceState.processing;
     final awaitingConfirmation =
@@ -1314,124 +1334,175 @@ class _SignalVoicePanelState extends ConsumerState<_SignalVoicePanel>
     };
 
     return Material(
-      color: colorScheme.surface,
+      color: DailyUi.pageBackground(context),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 12, 14),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          child: Material(
+            color: DailyUi.groupedSurface(context),
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: DailyUi.separator(context)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: IconButton.filled(
-                      tooltip: listening
-                          ? context.tr('듣기 완료')
-                          : context.tr('다시 듣기'),
-                      onPressed: processing || awaitingConfirmation
-                          ? null
-                          : listening
-                          ? _finishListening
-                          : _listen,
-                      icon: processing
-                          ? const SizedBox.square(
-                              dimension: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Icon(
-                              listening
-                                  ? Icons.stop_rounded
-                                  : Icons.mic_rounded,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: IconButton.filled(
+                          tooltip: listening
+                              ? context.tr('듣기 완료')
+                              : context.tr('다시 듣기'),
+                          onPressed: processing || awaitingConfirmation
+                              ? null
+                              : listening
+                              ? _finishListening
+                              : _listen,
+                          style: IconButton.styleFrom(
+                            backgroundColor: DailyUi.purple,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: DailyUi.purple.withValues(
+                              alpha: 0.35,
                             ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 44),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            status,
-                            style: Theme.of(context).textTheme.labelLarge,
                           ),
-                          if (_transcript.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              _transcript,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
-                          if (_response.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              _response,
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(color: colorScheme.primary),
-                            ),
-                          ],
-                          if (awaitingConfirmation) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                FilledButton(
-                                  onPressed: _confirmCommand,
-                                  child: Text(context.tr('실행')),
+                          icon: processing
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Icon(
+                                  listening
+                                      ? Icons.stop_rounded
+                                      : Icons.mic_rounded,
                                 ),
-                                const SizedBox(width: 8),
-                                TextButton(
-                                  onPressed: _cancelCommand,
-                                  child: Text(context.tr('취소')),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 44),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                status,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                              if (_transcript.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  _transcript,
+                                  style: Theme.of(context).textTheme.bodyMedium,
                                 ),
                               ],
-                            ),
-                          ],
-                        ],
+                              if (_response.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  _response,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: DailyUi.primary,
+                                        height: 1.35,
+                                      ),
+                                ),
+                              ],
+                              if (awaitingConfirmation) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    FilledButton(
+                                      onPressed: _confirmCommand,
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: DailyUi.primary,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: Text(context.tr('실행')),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: _cancelCommand,
+                                      child: Text(context.tr('취소')),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      DailyIconAction(
+                        tooltip: context.tr('텍스트로 입력'),
+                        onPressed: processing ? null : _toggleTextInput,
+                        selected: _showTextInput,
+                        icon: _showTextInput
+                            ? Icons.keyboard_hide_rounded
+                            : Icons.keyboard_alt_outlined,
+                      ),
+                      DailyIconAction(
+                        tooltip: context.tr('AI 입력 닫기'),
+                        onPressed: widget.onClose,
+                        icon: Icons.close_rounded,
+                      ),
+                    ],
+                  ),
+                  if (_showTextInput) ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      key: const ValueKey('signal-text-input'),
+                      controller: _textController,
+                      focusNode: _textFocusNode,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: _submitTyped,
+                      decoration: InputDecoration(
+                        hintText: context.tr('Daily에 요청할 내용을 입력하세요.'),
+                        prefixIcon: const Icon(Icons.keyboard_alt_outlined),
+                        suffixIcon: DailyIconAction(
+                          tooltip: context.tr('실행'),
+                          onPressed: () => _submitTyped(_textController.text),
+                          icon: Icons.arrow_upward_rounded,
+                          size: 36,
+                        ),
+                        fillColor: DailyUi.elevatedSurface(context),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: DailyUi.separator(context),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: DailyUi.separator(context),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: DailyUi.primary,
+                            width: 1.5,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: context.tr('텍스트로 입력'),
-                    onPressed: processing ? null : _toggleTextInput,
-                    icon: Icon(
-                      _showTextInput
-                          ? Icons.keyboard_hide_rounded
-                          : Icons.keyboard_alt_outlined,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: context.tr('AI 입력 닫기'),
-                    onPressed: widget.onClose,
-                    icon: const Icon(Icons.close_rounded),
-                  ),
+                  ],
                 ],
               ),
-              if (_showTextInput) ...[
-                const SizedBox(height: 10),
-                TextField(
-                  key: const ValueKey('signal-text-input'),
-                  controller: _textController,
-                  focusNode: _textFocusNode,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: _submitTyped,
-                  decoration: InputDecoration(
-                    hintText: context.tr('Daily에 요청할 내용을 입력하세요.'),
-                    prefixIcon: const Icon(Icons.keyboard_alt_outlined),
-                    suffixIcon: IconButton(
-                      tooltip: context.tr('실행'),
-                      onPressed: () => _submitTyped(_textController.text),
-                      icon: const Icon(Icons.arrow_upward_rounded),
-                    ),
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -1460,13 +1531,12 @@ class _InlineSearchPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
+        color: DailyUi.pageBackground(context),
+        border: Border(bottom: BorderSide(color: DailyUi.separator(context))),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1479,21 +1549,39 @@ class _InlineSearchPanel extends StatelessWidget {
             onSubmitted: (_) => onSubmitted(),
             decoration: InputDecoration(
               hintText: context.tr('제목, 메모, 장소 검색'),
-              prefixIcon: const Icon(Icons.search),
+              prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
+                  DailyIconAction(
                     tooltip: context.tr('검색'),
                     onPressed: onSubmitted,
-                    icon: const Icon(Icons.arrow_forward),
+                    icon: Icons.arrow_forward_rounded,
+                    size: 36,
                   ),
-                  IconButton(
+                  DailyIconAction(
                     tooltip: context.tr('닫기'),
                     onPressed: onClose,
-                    icon: const Icon(Icons.close),
+                    icon: Icons.close_rounded,
+                    size: 36,
                   ),
                 ],
+              ),
+              fillColor: DailyUi.groupedSurface(context),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: DailyUi.separator(context)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: DailyUi.separator(context)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                  color: DailyUi.primary,
+                  width: 1.5,
+                ),
               ),
             ),
           ),
@@ -1558,28 +1646,44 @@ class _InlineSearchResultTile extends StatelessWidget {
         ? context.tr('종일')
         : DateFormat.Hm(locale).format(event.startAt);
     final color = Color(event.colorValue);
-    return ListTile(
-      dense: true,
-      onTap: onTap,
+    return Material(
+      color: DailyUi.groupedSurface(context),
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: DailyUi.separator(context)),
       ),
-      leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.12),
-        child: Icon(Icons.flag, color: color),
-      ),
-      title: Text(
-        context.l10n.eventTitle(event.title, holiday: event.holiday),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: calendarEventCompletionStyle(
-          context,
-          Theme.of(context).textTheme.titleMedium,
-          completed: event.completed,
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        onTap: onTap,
+        leading: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          alignment: Alignment.center,
+          child: Icon(Icons.event_outlined, color: color, size: 19),
+        ),
+        title: Text(
+          context.l10n.eventTitle(event.title, holiday: event.holiday),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: calendarEventCompletionStyle(
+            context,
+            Theme.of(context).textTheme.titleMedium,
+            completed: event.completed,
+          ),
+        ),
+        subtitle: Text('$date  $time'),
+        trailing: Icon(
+          Icons.chevron_right_rounded,
+          color: DailyUi.tertiaryText(context),
+          size: 20,
         ),
       ),
-      subtitle: Text('$date  $time'),
     );
   }
 }
@@ -3726,7 +3830,7 @@ class _CalendarHeader extends ConsumerWidget {
     final monthButton = TextButton.icon(
       key: const ValueKey('calendar-period-button'),
       onPressed: () => _showMonthPicker(context, ref),
-      icon: const Icon(Icons.calendar_month_outlined, size: 20),
+      icon: const Icon(Icons.date_range_rounded, size: 20),
       label: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: ios ? periodLabelMaxWidth : double.infinity,
@@ -3757,39 +3861,47 @@ class _CalendarHeader extends ConsumerWidget {
       ),
     );
     final navigationActions = [
-      IconButton(
+      DailyIconAction(
         tooltip: context.tr('이전'),
         onPressed: () => _moveVisibleRange(ref, -1),
-        icon: const Icon(Icons.chevron_left),
+        icon: Icons.arrow_back_ios_new_rounded,
+        borderless: true,
       ),
-      IconButton(
+      DailyIconAction(
         tooltip: context.tr('다음'),
         onPressed: () => _moveVisibleRange(ref, 1),
-        icon: const Icon(Icons.chevron_right),
+        icon: Icons.arrow_forward_ios_rounded,
+        borderless: true,
       ),
-      IconButton(
+      DailyIconAction(
         tooltip: context.tr('오늘'),
         onPressed: () => _goToday(ref),
-        icon: const Icon(Icons.today_outlined),
+        icon: Icons.calendar_today_rounded,
+        borderless: true,
       ),
     ];
     final utilityActions = [
-      IconButton(
+      DailyIconAction(
         tooltip: context.tr(searchOpen ? '검색 닫기' : '검색'),
         onPressed: onSearchPressed,
-        icon: Icon(searchOpen ? Icons.search_off : Icons.search),
+        selected: searchOpen,
+        icon: Icons.search_rounded,
+        borderless: true,
       ),
-      IconButton(
+      DailyIconAction(
         tooltip: context.tr('검색/필터'),
         onPressed: () => _showFilterSheet(context, ref),
-        icon: Icon(searchQuery.isEmpty ? Icons.filter_list : Icons.filter_alt),
+        selected: searchQuery.isNotEmpty,
+        icon: Icons.tune_rounded,
+        borderless: true,
       ),
-      IconButton(
+      DailyIconAction(
         tooltip: context.tr('설정'),
         onPressed: () => Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const SettingsPage())),
-        icon: const Icon(Icons.settings_outlined),
+        icon: Icons.settings_rounded,
+        borderless: true,
       ),
     ];
 
@@ -3804,6 +3916,17 @@ class _CalendarHeader extends ConsumerWidget {
             const EdgeInsets.symmetric(horizontal: 8),
           ),
           minimumSize: WidgetStateProperty.all(const Size(38, 34)),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? Colors.white
+                : colorScheme.onSurfaceVariant,
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? DailyUi.primary
+                : DailyUi.groupedSurface(context),
+          ),
+          side: WidgetStateProperty.all(BorderSide.none),
         ),
         segments: [
           ButtonSegment(
@@ -3831,25 +3954,20 @@ class _CalendarHeader extends ConsumerWidget {
           }
         },
       );
-      final quickAccessButton = IconButton(
+      final quickAccessButton = DailyIconAction(
         tooltip: context.tr('빠른 보기'),
-        isSelected: quickAccessSelected,
-        style: IconButton.styleFrom(
-          backgroundColor: quickAccessSelected
-              ? colorScheme.primaryContainer
-              : Colors.transparent,
-          foregroundColor: quickAccessSelected
-              ? colorScheme.onPrimaryContainer
-              : colorScheme.onSurfaceVariant,
-        ),
+        selected: quickAccessSelected,
         onPressed: onQuickAccessPressed,
-        icon: const Icon(Icons.dashboard_outlined),
-        selectedIcon: const Icon(Icons.dashboard),
+        icon: Icons.view_agenda_outlined,
+        selectedIcon: Icons.view_agenda_rounded,
+        borderless: true,
       );
-      final llmButton = IconButton(
+      final llmButton = DailyIconAction(
         tooltip: 'LLM',
         onPressed: onLlmPressed,
-        icon: const Icon(Icons.auto_awesome_outlined),
+        icon: Icons.stars_rounded,
+        accentColor: DailyUi.purple,
+        borderless: true,
       );
 
       return Padding(
@@ -3981,7 +4099,12 @@ class _CalendarHeader extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      showDragHandle: true,
+      showDragHandle: false,
+      backgroundColor: DailyUi.pageBackground(context),
+      clipBehavior: Clip.antiAlias,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           final viewInsets = MediaQuery.viewInsetsOf(context);
@@ -3991,110 +4114,215 @@ class _CalendarHeader extends ConsumerWidget {
             child: ConstrainedBox(
               constraints: BoxConstraints(maxHeight: maxHeight),
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                padding: EdgeInsets.fromLTRB(
+                  DailyUi.isDesktop ? 24 : 16,
+                  10,
+                  DailyUi.isDesktop ? 24 : 16,
+                  20,
+                ),
                 shrinkWrap: true,
                 children: [
-                  Text(
-                    context.tr('검색/필터'),
-                    style: Theme.of(context).textTheme.titleMedium,
+                  const DailySheetHandle(),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const DailySettingsIcon(icon: Icons.filter_alt_outlined),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          context.tr('검색/필터'),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                      ),
+                      DailyIconAction(
+                        tooltip: context.tr('닫기'),
+                        onPressed: () {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          Navigator.of(context).pop();
+                        },
+                        icon: Icons.close_rounded,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: queryController,
                     autofocus: true,
                     decoration: InputDecoration(
-                      labelText: context.tr('현재 보기에서 검색'),
-                      prefixIcon: const Icon(Icons.search),
+                      hintText: context.tr('현재 보기에서 검색'),
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      fillColor: DailyUi.groupedSurface(context),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: DailyUi.separator(context),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: DailyUi.separator(context),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                          color: DailyUi.primary,
+                          width: 1.5,
+                        ),
+                      ),
                     ),
                     onChanged: (value) =>
                         ref.read(calendarSearchQueryProvider.notifier).state =
                             value.trim(),
                   ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: ddayOnly,
-                    title: Text(context.tr('D-day 일정만 보기')),
-                    onChanged: (value) async {
-                      setState(() => ddayOnly = value);
-                      final updated = ref
-                          .read(appSettingsProvider)
-                          .copyWith(calendarDdayOnly: value);
-                      await ref.read(settingsRepositoryProvider).save(updated);
-                      ref.read(appSettingsProvider.notifier).state = updated;
-                    },
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: showHolidays,
-                    title: Text(context.tr('공휴일 표시')),
-                    onChanged: (value) async {
-                      setState(() => showHolidays = value);
-                      final updated = ref
-                          .read(appSettingsProvider)
-                          .copyWith(calendarShowHolidays: value);
-                      await ref.read(settingsRepositoryProvider).save(updated);
-                      ref.read(appSettingsProvider.notifier).state = updated;
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    context.tr('분류 표시'),
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
+                  const SizedBox(height: 4),
+                  DailyGroupedSection(
+                    label: context.tr('표시 옵션'),
                     children: [
-                      for (final category in settings.categories)
-                        FilterChip(
-                          label: Text(
-                            context.l10n.categoryName(
-                              id: category.id,
-                              label: category.label,
-                            ),
-                          ),
-                          selected: !hidden.contains(category.id),
-                          onSelected: (selected) async {
-                            setState(() {
-                              if (selected) {
-                                hidden.remove(category.id);
-                              } else {
-                                hidden.add(category.id);
-                              }
-                            });
-                            final updated = ref
-                                .read(appSettingsProvider)
-                                .copyWith(hiddenCategoryIds: hidden.toList());
-                            await ref
-                                .read(settingsRepositoryProvider)
-                                .save(updated);
-                            ref.read(appSettingsProvider.notifier).state =
-                                updated;
-                          },
+                      SwitchListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
                         ),
+                        secondary: const Icon(Icons.flag_outlined),
+                        value: ddayOnly,
+                        title: Text(context.tr('D-day 일정만 보기')),
+                        onChanged: (value) async {
+                          setState(() => ddayOnly = value);
+                          final updated = ref
+                              .read(appSettingsProvider)
+                              .copyWith(calendarDdayOnly: value);
+                          await ref
+                              .read(settingsRepositoryProvider)
+                              .save(updated);
+                          ref.read(appSettingsProvider.notifier).state =
+                              updated;
+                        },
+                      ),
+                      SwitchListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                        ),
+                        secondary: const Icon(Icons.celebration_outlined),
+                        value: showHolidays,
+                        title: Text(context.tr('공휴일 표시')),
+                        onChanged: (value) async {
+                          setState(() => showHolidays = value);
+                          final updated = ref
+                              .read(appSettingsProvider)
+                              .copyWith(calendarShowHolidays: value);
+                          await ref
+                              .read(settingsRepositoryProvider)
+                              .save(updated);
+                          ref.read(appSettingsProvider.notifier).state =
+                              updated;
+                        },
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  DailySectionLabel(context.tr('분류 표시')),
+                  Material(
+                    color: DailyUi.groupedSurface(context),
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: DailyUi.separator(context)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final category in settings.categories)
+                            FilterChip(
+                              avatar: CircleAvatar(
+                                radius: 5,
+                                backgroundColor: Color(category.colorValue),
+                              ),
+                              label: Text(
+                                context.l10n.categoryName(
+                                  id: category.id,
+                                  label: category.label,
+                                ),
+                              ),
+                              selected: !hidden.contains(category.id),
+                              selectedColor: DailyUi.primary.withValues(
+                                alpha:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? 0.28
+                                    : 0.13,
+                              ),
+                              checkmarkColor: DailyUi.primary,
+                              shape: const StadiumBorder(),
+                              onSelected: (selected) async {
+                                setState(() {
+                                  if (selected) {
+                                    hidden.remove(category.id);
+                                  } else {
+                                    hidden.add(category.id);
+                                  }
+                                });
+                                final updated = ref
+                                    .read(appSettingsProvider)
+                                    .copyWith(
+                                      hiddenCategoryIds: hidden.toList(),
+                                    );
+                                await ref
+                                    .read(settingsRepositoryProvider)
+                                    .save(updated);
+                                ref.read(appSettingsProvider.notifier).state =
+                                    updated;
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   Row(
                     children: [
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          queryController.clear();
-                          ref.read(calendarSearchQueryProvider.notifier).state =
-                              '';
-                        },
-                        icon: const Icon(Icons.clear),
-                        label: Text(context.tr('검색어 지우기')),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            queryController.clear();
+                            ref
+                                    .read(calendarSearchQueryProvider.notifier)
+                                    .state =
+                                '';
+                          },
+                          icon: const Icon(Icons.clear_rounded),
+                          label: Text(context.tr('검색어 지우기')),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
                       ),
-                      const Spacer(),
-                      FilledButton(
-                        onPressed: () {
-                          FocusManager.instance.primaryFocus?.unfocus();
-                          Navigator.of(context).pop();
-                        },
-                        child: Text(context.tr('완료')),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            Navigator.of(context).pop();
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: DailyUi.primary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Text(context.tr('완료')),
+                        ),
                       ),
                     ],
                   ),
@@ -4266,7 +4494,6 @@ class _CalendarViewButtonState extends State<_CalendarViewButton> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final preferredWidth = widget.expanded ? 96.0 : 76.0;
     final preferredHeight = widget.expanded ? 48.0 : 40.0;
     final preferredFontSize = widget.expanded ? 13.0 : 11.0;
@@ -4297,16 +4524,14 @@ class _CalendarViewButtonState extends State<_CalendarViewButton> {
         width: widget.width,
         height: height,
         decoration: ShapeDecoration(
-          color: colorScheme.surfaceContainerHighest,
-          shape: StadiumBorder(
-            side: BorderSide(color: colorScheme.outlineVariant),
-          ),
+          color: DailyUi.elevatedSurface(context),
+          shape: const StadiumBorder(),
         ),
         clipBehavior: Clip.none,
         child: Material(
           color: Colors.transparent,
           child: Padding(
-            padding: const EdgeInsets.all(3),
+            padding: const EdgeInsets.all(4),
             child: LayoutBuilder(
               builder: (context, innerConstraints) {
                 final thumbSize = innerConstraints.maxHeight;
@@ -4333,7 +4558,7 @@ class _CalendarViewButtonState extends State<_CalendarViewButton> {
                           dimension: thumbSize,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer,
+                              color: DailyUi.primary,
                               shape: BoxShape.circle,
                               boxShadow: const [
                                 BoxShadow(
@@ -4370,8 +4595,8 @@ class _CalendarViewButtonState extends State<_CalendarViewButton> {
                                     context.l10n.compactCalendarViewName(mode),
                                     style: TextStyle(
                                       color: mode == _visibleMode
-                                          ? colorScheme.primary
-                                          : colorScheme.onSurfaceVariant,
+                                          ? Colors.white
+                                          : DailyUi.secondaryText(context),
                                       fontSize: fontSize,
                                       fontWeight: mode == _visibleMode
                                           ? FontWeight.w800
@@ -4447,7 +4672,6 @@ class _BottomModeSwitcherState extends State<_BottomModeSwitcher> {
         widget.selectedAction != null;
     final width = expanded ? expandedWidth : collapsedWidth;
     final height = expanded ? expandedHeight : collapsedHeight;
-    final colorScheme = Theme.of(context).colorScheme;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
@@ -4473,16 +4697,14 @@ class _BottomModeSwitcherState extends State<_BottomModeSwitcher> {
         child: Container(
           key: const ValueKey('bottom-mode-track'),
           decoration: ShapeDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            shape: StadiumBorder(
-              side: BorderSide(color: colorScheme.outlineVariant),
-            ),
+            color: DailyUi.elevatedSurface(context),
+            shape: const StadiumBorder(),
           ),
           clipBehavior: Clip.none,
           child: Material(
             color: Colors.transparent,
             child: Padding(
-              padding: const EdgeInsets.all(3),
+              padding: const EdgeInsets.all(4),
               child: LayoutBuilder(
                 builder: (context, innerConstraints) {
                   final thumbSize = innerConstraints.maxHeight;
@@ -4509,7 +4731,7 @@ class _BottomModeSwitcherState extends State<_BottomModeSwitcher> {
                             dimension: thumbSize,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                color: colorScheme.primaryContainer,
+                                color: DailyUi.primary,
                                 shape: BoxShape.circle,
                                 boxShadow: const [
                                   BoxShadow(
@@ -4527,7 +4749,7 @@ class _BottomModeSwitcherState extends State<_BottomModeSwitcher> {
                         children: [
                           _BottomModeButton(
                             tooltip: context.tr('빠른 보기'),
-                            icon: Icons.dashboard_outlined,
+                            icon: Icons.view_agenda_outlined,
                             selected: action == _BottomCenterAction.quickAccess,
                             onTapDown: () =>
                                 _press(_BottomCenterAction.quickAccess),
@@ -4537,7 +4759,7 @@ class _BottomModeSwitcherState extends State<_BottomModeSwitcher> {
                           ),
                           _BottomModeButton(
                             tooltip: context.tr('달력'),
-                            icon: Icons.calendar_month_outlined,
+                            icon: Icons.date_range_rounded,
                             selected: action == _BottomCenterAction.calendar,
                             onTapDown: () =>
                                 _press(_BottomCenterAction.calendar),
@@ -4547,7 +4769,7 @@ class _BottomModeSwitcherState extends State<_BottomModeSwitcher> {
                           ),
                           _BottomModeButton(
                             tooltip: 'AI',
-                            icon: Icons.auto_awesome_outlined,
+                            icon: Icons.stars_rounded,
                             selected: action == _BottomCenterAction.ai,
                             onTapDown: () => _press(_BottomCenterAction.ai),
                             onPressed: () =>
@@ -4617,7 +4839,6 @@ class _BottomModeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Expanded(
       child: Tooltip(
         message: tooltip,
@@ -4630,9 +4851,7 @@ class _BottomModeButton extends StatelessWidget {
             child: Icon(
               icon,
               size: 20,
-              color: selected
-                  ? colorScheme.primary
-                  : colorScheme.onSurfaceVariant,
+              color: selected ? Colors.white : DailyUi.secondaryText(context),
             ),
           ),
         ),
@@ -4646,6 +4865,48 @@ class _QuickTodoGroup {
 
   final EventCategory category;
   final List<CalendarEvent> events;
+}
+
+class _QuickTodoEmptyState extends StatelessWidget {
+  const _QuickTodoEmptyState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DailyUi.groupedSurface(context),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: DailyUi.separator(context).withValues(alpha: 0.78),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 38),
+        child: Column(
+          children: [
+            Icon(
+              Icons.check_circle_outline_rounded,
+              color: DailyUi.tertiaryText(context),
+              size: 34,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: DailyUi.secondaryText(context),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _QuickTodoCategoryCard extends StatelessWidget {
@@ -4662,17 +4923,18 @@ class _QuickTodoCategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final categoryColor = Color(group.category.colorValue);
     return Material(
       key: ValueKey('quick-todo-category-${group.category.id}'),
-      color: colorScheme.surface,
-      borderRadius: BorderRadius.circular(8),
+      color: DailyUi.groupedSurface(context),
+      borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: Container(
         decoration: BoxDecoration(
-          border: Border.all(color: colorScheme.outlineVariant),
-          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: DailyUi.separator(context).withValues(alpha: 0.78),
+          ),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -4680,8 +4942,12 @@ class _QuickTodoCategoryCard extends StatelessWidget {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              color: categoryColor.withValues(alpha: 0.1),
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+              color: categoryColor.withValues(
+                alpha: Theme.of(context).brightness == Brightness.dark
+                    ? 0.16
+                    : 0.09,
+              ),
               child: Row(
                 children: [
                   Container(
@@ -4701,12 +4967,21 @@ class _QuickTodoCategoryCard extends StatelessWidget {
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0,
+                      ),
                     ),
                   ),
                   Text(
                     '${group.events.where((event) => event.completed).length}/${group.events.length}',
-                    style: Theme.of(context).textTheme.labelMedium,
+                    style: TextStyle(
+                      color: DailyUi.secondaryText(context),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0,
+                    ),
                   ),
                 ],
               ),
@@ -4718,7 +4993,11 @@ class _QuickTodoCategoryCard extends StatelessWidget {
                 onOpen: onOpen,
               ),
               if (index != group.events.length - 1)
-                Divider(height: 1, color: colorScheme.outlineVariant),
+                Divider(
+                  height: 1,
+                  indent: 46,
+                  color: DailyUi.separator(context),
+                ),
             ],
           ],
         ),
@@ -4759,6 +5038,9 @@ class _QuickTodoRow extends StatelessWidget {
         Checkbox(
           key: ValueKey('quick-todo-checkbox-$eventKey'),
           value: event.completed,
+          shape: const CircleBorder(),
+          side: BorderSide(color: DailyUi.tertiaryText(context), width: 1.8),
+          activeColor: DailyUi.success,
           onChanged: (value) {
             if (value != null) {
               unawaited(onCompletedChanged(event, value));
@@ -4770,7 +5052,7 @@ class _QuickTodoRow extends StatelessWidget {
             key: ValueKey('quick-todo-open-$eventKey'),
             onTap: () => onOpen(event),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
+              padding: const EdgeInsets.fromLTRB(0, 11, 11, 11),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -4784,7 +5066,11 @@ class _QuickTodoRow extends StatelessWidget {
                       textAlign: TextAlign.start,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: titleStyle,
+                      style: titleStyle.copyWith(
+                        fontSize: 14,
+                        height: 1.25,
+                        letterSpacing: 0,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -4793,7 +5079,12 @@ class _QuickTodoRow extends StatelessWidget {
                     child: Text(
                       '$dateLabel · $timeLabel',
                       textAlign: TextAlign.start,
-                      style: Theme.of(context).textTheme.labelSmall,
+                      style: TextStyle(
+                        color: DailyUi.secondaryText(context),
+                        fontSize: 11,
+                        height: 1.25,
+                        letterSpacing: 0,
+                      ),
                     ),
                   ),
                 ],

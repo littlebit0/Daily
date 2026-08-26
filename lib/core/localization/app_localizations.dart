@@ -452,7 +452,6 @@ const Map<String, Map<String, String>> _translations = {
     '동기화 상태': 'Sync Status',
     '로그아웃': 'Sign Out',
     '아침 브리핑': 'Morning Briefing',
-    '알림 테스트': 'Test Notification',
     '복원': 'Restore',
     '분류 삭제': 'Delete Category',
     '분류 수정': 'Edit Category',
@@ -510,9 +509,6 @@ const Map<String, Map<String, String>> _translations = {
     '일정 시작 {time}입니다.': 'The event starts {time}.',
     'D-day 일정 알림입니다.': 'This is a D-day event reminder.',
     '오늘의 일정': "Today's Events",
-    'Daily 알림 테스트': 'Daily Notification Test',
-    '이 알림이 보이면 Daily의 알림 표시 권한은 정상입니다.':
-        'If you can see this, Daily notification permission is working.',
     '오늘 등록된 일정이 없습니다.': 'There are no events today.',
     ' 외 {count}개 더 있습니다.': ' and {count} more.',
     '정시': 'At time of event',
@@ -636,8 +632,6 @@ const Map<String, Map<String, String>> _translations = {
         'Lock with a Daily PIN and optionally use biometrics.',
     '기기의 Face ID, Touch ID 또는 시스템 비밀번호로 인증합니다.':
         'Authenticate with Face ID, Touch ID, or the device password.',
-    '알림 상태 확인 중입니다.': 'Checking notification status.',
-    '테스트 알림을 보냈습니다. {summary}': 'Test notification sent. {summary}',
     '시스템 알림 설정을 열 수 없습니다. OS 설정에서 Daily 알림을 허용하세요.':
         'Could not open notification settings. Allow Daily notifications in system settings.',
     'Gemini API 키': 'Gemini API Key',
@@ -711,6 +705,89 @@ const Map<String, Map<String, String>> _translations = {
     '{count}개월마다': 'Every {count} month(s)',
     '{count}년마다': 'Every {count} year(s)',
     '{count}번마다': 'Every {count} time(s)',
+    'AI 설정': 'AI Settings',
+    'Daily 개선 참여': 'Help Improve Daily',
+    'Daily 계정의 Apple/Google 연결 및 병합 정보, Google Drive AppData 백업, 이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다. 향후 iCloud 저장 데이터도 이 경로에서 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.':
+        'Delete the Daily account connections and merge information for Apple and Google, the Google Drive AppData backup, and all events and settings on this device, then return to the start screen. Future iCloud data will also be deleted here. This action cannot be undone.',
+    'Daily를 어떻게\n시작할까요?': 'How would you like to\nstart Daily?',
+    'Daily의 AI 기능 준비 상태를 확인합니다.': 'Check the readiness of Daily AI features.',
+    'Google Drive AppData의 일정과 설정을 이 기기에 복원할까요? 이 기기의 더 최신이거나 아직 백업되지 않은 변경은 유지됩니다.':
+        'Restore events and settings from Google Drive AppData to this device? Newer or not-yet-backed-up changes on this device will be kept.',
+    'Google 계정 연결을 해제할까요? Google Drive AppData 백업은 유지하거나 함께 삭제할 수 있습니다. 로컬 일정과 설정은 유지됩니다.':
+        'Disconnect the Google account? You can keep or delete the Google Drive AppData backup. Local events and settings will remain.',
+    'Google 연결은 앱 전용 Drive AppData 백업과 동기화에만 사용하며 일반 Drive 파일은 읽거나 수정하지 않습니다.':
+        'Google access is used only for app-specific Drive AppData backup and sync. Daily does not read or modify regular Drive files.',
+    'Siri 단축어 추가하기': 'Add Siri Shortcut',
+    'Siri 또는 단축어로 Daily 작업을 실행하면 날짜별 기록이 여기에 표시됩니다.':
+        'Daily actions run through Siri or Shortcuts will appear here by date.',
+    'Siri와 Daily': 'Siri and Daily',
+    '{month} · 일정 {count}개': '{month} · {count} events',
+    '가져올 캘린더를 선택하면 일정과 기존 분류 색상을 Daily에 복사합니다.':
+        'Select calendars to copy their events and existing category colors into Daily.',
+    '개인정보 및 잠금': 'Privacy & Lock',
+    '개인정보 및 지원': 'Privacy & Support',
+    '계정을 연결하면 기기 간 동기화를 사용할 수 있고, 계정 없이 이 기기에서만 시작할 수도 있어요.':
+        'Connect an account to sync across devices, or start without an account on this device only.',
+    '권한 설정을 완료하지 못했습니다. 나중에 설정에서 다시 시도할 수 있습니다. ({error})':
+        'Could not complete permission setup. You can try again later in Settings. ({error})',
+    '권한은 나중에 설정에서 다시 요청하거나 변경할 수 있습니다.':
+        'You can request or change permissions later in Settings.',
+    '기록부터 완료까지': 'From capture to completion',
+    '나중에': 'Later',
+    '더 완벽한 Daily를\n함께 만들어요.': 'Help us make Daily\neven better.',
+    '동의해주시면 실제 사용 흐름과 성능 문제를 익명으로 분석해 더 빠르고 안정적인 Daily를 만들 수 있어요.':
+        'With your consent, anonymous usage flow and performance data help us make Daily faster and more reliable.',
+    '마지막 단계': 'Final step',
+    '말 한마디로\n일정을 관리하세요.': 'Manage your schedule\nwith your voice.',
+    '백업할 변경 사항이 없습니다.': 'There are no changes to back up.',
+    '버전 정보, GitHub와 버그 제보를 확인합니다.':
+        'View version information, GitHub, and bug reporting.',
+    '분류 설정': 'Category Settings',
+    '사용 흐름': 'Usage flow',
+    '색상, 표시 여부와 일정 정렬 순서를 관리합니다.':
+        'Manage colors, visibility, and event sorting order.',
+    '선택을 저장하지 못했습니다. 다시 시도해 주세요.':
+        'Could not save your choice. Please try again.',
+    '성능 개선': 'Performance improvement',
+    '시그널 단축어를 추가하면 Siri에게 일정을 묻거나 추가하고 수정할 수 있어요.':
+        'Add the Signal shortcut to ask Siri about events or to add and edit them.',
+    '시작 전 알림과 브리핑': 'Reminders and briefing before you start',
+    '실행': 'Run',
+    '아직 Google Drive에 백업되지 않은 변경이 있을 수 있습니다. 그래도 이 기기의 데이터를 삭제하고 로그아웃할까요?':
+        'Some changes may not be backed up to Google Drive yet. Delete data on this device and sign out anyway?',
+    '알림 및 알람 허용': 'Allow Notifications and Alarms',
+    '알림과 알람을\n준비할까요?': 'Set up notifications\nand alarms?',
+    '앱 정보 및 지원': 'App Info & Support',
+    '언어, 테마, 글자 크기와 달력 표시 방식을 설정합니다.':
+        'Set language, theme, text size, and calendar display options.',
+    '연락처 보호': 'Contact privacy',
+    '예: “Siri야, Daily에서 시그널 실행.”이라고 말한 뒤 “내일 오전 9시에 헬스장 일정 추가해줘.”라고 이어서 말하세요.':
+        'For example, say “Siri, run Signal in Daily,” then say “Add a gym event tomorrow at 9 AM.”',
+    '오늘을 더\n가볍게 정리하세요.': 'Make today\neasier to manage.',
+    '오류 범주와 응답 시간': 'Error categories and response time',
+    '월간, 주간, 일간 보기': 'Month, week, and day views',
+    '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다.':
+        'Delete all events and settings on this device, then return to the start screen.',
+    '이 기기의 일정, 설정, 로그인 정보를 삭제하고 시작 화면으로 돌아갑니다. Google Drive AppData의 백업은 삭제하지 않습니다.':
+        'Delete events, settings, and sign-in information on this device, then return to the start screen. The Google Drive AppData backup will remain.',
+    '익명 분석 데이터와 앱 잠금을 관리합니다.': 'Manage anonymous analytics data and app lock.',
+    '익명 분석 허용': 'Allow Anonymous Analytics',
+    '일정 내용, 검색어, 계정 정보, 위치, 광고 식별자는 수집하지 않습니다. 언제든 설정에서 변경할 수 있어요.':
+        'Daily does not collect event content, search terms, account information, location, or advertising identifiers. You can change this anytime in Settings.',
+    '일정 알림': 'Event reminders',
+    '일정 알림과 아침 브리핑을 받으려면 알림 권한이 필요합니다. 지원되는 기기에서는 일정별 알람도 사용할 수 있어요.':
+        'Notification permission is required for event reminders and morning briefings. Event alarms are also available on supported devices.',
+    '일정과 할 일': 'Events and to-dos',
+    '일정과 할 일을 한곳에서 보고, 필요한 순간에만 알림을 받으세요.':
+        'See events and to-dos in one place and get notified only when needed.',
+    '일정을 불러오지 못했습니다. ({error})': 'Could not load events. ({error})',
+    '지원 기기에서 선택 사용': 'Optional on supported devices',
+    '표시 옵션': 'Display Options',
+    '필요한 순간 놓치지 않기': 'Never miss what matters',
+    '한눈에 보는 일정': 'Your schedule at a glance',
+    '화면 및 달력': 'Display & Calendar',
+    '화면 및 일정': 'Display & Schedule',
+    '화면과 기능 사용': 'Screens and feature usage',
   },
   'ja': {
     '업데이트 중입니다': 'Dailyを更新しています',
@@ -970,7 +1047,6 @@ const Map<String, Map<String, String>> _translations = {
     '동기화 상태': '同期状態',
     '로그아웃': 'ログアウト',
     '아침 브리핑': '朝のブリーフィング',
-    '알림 테스트': '通知テスト',
     '복원': '復元',
     '분류 삭제': 'カテゴリを削除',
     '분류 수정': 'カテゴリを編集',
@@ -1026,8 +1102,6 @@ const Map<String, Map<String, String>> _translations = {
     '일정 시작 {time}입니다.': '予定開始の{time}です。',
     'D-day 일정 알림입니다.': 'D-day予定のお知らせです。',
     '오늘의 일정': '今日の予定',
-    'Daily 알림 테스트': 'Daily通知テスト',
-    '이 알림이 보이면 Daily의 알림 표시 권한은 정상입니다.': 'この通知が表示されれば、Dailyの通知権限は正常です。',
     '오늘 등록된 일정이 없습니다.': '今日の予定はありません。',
     ' 외 {count}개 더 있습니다.': '、ほか{count}件',
     '정시': '予定時刻',
@@ -1121,8 +1195,6 @@ const Map<String, Map<String, String>> _translations = {
         'Daily専用PINでロックし、生体認証も任意で利用できます。',
     '기기의 Face ID, Touch ID 또는 시스템 비밀번호로 인증합니다.':
         'Face ID、Touch ID、または端末のパスワードで認証します。',
-    '알림 상태 확인 중입니다.': '通知状態を確認しています。',
-    '테스트 알림을 보냈습니다. {summary}': 'テスト通知を送信しました。{summary}',
     '일정 알림, 아침 브리핑, D-day 알림': '予定通知、朝のブリーフィング、D-day通知',
     'Apple, Google, 동기화 및 계정 관리': 'Apple、Google、同期、アカウント管理',
     '월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.': '月間カレンダーの各日に旧暦の日付も表示します。',
@@ -1219,6 +1291,82 @@ const Map<String, Map<String, String>> _translations = {
     '{count}개월마다': '{count}か月ごと',
     '{count}년마다': '{count}年ごと',
     '{count}번마다': '{count}回ごと',
+    'AI 설정': 'AI設定',
+    'Daily 개선 참여': 'Dailyの改善に協力',
+    'Daily 계정의 Apple/Google 연결 및 병합 정보, Google Drive AppData 백업, 이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다. 향후 iCloud 저장 데이터도 이 경로에서 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.':
+        'DailyアカウントのApple／Google連携・統合情報、Google Drive AppDataのバックアップ、このデバイスのすべての予定と設定を削除し、開始画面に戻ります。今後iCloud保存データもこの経路で削除されます。この操作は取り消せません。',
+    'Daily를 어떻게\n시작할까요?': 'Dailyをどのように\n始めますか？',
+    'Daily의 AI 기능 준비 상태를 확인합니다.': 'DailyのAI機能の準備状況を確認します。',
+    'Google Drive AppData의 일정과 설정을 이 기기에 복원할까요? 이 기기의 더 최신이거나 아직 백업되지 않은 변경은 유지됩니다.':
+        'Google Drive AppDataの予定と設定をこのデバイスに復元しますか？このデバイス上の新しい変更や未バックアップの変更は保持されます。',
+    'Google 계정 연결을 해제할까요? Google Drive AppData 백업은 유지하거나 함께 삭제할 수 있습니다. 로컬 일정과 설정은 유지됩니다.':
+        'Googleアカウントの連携を解除しますか？Google Drive AppDataのバックアップは保持または削除できます。ローカルの予定と設定は保持されます。',
+    'Google 연결은 앱 전용 Drive AppData 백업과 동기화에만 사용하며 일반 Drive 파일은 읽거나 수정하지 않습니다.':
+        'Google連携はアプリ専用Drive AppDataのバックアップと同期にのみ使用し、通常のDriveファイルは読み取りも変更もしません。',
+    'Siri 단축어 추가하기': 'Siriショートカットを追加',
+    'Siri 또는 단축어로 Daily 작업을 실행하면 날짜별 기록이 여기에 표시됩니다.':
+        'Siriまたはショートカットで実行したDailyの操作が日付ごとにここへ表示されます。',
+    'Siri와 Daily': 'SiriとDaily',
+    '{month} · 일정 {count}개': '{month}・予定{count}件',
+    '가져올 캘린더를 선택하면 일정과 기존 분류 색상을 Daily에 복사합니다.':
+        '読み込むカレンダーを選ぶと、予定と既存の分類色をDailyにコピーします。',
+    '개인정보 및 잠금': 'プライバシーとロック',
+    '개인정보 및 지원': 'プライバシーとサポート',
+    '계정을 연결하면 기기 간 동기화를 사용할 수 있고, 계정 없이 이 기기에서만 시작할 수도 있어요.':
+        'アカウントを連携するとデバイス間で同期できます。アカウントなしでこのデバイスだけで始めることもできます。',
+    '권한 설정을 완료하지 못했습니다. 나중에 설정에서 다시 시도할 수 있습니다. ({error})':
+        '権限設定を完了できませんでした。後で設定から再試行できます。({error})',
+    '권한은 나중에 설정에서 다시 요청하거나 변경할 수 있습니다.': '権限は後で設定から再度要求または変更できます。',
+    '기록부터 완료까지': '記録から完了まで',
+    '나중에': '後で',
+    '더 완벽한 Daily를\n함께 만들어요.': 'より良いDailyを\n一緒に作りましょう。',
+    '동의해주시면 실제 사용 흐름과 성능 문제를 익명으로 분석해 더 빠르고 안정적인 Daily를 만들 수 있어요.':
+        '同意いただくと、実際の利用フローと性能上の問題を匿名で分析し、Dailyをより速く安定させることができます。',
+    '마지막 단계': '最後のステップ',
+    '말 한마디로\n일정을 관리하세요.': '声だけで\n予定を管理しましょう。',
+    '백업할 변경 사항이 없습니다.': 'バックアップする変更はありません。',
+    '버전 정보, GitHub와 버그 제보를 확인합니다.': 'バージョン情報、GitHub、バグ報告を確認します。',
+    '분류 설정': '分類設定',
+    '사용 흐름': '利用フロー',
+    '색상, 표시 여부와 일정 정렬 순서를 관리합니다.': '色、表示状態、予定の並び順を管理します。',
+    '선택을 저장하지 못했습니다. 다시 시도해 주세요.': '選択を保存できませんでした。もう一度お試しください。',
+    '성능 개선': '性能改善',
+    '시그널 단축어를 추가하면 Siri에게 일정을 묻거나 추가하고 수정할 수 있어요.':
+        'Signalショートカットを追加すると、Siriで予定の確認・追加・編集ができます。',
+    '시작 전 알림과 브리핑': '開始前の通知とブリーフィング',
+    '실행': '実行',
+    '아직 Google Drive에 백업되지 않은 변경이 있을 수 있습니다. 그래도 이 기기의 데이터를 삭제하고 로그아웃할까요?':
+        'Google Driveにまだバックアップされていない変更がある可能性があります。それでもこのデバイスのデータを削除してログアウトしますか？',
+    '알림 및 알람 허용': '通知とアラームを許可',
+    '알림과 알람을\n준비할까요?': '通知とアラームを\n設定しますか？',
+    '앱 정보 및 지원': 'アプリ情報とサポート',
+    '언어, 테마, 글자 크기와 달력 표시 방식을 설정합니다.': '言語、テーマ、文字サイズ、カレンダーの表示方法を設定します。',
+    '연락처 보호': '連絡先の保護',
+    '예: “Siri야, Daily에서 시그널 실행.”이라고 말한 뒤 “내일 오전 9시에 헬스장 일정 추가해줘.”라고 이어서 말하세요.':
+        '例：「Siri、DailyでSignalを実行」と言った後、「明日の午前9時にジムの予定を追加して」と続けます。',
+    '오늘을 더\n가볍게 정리하세요.': '今日をもっと\n軽やかに整えましょう。',
+    '오류 범주와 응답 시간': 'エラー分類と応答時間',
+    '월간, 주간, 일간 보기': '月・週・日表示',
+    '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다.': 'このデバイスのすべての予定と設定を削除し、開始画面に戻ります。',
+    '이 기기의 일정, 설정, 로그인 정보를 삭제하고 시작 화면으로 돌아갑니다. Google Drive AppData의 백업은 삭제하지 않습니다.':
+        'このデバイスの予定、設定、ログイン情報を削除して開始画面に戻ります。Google Drive AppDataのバックアップは削除しません。',
+    '익명 분석 데이터와 앱 잠금을 관리합니다.': '匿名分析データとアプリロックを管理します。',
+    '익명 분석 허용': '匿名分析を許可',
+    '일정 내용, 검색어, 계정 정보, 위치, 광고 식별자는 수집하지 않습니다. 언제든 설정에서 변경할 수 있어요.':
+        '予定内容、検索語、アカウント情報、位置情報、広告識別子は収集しません。設定からいつでも変更できます。',
+    '일정 알림': '予定の通知',
+    '일정 알림과 아침 브리핑을 받으려면 알림 권한이 필요합니다. 지원되는 기기에서는 일정별 알람도 사용할 수 있어요.':
+        '予定通知と朝のブリーフィングには通知権限が必要です。対応デバイスでは予定ごとのアラームも利用できます。',
+    '일정과 할 일': '予定とTodo',
+    '일정과 할 일을 한곳에서 보고, 필요한 순간에만 알림을 받으세요.': '予定とTodoを一か所で確認し、必要なときだけ通知を受け取れます。',
+    '일정을 불러오지 못했습니다. ({error})': '予定を読み込めませんでした。({error})',
+    '지원 기기에서 선택 사용': '対応デバイスで任意に使用',
+    '표시 옵션': '表示オプション',
+    '필요한 순간 놓치지 않기': '必要な瞬間を逃さない',
+    '한눈에 보는 일정': '予定をひと目で確認',
+    '화면 및 달력': '表示とカレンダー',
+    '화면 및 일정': '表示と予定',
+    '화면과 기능 사용': '画面と機能の利用',
   },
   'zh_Hant': {
     '업데이트 중입니다': '正在更新 Daily',
@@ -1476,7 +1624,6 @@ const Map<String, Map<String, String>> _translations = {
     '동기화 상태': '同步狀態',
     '로그아웃': '登出',
     '아침 브리핑': '晨間摘要',
-    '알림 테스트': '測試通知',
     '복원': '還原',
     '분류 삭제': '刪除分類',
     '분류 수정': '編輯分類',
@@ -1529,8 +1676,6 @@ const Map<String, Map<String, String>> _translations = {
     '일정 시작 {time}입니다.': '行程將於{time}開始。',
     'D-day 일정 알림입니다.': '這是 D-day 行程提醒。',
     '오늘의 일정': '今日行程',
-    'Daily 알림 테스트': 'Daily 通知測試',
-    '이 알림이 보이면 Daily의 알림 표시 권한은 정상입니다.': '若您看到此通知，表示 Daily 的通知權限正常。',
     '오늘 등록된 일정이 없습니다.': '今天沒有行程。',
     ' 외 {count}개 더 있습니다.': '，另有 {count} 個',
     '정시': '準時',
@@ -1621,8 +1766,6 @@ const Map<String, Map<String, String>> _translations = {
     'Daily 전용 PIN으로 잠그며 생체인식을 선택해서 함께 사용할 수 있습니다.':
         '使用 Daily 專用 PIN 鎖定，也可選擇搭配生物辨識。',
     '기기의 Face ID, Touch ID 또는 시스템 비밀번호로 인증합니다.': '使用 Face ID、Touch ID 或裝置密碼驗證。',
-    '알림 상태 확인 중입니다.': '正在檢查通知狀態。',
-    '테스트 알림을 보냈습니다. {summary}': '已傳送測試通知。{summary}',
     '일정 알림, 아침 브리핑, D-day 알림': '行程提醒、晨間摘要與 D-day 提醒',
     'Apple, Google, 동기화 및 계정 관리': 'Apple、Google、同步與帳號管理',
     '월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.': '在月份行事曆的每個日期旁顯示農曆日期。',
@@ -1716,5 +1859,81 @@ const Map<String, Map<String, String>> _translations = {
     '{count}개월마다': '每 {count} 個月',
     '{count}년마다': '每 {count} 年',
     '{count}번마다': '每 {count} 次',
+    'AI 설정': 'AI 設定',
+    'Daily 개선 참여': '協助改善 Daily',
+    'Daily 계정의 Apple/Google 연결 및 병합 정보, Google Drive AppData 백업, 이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다. 향후 iCloud 저장 데이터도 이 경로에서 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.':
+        '刪除 Daily 帳號的 Apple／Google 連結與合併資訊、Google Drive AppData 備份，以及此裝置上的所有行程與設定，然後返回開始畫面。未來 iCloud 儲存資料也會透過此路徑一併刪除。此操作無法復原。',
+    'Daily를 어떻게\n시작할까요?': '要如何\n開始使用 Daily？',
+    'Daily의 AI 기능 준비 상태를 확인합니다.': '查看 Daily AI 功能的準備狀態。',
+    'Google Drive AppData의 일정과 설정을 이 기기에 복원할까요? 이 기기의 더 최신이거나 아직 백업되지 않은 변경은 유지됩니다.':
+        '要將 Google Drive AppData 中的行程與設定還原到此裝置嗎？此裝置上較新的變更或尚未備份的變更會保留。',
+    'Google 계정 연결을 해제할까요? Google Drive AppData 백업은 유지하거나 함께 삭제할 수 있습니다. 로컬 일정과 설정은 유지됩니다.':
+        '要中斷 Google 帳號連結嗎？您可以保留或一併刪除 Google Drive AppData 備份。本機行程與設定會保留。',
+    'Google 연결은 앱 전용 Drive AppData 백업과 동기화에만 사용하며 일반 Drive 파일은 읽거나 수정하지 않습니다.':
+        'Google 連結僅用於 App 專用 Drive AppData 的備份與同步，不會讀取或修改一般 Drive 檔案。',
+    'Siri 단축어 추가하기': '加入 Siri 捷徑',
+    'Siri 또는 단축어로 Daily 작업을 실행하면 날짜별 기록이 여기에 표시됩니다.':
+        '透過 Siri 或捷徑執行的 Daily 操作會依日期顯示在這裡。',
+    'Siri와 Daily': 'Siri 與 Daily',
+    '{month} · 일정 {count}개': '{month} · {count} 個行程',
+    '가져올 캘린더를 선택하면 일정과 기존 분류 색상을 Daily에 복사합니다.':
+        '選取要匯入的行事曆後，會將行程與既有分類顏色複製到 Daily。',
+    '개인정보 및 잠금': '隱私與鎖定',
+    '개인정보 및 지원': '隱私與支援',
+    '계정을 연결하면 기기 간 동기화를 사용할 수 있고, 계정 없이 이 기기에서만 시작할 수도 있어요.':
+        '連結帳號即可在裝置間同步，也可以不使用帳號，僅在此裝置開始。',
+    '권한 설정을 완료하지 못했습니다. 나중에 설정에서 다시 시도할 수 있습니다. ({error})':
+        '無法完成權限設定。稍後可在「設定」中重試。({error})',
+    '권한은 나중에 설정에서 다시 요청하거나 변경할 수 있습니다.': '稍後可在「設定」中再次要求或變更權限。',
+    '기록부터 완료까지': '從記錄到完成',
+    '나중에': '稍後',
+    '더 완벽한 Daily를\n함께 만들어요.': '一起讓 Daily\n變得更完善。',
+    '동의해주시면 실제 사용 흐름과 성능 문제를 익명으로 분석해 더 빠르고 안정적인 Daily를 만들 수 있어요.':
+        '若您同意，我們會匿名分析實際使用流程與效能問題，讓 Daily 更快速、更穩定。',
+    '마지막 단계': '最後一步',
+    '말 한마디로\n일정을 관리하세요.': '用一句話\n管理您的行程。',
+    '백업할 변경 사항이 없습니다.': '沒有需要備份的變更。',
+    '버전 정보, GitHub와 버그 제보를 확인합니다.': '查看版本資訊、GitHub 與錯誤回報。',
+    '분류 설정': '分類設定',
+    '사용 흐름': '使用流程',
+    '색상, 표시 여부와 일정 정렬 순서를 관리합니다.': '管理顏色、顯示狀態與行程排序。',
+    '선택을 저장하지 못했습니다. 다시 시도해 주세요.': '無法儲存您的選擇，請再試一次。',
+    '성능 개선': '效能改善',
+    '시그널 단축어를 추가하면 Siri에게 일정을 묻거나 추가하고 수정할 수 있어요.':
+        '加入 Signal 捷徑後，可以透過 Siri 查詢、新增或修改行程。',
+    '시작 전 알림과 브리핑': '開始前提醒與摘要',
+    '실행': '執行',
+    '아직 Google Drive에 백업되지 않은 변경이 있을 수 있습니다. 그래도 이 기기의 데이터를 삭제하고 로그아웃할까요?':
+        '可能仍有尚未備份到 Google Drive 的變更。仍要刪除此裝置上的資料並登出嗎？',
+    '알림 및 알람 허용': '允許通知與鬧鐘',
+    '알림과 알람을\n준비할까요?': '要設定通知\n與鬧鐘嗎？',
+    '앱 정보 및 지원': 'App 資訊與支援',
+    '언어, 테마, 글자 크기와 달력 표시 방식을 설정합니다.': '設定語言、主題、文字大小與行事曆顯示方式。',
+    '연락처 보호': '聯絡資訊保護',
+    '예: “Siri야, Daily에서 시그널 실행.”이라고 말한 뒤 “내일 오전 9시에 헬스장 일정 추가해줘.”라고 이어서 말하세요.':
+        '例如，先說「Siri，在 Daily 執行 Signal」，再接著說「新增明天上午 9 點的健身房行程」。',
+    '오늘을 더\n가볍게 정리하세요.': '更輕鬆地\n整理今天。',
+    '오류 범주와 응답 시간': '錯誤類別與回應時間',
+    '월간, 주간, 일간 보기': '月、週、日檢視',
+    '이 기기의 모든 일정과 설정을 삭제하고 시작 화면으로 돌아갑니다.': '刪除此裝置上的所有行程與設定，然後返回開始畫面。',
+    '이 기기의 일정, 설정, 로그인 정보를 삭제하고 시작 화면으로 돌아갑니다. Google Drive AppData의 백업은 삭제하지 않습니다.':
+        '刪除此裝置上的行程、設定與登入資訊，然後返回開始畫面。Google Drive AppData 備份不會刪除。',
+    '익명 분석 데이터와 앱 잠금을 관리합니다.': '管理匿名分析資料與 App 鎖定。',
+    '익명 분석 허용': '允許匿名分析',
+    '일정 내용, 검색어, 계정 정보, 위치, 광고 식별자는 수집하지 않습니다. 언제든 설정에서 변경할 수 있어요.':
+        '不會收集行程內容、搜尋字詞、帳號資訊、位置或廣告識別碼。您可以隨時在「設定」中變更。',
+    '일정 알림': '行程提醒',
+    '일정 알림과 아침 브리핑을 받으려면 알림 권한이 필요합니다. 지원되는 기기에서는 일정별 알람도 사용할 수 있어요.':
+        '行程提醒與晨間摘要需要通知權限。支援的裝置也可使用個別行程鬧鐘。',
+    '일정과 할 일': '行程與待辦事項',
+    '일정과 할 일을 한곳에서 보고, 필요한 순간에만 알림을 받으세요.': '在同一處查看行程與待辦事項，並只在需要時接收通知。',
+    '일정을 불러오지 못했습니다. ({error})': '無法載入行程。({error})',
+    '지원 기기에서 선택 사용': '可在支援的裝置選用',
+    '표시 옵션': '顯示選項',
+    '필요한 순간 놓치지 않기': '不錯過重要時刻',
+    '한눈에 보는 일정': '一眼掌握行程',
+    '화면 및 달력': '顯示與行事曆',
+    '화면 및 일정': '顯示與行程',
+    '화면과 기능 사용': '畫面與功能使用',
   },
 };

@@ -17,21 +17,29 @@ import '../../../core/auth/google_account.dart';
 import '../../../core/di/app_providers.dart';
 import '../../../core/security/biometric_auth_service.dart';
 import '../../../core/security/app_lock_privacy_service.dart';
+import '../../../core/siri/siri_shortcut_installer.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/support/bug_report_service.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
 import '../../../core/sync/google_drive_sync_service.dart';
+import '../../../core/theme/daily_ui.dart';
 import '../../events/domain/calendar_event.dart';
 import '../../events/domain/event_category.dart';
 import 'calendar_import_page.dart';
 import 'siri_activity_log_page.dart';
 
 const _fallbackAppVersion = '3.0.0';
-const _signalShortcutShareUrl =
-    'https://www.icloud.com/shortcuts/d38300f25eca434db08375c9924b4e18';
 
-enum _SettingsDestination { notifications, account }
+enum _SettingsDestination {
+  notifications,
+  account,
+  appearance,
+  privacy,
+  categories,
+  ai,
+  about,
+}
 
 bool supportsAdjacentMonthDateSetting(TargetPlatform platform) {
   return platform == TargetPlatform.android ||
@@ -63,8 +71,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   var _syncBusy = false;
   var _appleMessage = '';
   var _appleBusy = false;
-  var _notificationMessage = '';
-  var _notificationBusy = false;
   var _bugReportBusy = false;
   var _deviceAuthenticationAvailable = false;
   var _biometricAuthenticationAvailable = false;
@@ -94,6 +100,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _SettingsDestination.notifications =>
           AnalyticsScreen.notificationSettings,
         _SettingsDestination.account => AnalyticsScreen.accountSettings,
+        _SettingsDestination.appearance ||
+        _SettingsDestination.privacy ||
+        _SettingsDestination.categories ||
+        _SettingsDestination.ai ||
+        _SettingsDestination.about => AnalyticsScreen.settings,
         null => AnalyticsScreen.settings,
       };
       unawaited(
@@ -186,794 +197,921 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final pageTitle = switch (widget._destination) {
       _SettingsDestination.notifications => context.tr('알림 설정'),
       _SettingsDestination.account => context.tr('계정 설정'),
+      _SettingsDestination.appearance => context.tr('화면 및 달력'),
+      _SettingsDestination.privacy => context.tr('개인정보 및 잠금'),
+      _SettingsDestination.categories => context.tr('분류 설정'),
+      _SettingsDestination.ai => context.tr('AI 설정'),
+      _SettingsDestination.about => context.tr('앱 정보 및 지원'),
       null => context.tr('설정'),
     };
     return Scaffold(
-      appBar: AppBar(title: Text(pageTitle)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-        children: [
-          if (widget._destination == null)
-            _SettingsSection(
-              title: context.tr('설정'),
+      backgroundColor: DailyUi.pageBackground(context),
+      appBar: DailyNavigationBar(title: pageTitle),
+      body: ColoredBox(
+        color: DailyUi.pageBackground(context),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                DailyUi.isDesktop ? 24 : 16,
+                10,
+                DailyUi.isDesktop ? 24 : 16,
+                28,
+              ),
               children: [
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(
-                    Icons.notifications_outlined,
-                  ),
-                  title: Text(context.tr('알림')),
-                  subtitle: _SettingsDescription(
-                    context.tr('일정 알림, 아침 브리핑, D-day 알림'),
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const SettingsPage._destination(
-                        destination: _SettingsDestination.notifications,
-                      ),
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  key: const ValueKey('account-settings-navigation'),
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(
-                    Icons.account_circle_outlined,
-                  ),
-                  title: Text(context.tr('계정')),
-                  subtitle: _SettingsDescription(
-                    context.tr('Apple, Google, 동기화 및 계정 관리'),
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const SettingsPage._destination(
-                        destination: _SettingsDestination.account,
-                      ),
-                    ),
-                  ),
-                ),
-                if (defaultTargetPlatform == TargetPlatform.iOS ||
-                    defaultTargetPlatform == TargetPlatform.macOS) ...[
-                  const Divider(height: 1),
-                  ListTile(
-                    key: const ValueKey('siri-shortcut-setup'),
-                    contentPadding: EdgeInsets.zero,
-                    leading: const _SettingsLeadingIcon(
-                      Icons.add_link_outlined,
-                    ),
-                    title: Text(context.tr('Siri 단축어 설정')),
-                    subtitle: _SettingsDescription(
-                      context.tr('시그널 단축어를 추가하고 Siri에서 Daily 명령을 사용합니다.'),
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _showSiriShortcutSetup,
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    key: const ValueKey('siri-activity-log-navigation'),
-                    contentPadding: EdgeInsets.zero,
-                    leading: const _SettingsLeadingIcon(
-                      Icons.record_voice_over_outlined,
-                    ),
-                    title: Text(context.tr('Siri 작업 기록')),
-                    subtitle: _SettingsDescription(
-                      context.tr('Siri와 자동화로 실행한 Daily 작업을 날짜별로 확인합니다.'),
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const SiriActivityLogPage(),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          if (widget._destination == _SettingsDestination.notifications)
-            _SettingsSection(
-              title: context.tr('알림'),
-              children: [
-                _NotificationTestTile(
-                  message: _notificationMessage,
-                  busy: _notificationBusy,
-                  onPressed: _testNotification,
-                ),
-                if (_notificationMessage.contains('차단')) ...[
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed: _openNotificationSettings,
-                      icon: const Icon(Icons.settings_outlined),
-                      label: Text(context.tr('시스템 알림 설정 열기')),
-                    ),
-                  ),
-                ],
-                const Divider(height: 1),
-                _DefaultRemindersTile(
-                  title: context.tr('기본 일정 알림'),
-                  values: settings.defaultReminderMinutesList,
-                  presets: const [0, 10, 30, 60, 1440],
-                  onChanged: (values) => _save(
-                    settings.copyWith(defaultReminderMinutesList: values),
-                  ),
-                  onCustom: () async {
-                    final value = await _showNumberDialog(
-                      context: context,
-                      title: context.tr('기본 알림 직접 입력'),
-                      label: context.tr('몇 분 전에 알릴까요?'),
-                      initialValue: settings.defaultReminderMinutes,
-                    );
-                    if (value != null && value >= 0) {
-                      await _save(
-                        settings.copyWith(
-                          defaultReminderMinutesList: normalizeReminderMinutes([
-                            ...settings.defaultReminderMinutesList,
-                            value,
-                          ]),
-                        ),
-                      );
-                    }
-                  },
-                ),
-                const Divider(height: 1),
-                _TimeTile(
-                  title: context.tr('종일 일정 알림 시간'),
-                  subtitle: context.tr('종일 일정의 알림 기준 시간'),
-                  icon: Icons.event_outlined,
-                  hour: settings.allDayReminderHour,
-                  minute: settings.allDayReminderMinute,
-                  use24HourTime: settings.use24HourTime,
-                  onChanged: (time) => _save(
-                    settings.copyWith(
-                      allDayReminderHour: time.hour,
-                      allDayReminderMinute: time.minute,
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                _TimeFormatTile(
-                  use24HourTime: settings.use24HourTime,
-                  onChanged: (value) =>
-                      _save(settings.copyWith(use24HourTime: value)),
-                ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const _SettingsLeadingIcon(
-                    Icons.wb_sunny_outlined,
-                  ),
-                  value: settings.morningBriefingEnabled,
-                  title: Text(context.tr('아침 브리핑')),
-                  subtitle: _SettingsDescription(
-                    context.tr('매일 지정한 시간에 오늘 일정을 알려줍니다.'),
-                  ),
-                  onChanged: (value) async {
-                    final updated = settings.copyWith(
-                      morningBriefingEnabled: value,
-                    );
-                    await _save(updated);
-                    if (value) {
-                      await ref
-                          .read(notificationServiceProvider)
-                          .scheduleMorningBriefing(
-                            hour: updated.morningBriefingHour,
-                            minute: updated.morningBriefingMinute,
-                          );
-                    } else {
-                      await ref
-                          .read(notificationServiceProvider)
-                          .cancelMorningBriefing();
-                    }
-                  },
-                ),
-                if (settings.morningBriefingEnabled)
-                  _TimeTile(
-                    title: context.tr('아침 브리핑 시간'),
-                    subtitle: context.tr('브리핑을 받을 시간'),
-                    icon: Icons.alarm_outlined,
-                    hour: settings.morningBriefingHour,
-                    minute: settings.morningBriefingMinute,
-                    use24HourTime: settings.use24HourTime,
-                    onChanged: (time) async {
-                      final updated = settings.copyWith(
-                        morningBriefingHour: time.hour,
-                        morningBriefingMinute: time.minute,
-                      );
-                      await _save(updated);
-                      await ref
-                          .read(notificationServiceProvider)
-                          .scheduleMorningBriefing(
-                            hour: time.hour,
-                            minute: time.minute,
-                          );
-                    },
-                  ),
-                const Divider(height: 1),
-                _DdayOffsetsTile(
-                  offsets: settings.dDayReminderOffsets,
-                  onChanged: (offsets) =>
-                      _save(settings.copyWith(dDayReminderOffsets: offsets)),
-                  onCustom: () async {
-                    final value = await _showNumberDialog(
-                      context: context,
-                      title: context.tr('D-day 알림 직접 입력'),
-                      label: context.tr('D-day 기준 일수. 예: -7, 0'),
-                      initialValue: -7,
-                    );
-                    if (value != null) {
-                      final offsets = {
-                        ...settings.dDayReminderOffsets,
-                        value,
-                      }.toList()..sort();
-                      await _save(
-                        settings.copyWith(dDayReminderOffsets: offsets),
-                      );
-                    }
-                  },
-                ),
-              ],
-            ),
-          if (widget._destination == null)
-            _SettingsSection(
-              title: context.tr('화면'),
-              children: [
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(Icons.language_outlined),
-                  title: Text(context.tr('언어')),
-                  trailing: DropdownButtonHideUnderline(
-                    child: DropdownButton<AppLanguage>(
-                      value: settings.language,
-                      alignment: AlignmentDirectional.centerEnd,
-                      items: AppLanguage.values
-                          .map(
-                            (language) => DropdownMenuItem(
-                              value: language,
-                              child: Text(context.l10n.languageName(language)),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (language) {
-                        if (language != null) {
-                          _save(settings.copyWith(language: language));
-                        }
-                      },
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Row(
+                if (widget._destination == null) ...[
+                  _SettingsSection(
+                    title: 'Daily',
                     children: [
-                      const _SettingsRowLeading(Icons.palette_outlined),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          context.tr('테마'),
-                          style: Theme.of(context).textTheme.titleSmall,
+                      ListTile(
+                        key: const ValueKey('account-settings-navigation'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.account_circle_outlined,
+                        ),
+                        title: Text(context.tr('계정')),
+                        subtitle: _SettingsDescription(
+                          context.tr('Apple, Google, 동기화 및 계정 관리'),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () =>
+                            _openDestination(_SettingsDestination.account),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const ValueKey('notification-settings-navigation'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.notifications_outlined,
+                        ),
+                        title: Text(context.tr('알림')),
+                        subtitle: _SettingsDescription(
+                          context.tr('일정 알림, 아침 브리핑, D-day 알림'),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => _openDestination(
+                          _SettingsDestination.notifications,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 5,
-                        child: _ThreeWayCapsule<AppThemeMode>(
-                          key: const ValueKey('app-theme-mode-slider'),
-                          values: AppThemeMode.values,
-                          selected: settings.themeMode,
-                          labelFor: context.l10n.themeName,
-                          onChanged: (mode) =>
-                              _save(settings.copyWith(themeMode: mode)),
+                      if (defaultTargetPlatform == TargetPlatform.iOS ||
+                          defaultTargetPlatform == TargetPlatform.macOS) ...[
+                        const Divider(height: 1),
+                        ListTile(
+                          key: const ValueKey('siri-shortcut-setup'),
+                          contentPadding: EdgeInsets.zero,
+                          leading: const _SettingsLeadingIcon(
+                            Icons.add_link_outlined,
+                          ),
+                          title: Text(context.tr('Siri 단축어 설정')),
+                          subtitle: _SettingsDescription(
+                            context.tr('시그널 단축어를 추가하고 Siri에서 Daily 명령을 사용합니다.'),
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: _showSiriShortcutSetup,
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          key: const ValueKey('siri-activity-log-navigation'),
+                          contentPadding: EdgeInsets.zero,
+                          leading: const _SettingsLeadingIcon(
+                            Icons.record_voice_over_outlined,
+                          ),
+                          title: Text(context.tr('Siri 작업 기록')),
+                          subtitle: _SettingsDescription(
+                            context.tr('Siri와 자동화로 실행한 Daily 작업을 날짜별로 확인합니다.'),
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const SiriActivityLogPage(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  _SettingsSection(
+                    title: context.tr('화면 및 일정'),
+                    children: [
+                      ListTile(
+                        key: const ValueKey('appearance-settings-navigation'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.display_settings_outlined,
+                        ),
+                        title: Text(context.tr('화면 및 달력')),
+                        subtitle: _SettingsDescription(
+                          context.tr('언어, 테마, 글자 크기와 달력 표시 방식을 설정합니다.'),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () =>
+                            _openDestination(_SettingsDestination.appearance),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const ValueKey('category-settings-navigation'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.category_outlined,
+                        ),
+                        title: Text(context.tr('분류')),
+                        subtitle: _SettingsDescription(
+                          context.tr('색상, 표시 여부와 일정 정렬 순서를 관리합니다.'),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () =>
+                            _openDestination(_SettingsDestination.categories),
+                      ),
+                    ],
+                  ),
+                  _SettingsSection(
+                    title: context.tr('개인정보 및 지원'),
+                    children: [
+                      ListTile(
+                        key: const ValueKey('privacy-settings-navigation'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.privacy_tip_outlined,
+                        ),
+                        title: Text(context.tr('개인정보 및 잠금')),
+                        subtitle: _SettingsDescription(
+                          context.tr('익명 분석 데이터와 앱 잠금을 관리합니다.'),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () =>
+                            _openDestination(_SettingsDestination.privacy),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const ValueKey('ai-settings-navigation'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.auto_awesome_outlined,
+                        ),
+                        title: Text(context.tr('AI 설정')),
+                        subtitle: _SettingsDescription(
+                          context.tr('Daily의 AI 기능 준비 상태를 확인합니다.'),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => _openDestination(_SettingsDestination.ai),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const ValueKey('about-settings-navigation'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.info_outline_rounded,
+                        ),
+                        title: Text(context.tr('앱 정보 및 지원')),
+                        subtitle: _SettingsDescription(
+                          context.tr('버전 정보, GitHub와 버그 제보를 확인합니다.'),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () =>
+                            _openDestination(_SettingsDestination.about),
+                      ),
+                    ],
+                  ),
+                ],
+                if (widget._destination == _SettingsDestination.notifications)
+                  _SettingsSection(
+                    title: context.tr('알림'),
+                    children: [
+                      ListTile(
+                        key: const ValueKey('system-notification-settings'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.settings_outlined,
+                        ),
+                        title: Text(context.tr('시스템 알림 설정 열기')),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: _openNotificationSettings,
+                      ),
+                      const Divider(height: 1),
+                      _DefaultRemindersTile(
+                        title: context.tr('기본 일정 알림'),
+                        values: settings.defaultReminderMinutesList,
+                        presets: const [0, 10, 30, 60, 1440],
+                        onChanged: (values) => _save(
+                          settings.copyWith(defaultReminderMinutesList: values),
+                        ),
+                        onCustom: () async {
+                          final value = await _showNumberDialog(
+                            context: context,
+                            title: context.tr('기본 알림 직접 입력'),
+                            label: context.tr('몇 분 전에 알릴까요?'),
+                            initialValue: settings.defaultReminderMinutes,
+                          );
+                          if (value != null && value >= 0) {
+                            await _save(
+                              settings.copyWith(
+                                defaultReminderMinutesList:
+                                    normalizeReminderMinutes([
+                                      ...settings.defaultReminderMinutesList,
+                                      value,
+                                    ]),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                      const Divider(height: 1),
+                      _TimeTile(
+                        title: context.tr('종일 일정 알림 시간'),
+                        subtitle: context.tr('종일 일정의 알림 기준 시간'),
+                        icon: Icons.event_outlined,
+                        hour: settings.allDayReminderHour,
+                        minute: settings.allDayReminderMinute,
+                        use24HourTime: settings.use24HourTime,
+                        onChanged: (time) => _save(
+                          settings.copyWith(
+                            allDayReminderHour: time.hour,
+                            allDayReminderMinute: time.minute,
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      _TimeFormatTile(
+                        use24HourTime: settings.use24HourTime,
+                        onChanged: (value) =>
+                            _save(settings.copyWith(use24HourTime: value)),
+                      ),
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const _SettingsLeadingIcon(
+                          Icons.wb_sunny_outlined,
+                        ),
+                        value: settings.morningBriefingEnabled,
+                        title: Text(context.tr('아침 브리핑')),
+                        subtitle: _SettingsDescription(
+                          context.tr('매일 지정한 시간에 오늘 일정을 알려줍니다.'),
+                        ),
+                        onChanged: (value) async {
+                          final updated = settings.copyWith(
+                            morningBriefingEnabled: value,
+                          );
+                          await _save(updated);
+                          if (value) {
+                            await ref
+                                .read(notificationServiceProvider)
+                                .scheduleMorningBriefing(
+                                  hour: updated.morningBriefingHour,
+                                  minute: updated.morningBriefingMinute,
+                                );
+                          } else {
+                            await ref
+                                .read(notificationServiceProvider)
+                                .cancelMorningBriefing();
+                          }
+                        },
+                      ),
+                      if (settings.morningBriefingEnabled)
+                        _TimeTile(
+                          title: context.tr('아침 브리핑 시간'),
+                          subtitle: context.tr('브리핑을 받을 시간'),
+                          icon: Icons.alarm_outlined,
+                          hour: settings.morningBriefingHour,
+                          minute: settings.morningBriefingMinute,
+                          use24HourTime: settings.use24HourTime,
+                          onChanged: (time) async {
+                            final updated = settings.copyWith(
+                              morningBriefingHour: time.hour,
+                              morningBriefingMinute: time.minute,
+                            );
+                            await _save(updated);
+                            await ref
+                                .read(notificationServiceProvider)
+                                .scheduleMorningBriefing(
+                                  hour: time.hour,
+                                  minute: time.minute,
+                                );
+                          },
+                        ),
+                      const Divider(height: 1),
+                      _DdayOffsetsTile(
+                        offsets: settings.dDayReminderOffsets,
+                        onChanged: (offsets) => _save(
+                          settings.copyWith(dDayReminderOffsets: offsets),
+                        ),
+                        onCustom: () async {
+                          final value = await _showNumberDialog(
+                            context: context,
+                            title: context.tr('D-day 알림 직접 입력'),
+                            label: context.tr('D-day 기준 일수. 예: -7, 0'),
+                            initialValue: -7,
+                          );
+                          if (value != null) {
+                            final offsets = {
+                              ...settings.dDayReminderOffsets,
+                              value,
+                            }.toList()..sort();
+                            await _save(
+                              settings.copyWith(dDayReminderOffsets: offsets),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                if (widget._destination == _SettingsDestination.appearance)
+                  _SettingsSection(
+                    title: context.tr('화면'),
+                    children: [
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.language_outlined,
+                        ),
+                        title: Text(context.tr('언어')),
+                        trailing: DropdownButtonHideUnderline(
+                          child: DropdownButton<AppLanguage>(
+                            value: settings.language,
+                            alignment: AlignmentDirectional.centerEnd,
+                            items: AppLanguage.values
+                                .map(
+                                  (language) => DropdownMenuItem(
+                                    value: language,
+                                    child: Text(
+                                      context.l10n.languageName(language),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (language) {
+                              if (language != null) {
+                                _save(settings.copyWith(language: language));
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Row(
+                          children: [
+                            const _SettingsRowLeading(Icons.palette_outlined),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                context.tr('테마'),
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 5,
+                              child: _ThreeWayCapsule<AppThemeMode>(
+                                key: const ValueKey('app-theme-mode-slider'),
+                                values: AppThemeMode.values,
+                                selected: settings.themeMode,
+                                labelFor: context.l10n.themeName,
+                                onChanged: (mode) =>
+                                    _save(settings.copyWith(themeMode: mode)),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-          if (widget._destination == null)
-            _SettingsSection(
-              title: context.tr('달력'),
-              children: [
-                if (defaultTargetPlatform == TargetPlatform.iOS ||
-                    defaultTargetPlatform == TargetPlatform.android) ...[
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const _SettingsLeadingIcon(
-                      Icons.move_to_inbox_outlined,
-                    ),
-                    title: Text(context.tr('캘린더 데이터 옮기기')),
-                    subtitle: _SettingsDescription(
-                      context.tr(
-                        defaultTargetPlatform == TargetPlatform.android
-                            ? 'Samsung 캘린더 또는 Google 캘린더에서 가져옵니다.'
-                            : 'Apple 캘린더 또는 Google 캘린더에서 가져옵니다.',
-                      ),
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const CalendarImportPage(),
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                ],
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(
-                    Icons.calendar_view_week_outlined,
-                  ),
-                  title: Text(context.tr('주 시작 요일')),
-                  trailing: SizedBox(
-                    width: 132,
-                    child: _ThreeWayCapsule<bool>(
-                      key: const ValueKey('week-start-toggle'),
-                      values: const [false, true],
-                      selected: settings.weekStartsOnMonday,
-                      labelFor: (startsOnMonday) =>
-                          context.tr(startsOnMonday ? '월' : '일'),
-                      onChanged: (value) =>
-                          _save(settings.copyWith(weekStartsOnMonday: value)),
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const _SettingsLeadingIcon(
-                    Icons.nightlight_outlined,
-                  ),
-                  value: settings.showLunarDates,
-                  title: Text(context.tr('음력 표시')),
-                  subtitle: _SettingsDescription(
-                    context.tr('월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.'),
-                  ),
-                  onChanged: (value) =>
-                      _save(settings.copyWith(showLunarDates: value)),
-                ),
-                if (supportsAdjacentMonthDateSetting(
-                  defaultTargetPlatform,
-                )) ...[
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    secondary: const _SettingsLeadingIcon(
-                      Icons.date_range_outlined,
-                    ),
-                    value:
-                        settings.monthNavigationMode ==
-                            MonthNavigationMode.vertical
-                        ? false
-                        : settings.showAdjacentMonthDates,
-                    title: Text(context.tr('인접한 달 날짜 표시')),
-                    subtitle: _SettingsDescription(
-                      settings.monthNavigationMode ==
-                              MonthNavigationMode.vertical
-                          ? context.tr(
-                              '상하 스크롤에서는 월 경계를 명확히 구분하기 위해 사용할 수 없습니다.',
-                            )
-                          : context.tr('월간 달력의 첫주와 마지막 주에 이전·다음 달을 표시합니다.'),
-                    ),
-                    onChanged:
-                        settings.monthNavigationMode ==
-                            MonthNavigationMode.vertical
-                        ? null
-                        : (value) => _save(
-                            settings.copyWith(showAdjacentMonthDates: value),
-                          ),
-                  ),
-                ],
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(Icons.swipe_outlined),
-                  title: Text(context.tr('월간 이동 방식')),
-                  trailing: SizedBox(
-                    width: 224,
-                    child: _ThreeWayCapsule<MonthNavigationMode>(
-                      key: const ValueKey('month-navigation-mode-slider'),
-                      values: MonthNavigationMode.values,
-                      selected: settings.monthNavigationMode,
-                      labelFor: context.l10n.navigationName,
-                      onChanged: (value) => _save(
-                        settings.copyWith(
-                          monthNavigationMode: value,
-                          showAdjacentMonthDates:
-                              value == MonthNavigationMode.vertical
-                              ? false
-                              : settings.showAdjacentMonthDates,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(
-                    Icons.calendar_view_month_outlined,
-                  ),
-                  title: Text(context.tr('기본 보기')),
-                  subtitle: _SettingsDescription(
-                    context.tr('앱을 열었을 때 먼저 보여줄 달력 보기'),
-                  ),
-                  trailing: SizedBox(
-                    width: 188,
-                    child: _ThreeWayCapsule<CalendarViewMode>(
-                      key: const ValueKey('default-calendar-view-slider'),
-                      values: CalendarViewMode.values,
-                      selected: settings.defaultCalendarView,
-                      labelFor: context.l10n.calendarViewName,
-                      onChanged: (value) {
-                        _save(settings.copyWith(defaultCalendarView: value));
-                        ref.read(calendarViewModeProvider.notifier).state =
-                            value;
-                      },
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(
-                    Icons.view_agenda_outlined,
-                  ),
-                  title: Text(context.tr('주간·일간 표시 방식')),
-                  trailing: SizedBox(
-                    width: 168,
-                    child: _ThreeWayCapsule<WeekDayLayoutMode>(
-                      key: const ValueKey('week-day-layout-mode-slider'),
-                      values: WeekDayLayoutMode.values,
-                      selected: settings.weekDayLayoutMode,
-                      labelFor: (mode) => context.tr(
-                        mode == WeekDayLayoutMode.list ? '목록' : '스케줄',
-                      ),
-                      onChanged: (value) =>
-                          _save(settings.copyWith(weekDayLayoutMode: value)),
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(
-                    Icons.format_align_center_outlined,
-                  ),
-                  title: Text(context.tr('일정 제목 정렬')),
-                  trailing: SizedBox(
-                    width: 168,
-                    child: _ThreeWayCapsule<CalendarEventTitleAlignment>(
-                      key: const ValueKey('event-title-alignment-slider'),
-                      values: CalendarEventTitleAlignment.values,
-                      selected: settings.calendarEventTitleAlignment,
-                      labelFor: (alignment) => context.tr(
-                        alignment == CalendarEventTitleAlignment.leading
-                            ? '기본'
-                            : '가운데',
-                      ),
-                      onChanged: (value) => _save(
-                        settings.copyWith(calendarEventTitleAlignment: value),
-                      ),
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                _AppTextSizeSlider(
-                  textSize: settings.appTextSize,
-                  onChanged: (value) =>
-                      _save(settings.copyWith(appTextSize: value)),
-                ),
-              ],
-            ),
-          if (widget._destination == null)
-            _SettingsSection(
-              title: context.tr('개인정보'),
-              children: [
-                ValueListenableBuilder<bool>(
-                  valueListenable: analytics.enabledListenable,
-                  builder: (context, enabled, _) => SwitchListTile(
-                    key: const ValueKey('anonymous-analytics-toggle'),
-                    contentPadding: EdgeInsets.zero,
-                    secondary: const _SettingsLeadingIcon(
-                      Icons.insights_outlined,
-                    ),
-                    value: enabled,
-                    title: Text(context.tr('익명 사용성 분석 허용')),
-                    subtitle: _SettingsDescription(
-                      context.tr(
-                        '일정 내용, 검색어, 계정 정보 없이 화면과 기능 사용, 오류 범주, 성능 정보만 수집합니다.',
-                      ),
-                    ),
-                    onChanged: (value) => analytics.setEnabled(value),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  key: const ValueKey('delete-analytics-data'),
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(
-                    Icons.delete_sweep_outlined,
-                  ),
-                  title: Text(context.tr('분석 데이터 삭제')),
-                  subtitle: _SettingsDescription(
-                    context.tr('이 기기에 전송 대기 중인 익명 분석 데이터를 삭제합니다.'),
-                  ),
-                  onTap: _deleteAnalyticsData,
-                ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const _SettingsLeadingIcon(Icons.lock_outline),
-                  value: settings.appLockEnabled,
-                  title: Text(context.tr('앱 잠금')),
-                  subtitle: _SettingsDescription(
-                    settings.appLockEnabled
-                        ? '앱 실행 시 ${settings.appLockMethod.label}으로 확인합니다.'
-                        : context.tr('앱을 다시 열 때 사용자를 확인합니다.'),
-                  ),
-                  onChanged: (value) => value
-                      ? _enableAppLock(settings)
-                      : _disableAppLock(settings),
-                ),
-                if (settings.appLockEnabled) ...[
-                  const Divider(height: 1),
-                  _AppLockMethodSlider(
-                    method: settings.appLockMethod,
-                    systemAuthenticationAvailable:
-                        _deviceAuthenticationAvailable,
-                    onChanged: (method) =>
-                        _changeAppLockMethod(settings, method),
-                  ),
-                  if (settings.appLockMethod == AppLockMethod.appPin) ...[
-                    const Divider(height: 1),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      secondary: const _SettingsLeadingIcon(Icons.fingerprint),
-                      value: settings.appLockBiometricsEnabled,
-                      title: Text(context.tr('생체인식 잠금 해제')),
-                      subtitle: _SettingsDescription(
-                        _biometricAuthenticationAvailable
-                            ? defaultTargetPlatform == TargetPlatform.macOS
-                                  ? 'PIN 대신 Touch ID 또는 Apple Watch로 잠금을 해제할 수 있습니다.'
-                                  : 'PIN 대신 Face ID 또는 Touch ID로 잠금을 해제할 수 있습니다.'
-                            : '이 기기에서 사용할 수 있는 생체인식이 없습니다.',
-                      ),
-                      onChanged: _biometricAuthenticationAvailable
-                          ? (value) =>
-                                _changePinBiometricUnlock(settings, value)
-                          : null,
-                    ),
-                  ],
-                ],
-              ],
-            ),
-          if (widget._destination == null)
-            _SettingsSection(
-              title: context.tr('분류'),
-              children: [
-                ReorderableListView.builder(
-                  key: const ValueKey('category-reorder-list'),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  buildDefaultDragHandles: false,
-                  itemCount: settings.categories.length,
-                  onReorderItem: (oldIndex, newIndex) =>
-                      _reorderCategories(settings, oldIndex, newIndex),
-                  itemBuilder: (context, index) {
-                    final category = settings.categories[index];
-                    return _CategoryTile(
-                      key: ValueKey('category-${category.id}'),
-                      reorderIndex: index,
-                      category: category,
-                      visible: !settings.hiddenCategoryIds.contains(
-                        category.id,
-                      ),
-                      onVisibilityChanged: (visible) =>
-                          _setCategoryVisible(settings, category, visible),
-                      onEdit:
-                          !category.locked ||
-                              category.id == EventCategory.holiday.id
-                          ? () => _editCategory(settings, category)
-                          : null,
-                      onDelete: category.locked
-                          ? null
-                          : () => _deleteCategory(settings, category),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(Icons.sort_outlined),
-                  title: Text(context.tr('일정 정렬 우선순위')),
-                  trailing: SizedBox(
-                    width: 188,
-                    child: _ThreeWayCapsule<CalendarEventSortPriority>(
-                      key: const ValueKey('event-sort-priority-slider'),
-                      values: CalendarEventSortPriority.values,
-                      selected: settings.calendarEventSortPriority,
-                      labelFor: (priority) => context.tr(
-                        priority == CalendarEventSortPriority.category
-                            ? '분류 우선'
-                            : '시간 우선',
-                      ),
-                      onChanged: (value) => _save(
-                        settings.copyWith(calendarEventSortPriority: value),
-                      ),
-                    ),
-                  ),
-                ),
-                SwitchListTile(
-                  key: const ValueKey('holiday-background-setting'),
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const _SettingsLeadingIcon(
-                    Icons.format_color_fill_outlined,
-                  ),
-                  value: settings.calendarHolidayBackgroundEnabled,
-                  title: Text(context.tr('공휴일 날짜 배경')),
-                  subtitle: _SettingsDescription(
-                    context.tr('공휴일 분류 색상을 날짜 배경에 표시합니다.'),
-                  ),
-                  onChanged: (value) => _save(
-                    settings.copyWith(calendarHolidayBackgroundEnabled: value),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _addCategory(settings),
-                    icon: const Icon(Icons.add),
-                    label: Text(context.tr('분류 추가')),
-                  ),
-                ),
-              ],
-            ),
-          if (widget._destination == null)
-            _SettingsSection(
-              title: 'AI',
-              children: [
-                Opacity(
-                  opacity: 0.45,
-                  child: IgnorePointer(
-                    child: Column(
-                      children: [
+                if (widget._destination == _SettingsDestination.appearance)
+                  _SettingsSection(
+                    title: context.tr('달력'),
+                    children: [
+                      if (defaultTargetPlatform == TargetPlatform.iOS ||
+                          defaultTargetPlatform == TargetPlatform.android) ...[
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: const _SettingsLeadingIcon(
-                            Icons.auto_awesome_outlined,
+                            Icons.move_to_inbox_outlined,
                           ),
-                          title: Text(context.tr('AI 기능')),
+                          title: Text(context.tr('캘린더 데이터 옮기기')),
                           subtitle: _SettingsDescription(
-                            context.tr('개발 중입니다.'),
+                            context.tr(
+                              defaultTargetPlatform == TargetPlatform.android
+                                  ? 'Samsung 캘린더 또는 Google 캘린더에서 가져옵니다.'
+                                  : 'Apple 캘린더 또는 Google 캘린더에서 가져옵니다.',
+                            ),
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const CalendarImportPage(),
+                            ),
                           ),
                         ),
+                        const Divider(height: 1),
+                      ],
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.calendar_view_week_outlined,
+                        ),
+                        title: Text(context.tr('주 시작 요일')),
+                        trailing: SizedBox(
+                          width: 132,
+                          child: _ThreeWayCapsule<bool>(
+                            key: const ValueKey('week-start-toggle'),
+                            values: const [false, true],
+                            selected: settings.weekStartsOnMonday,
+                            labelFor: (startsOnMonday) =>
+                                context.tr(startsOnMonday ? '월' : '일'),
+                            onChanged: (value) => _save(
+                              settings.copyWith(weekStartsOnMonday: value),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const _SettingsLeadingIcon(
+                          Icons.nightlight_outlined,
+                        ),
+                        value: settings.showLunarDates,
+                        title: Text(context.tr('음력 표시')),
+                        subtitle: _SettingsDescription(
+                          context.tr('월 달력의 각 날짜에 음력 날짜를 함께 표시합니다.'),
+                        ),
+                        onChanged: (value) =>
+                            _save(settings.copyWith(showLunarDates: value)),
+                      ),
+                      if (supportsAdjacentMonthDateSetting(
+                        defaultTargetPlatform,
+                      )) ...[
+                        const Divider(height: 1),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           secondary: const _SettingsLeadingIcon(
-                            Icons.psychology_outlined,
+                            Icons.date_range_outlined,
                           ),
-                          value: settings.aiEnabled,
-                          title: Text(context.tr('Gemini 사용')),
-                          onChanged: (_) {},
-                        ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          secondary: const _SettingsLeadingIcon(
-                            Icons.shield_outlined,
+                          value:
+                              settings.monthNavigationMode ==
+                                  MonthNavigationMode.vertical
+                              ? false
+                              : settings.showAdjacentMonthDates,
+                          title: Text(context.tr('인접한 달 날짜 표시')),
+                          subtitle: _SettingsDescription(
+                            settings.monthNavigationMode ==
+                                    MonthNavigationMode.vertical
+                                ? context.tr(
+                                    '상하 스크롤에서는 월 경계를 명확히 구분하기 위해 사용할 수 없습니다.',
+                                  )
+                                : context.tr(
+                                    '월간 달력의 첫주와 마지막 주에 이전·다음 달을 표시합니다.',
+                                  ),
                           ),
-                          value: settings.blockSensitiveAi,
-                          title: Text(context.tr('민감 문장 AI 차단')),
-                          onChanged: (_) {},
-                        ),
-                        TextField(
-                          controller: _apiKeyController,
-                          obscureText: true,
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.key_outlined),
-                            labelText: context.tr('Gemini API 키'),
-                          ),
+                          onChanged:
+                              settings.monthNavigationMode ==
+                                  MonthNavigationMode.vertical
+                              ? null
+                              : (value) => _save(
+                                  settings.copyWith(
+                                    showAdjacentMonthDates: value,
+                                  ),
+                                ),
                         ),
                       ],
-                    ),
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.swipe_outlined,
+                        ),
+                        title: Text(context.tr('월간 이동 방식')),
+                        trailing: SizedBox(
+                          width: 224,
+                          child: _ThreeWayCapsule<MonthNavigationMode>(
+                            key: const ValueKey('month-navigation-mode-slider'),
+                            values: MonthNavigationMode.values,
+                            selected: settings.monthNavigationMode,
+                            labelFor: context.l10n.navigationName,
+                            onChanged: (value) => _save(
+                              settings.copyWith(
+                                monthNavigationMode: value,
+                                showAdjacentMonthDates:
+                                    value == MonthNavigationMode.vertical
+                                    ? false
+                                    : settings.showAdjacentMonthDates,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.calendar_view_month_outlined,
+                        ),
+                        title: Text(context.tr('기본 보기')),
+                        subtitle: _SettingsDescription(
+                          context.tr('앱을 열었을 때 먼저 보여줄 달력 보기'),
+                        ),
+                        trailing: SizedBox(
+                          width: 188,
+                          child: _ThreeWayCapsule<CalendarViewMode>(
+                            key: const ValueKey('default-calendar-view-slider'),
+                            values: CalendarViewMode.values,
+                            selected: settings.defaultCalendarView,
+                            labelFor: context.l10n.calendarViewName,
+                            onChanged: (value) {
+                              _save(
+                                settings.copyWith(defaultCalendarView: value),
+                              );
+                              ref
+                                      .read(calendarViewModeProvider.notifier)
+                                      .state =
+                                  value;
+                            },
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.view_agenda_outlined,
+                        ),
+                        title: Text(context.tr('주간·일간 표시 방식')),
+                        trailing: SizedBox(
+                          width: 168,
+                          child: _ThreeWayCapsule<WeekDayLayoutMode>(
+                            key: const ValueKey('week-day-layout-mode-slider'),
+                            values: WeekDayLayoutMode.values,
+                            selected: settings.weekDayLayoutMode,
+                            labelFor: (mode) => context.tr(
+                              mode == WeekDayLayoutMode.list ? '목록' : '스케줄',
+                            ),
+                            onChanged: (value) => _save(
+                              settings.copyWith(weekDayLayoutMode: value),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.format_align_center_outlined,
+                        ),
+                        title: Text(context.tr('일정 제목 정렬')),
+                        trailing: SizedBox(
+                          width: 168,
+                          child: _ThreeWayCapsule<CalendarEventTitleAlignment>(
+                            key: const ValueKey('event-title-alignment-slider'),
+                            values: CalendarEventTitleAlignment.values,
+                            selected: settings.calendarEventTitleAlignment,
+                            labelFor: (alignment) => context.tr(
+                              alignment == CalendarEventTitleAlignment.leading
+                                  ? '기본'
+                                  : '가운데',
+                            ),
+                            onChanged: (value) => _save(
+                              settings.copyWith(
+                                calendarEventTitleAlignment: value,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      _AppTextSizeSlider(
+                        textSize: settings.appTextSize,
+                        onChanged: (value) =>
+                            _save(settings.copyWith(appTextSize: value)),
+                      ),
+                    ],
                   ),
-                ),
+                if (widget._destination == _SettingsDestination.privacy)
+                  _SettingsSection(
+                    title: context.tr('개인정보'),
+                    children: [
+                      ValueListenableBuilder<bool>(
+                        valueListenable: analytics.enabledListenable,
+                        builder: (context, enabled, _) => SwitchListTile(
+                          key: const ValueKey('anonymous-analytics-toggle'),
+                          contentPadding: EdgeInsets.zero,
+                          secondary: const _SettingsLeadingIcon(
+                            Icons.insights_outlined,
+                          ),
+                          value: enabled,
+                          title: Text(context.tr('익명 사용성 분석 허용')),
+                          subtitle: _SettingsDescription(
+                            context.tr(
+                              '일정 내용, 검색어, 계정 정보 없이 화면과 기능 사용, 오류 범주, 성능 정보만 수집합니다.',
+                            ),
+                          ),
+                          onChanged: (value) => analytics.setEnabled(value),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const ValueKey('delete-analytics-data'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.delete_sweep_outlined,
+                        ),
+                        title: Text(context.tr('분석 데이터 삭제')),
+                        subtitle: _SettingsDescription(
+                          context.tr('이 기기에 전송 대기 중인 익명 분석 데이터를 삭제합니다.'),
+                        ),
+                        onTap: _deleteAnalyticsData,
+                      ),
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const _SettingsLeadingIcon(
+                          Icons.lock_outline,
+                        ),
+                        value: settings.appLockEnabled,
+                        title: Text(context.tr('앱 잠금')),
+                        subtitle: _SettingsDescription(
+                          settings.appLockEnabled
+                              ? '앱 실행 시 ${settings.appLockMethod.label}으로 확인합니다.'
+                              : context.tr('앱을 다시 열 때 사용자를 확인합니다.'),
+                        ),
+                        onChanged: (value) => value
+                            ? _enableAppLock(settings)
+                            : _disableAppLock(settings),
+                      ),
+                      if (settings.appLockEnabled) ...[
+                        const Divider(height: 1),
+                        _AppLockMethodSlider(
+                          method: settings.appLockMethod,
+                          systemAuthenticationAvailable:
+                              _deviceAuthenticationAvailable,
+                          onChanged: (method) =>
+                              _changeAppLockMethod(settings, method),
+                        ),
+                        if (settings.appLockMethod == AppLockMethod.appPin) ...[
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            secondary: const _SettingsLeadingIcon(
+                              Icons.fingerprint,
+                            ),
+                            value: settings.appLockBiometricsEnabled,
+                            title: Text(context.tr('생체인식 잠금 해제')),
+                            subtitle: _SettingsDescription(
+                              _biometricAuthenticationAvailable
+                                  ? defaultTargetPlatform ==
+                                            TargetPlatform.macOS
+                                        ? 'PIN 대신 Touch ID 또는 Apple Watch로 잠금을 해제할 수 있습니다.'
+                                        : 'PIN 대신 Face ID 또는 Touch ID로 잠금을 해제할 수 있습니다.'
+                                  : '이 기기에서 사용할 수 있는 생체인식이 없습니다.',
+                            ),
+                            onChanged: _biometricAuthenticationAvailable
+                                ? (value) =>
+                                      _changePinBiometricUnlock(settings, value)
+                                : null,
+                          ),
+                        ],
+                      ],
+                    ],
+                  ),
+                if (widget._destination == _SettingsDestination.categories)
+                  _SettingsSection(
+                    title: context.tr('분류'),
+                    children: [
+                      ReorderableListView.builder(
+                        key: const ValueKey('category-reorder-list'),
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        buildDefaultDragHandles: false,
+                        itemCount: settings.categories.length,
+                        onReorderItem: (oldIndex, newIndex) =>
+                            _reorderCategories(settings, oldIndex, newIndex),
+                        itemBuilder: (context, index) {
+                          final category = settings.categories[index];
+                          return _CategoryTile(
+                            key: ValueKey('category-${category.id}'),
+                            reorderIndex: index,
+                            category: category,
+                            visible: !settings.hiddenCategoryIds.contains(
+                              category.id,
+                            ),
+                            onVisibilityChanged: (visible) =>
+                                _setCategoryVisible(
+                                  settings,
+                                  category,
+                                  visible,
+                                ),
+                            onEdit:
+                                !category.locked ||
+                                    category.id == EventCategory.holiday.id
+                                ? () => _editCategory(settings, category)
+                                : null,
+                            onDelete: category.locked
+                                ? null
+                                : () => _deleteCategory(settings, category),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.sort_outlined,
+                        ),
+                        title: Text(context.tr('일정 정렬 우선순위')),
+                        trailing: SizedBox(
+                          width: 188,
+                          child: _ThreeWayCapsule<CalendarEventSortPriority>(
+                            key: const ValueKey('event-sort-priority-slider'),
+                            values: CalendarEventSortPriority.values,
+                            selected: settings.calendarEventSortPriority,
+                            labelFor: (priority) => context.tr(
+                              priority == CalendarEventSortPriority.category
+                                  ? '분류 우선'
+                                  : '시간 우선',
+                            ),
+                            onChanged: (value) => _save(
+                              settings.copyWith(
+                                calendarEventSortPriority: value,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SwitchListTile(
+                        key: const ValueKey('holiday-background-setting'),
+                        contentPadding: EdgeInsets.zero,
+                        secondary: const _SettingsLeadingIcon(
+                          Icons.format_color_fill_outlined,
+                        ),
+                        value: settings.calendarHolidayBackgroundEnabled,
+                        title: Text(context.tr('공휴일 날짜 배경')),
+                        subtitle: _SettingsDescription(
+                          context.tr('공휴일 분류 색상을 날짜 배경에 표시합니다.'),
+                        ),
+                        onChanged: (value) => _save(
+                          settings.copyWith(
+                            calendarHolidayBackgroundEnabled: value,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _addCategory(settings),
+                          icon: const Icon(Icons.add),
+                          label: Text(context.tr('분류 추가')),
+                        ),
+                      ),
+                    ],
+                  ),
+                if (widget._destination == _SettingsDestination.ai)
+                  _SettingsSection(
+                    title: 'AI',
+                    children: [
+                      Opacity(
+                        opacity: 0.45,
+                        child: IgnorePointer(
+                          child: Column(
+                            children: [
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const _SettingsLeadingIcon(
+                                  Icons.auto_awesome_outlined,
+                                ),
+                                title: Text(context.tr('AI 기능')),
+                                subtitle: _SettingsDescription(
+                                  context.tr('개발 중입니다.'),
+                                ),
+                              ),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                secondary: const _SettingsLeadingIcon(
+                                  Icons.psychology_outlined,
+                                ),
+                                value: settings.aiEnabled,
+                                title: Text(context.tr('Gemini 사용')),
+                                onChanged: (_) {},
+                              ),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                secondary: const _SettingsLeadingIcon(
+                                  Icons.shield_outlined,
+                                ),
+                                value: settings.blockSensitiveAi,
+                                title: Text(context.tr('민감 문장 AI 차단')),
+                                onChanged: (_) {},
+                              ),
+                              TextField(
+                                controller: _apiKeyController,
+                                obscureText: true,
+                                decoration: InputDecoration(
+                                  prefixIcon: const Icon(Icons.key_outlined),
+                                  labelText: context.tr('Gemini API 키'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                if (widget._destination == _SettingsDestination.account)
+                  _SettingsSection(
+                    title: context.tr('계정'),
+                    children: [
+                      _DailyAccountStatus(account: account),
+                      const Divider(height: 1),
+                      if (appleSignInService.isSupportedPlatform) ...[
+                        _AppleSignInSettings(
+                          account: appleAccount,
+                          busy: _appleBusy,
+                          message: _appleMessage,
+                          onSignIn: _connectApple,
+                          onDisconnect: _disconnectApple,
+                        ),
+                        const Divider(height: 1),
+                      ],
+                      _SyncStatusTile(
+                        notifier: ref
+                            .watch(googleDriveSyncServiceProvider)
+                            .statusNotifier,
+                      ),
+                      const Divider(height: 1),
+                      _GoogleDriveSyncSettings(
+                        email: account?.googleAccount?.email,
+                        sessionConnected: _googleDriveAccount != null,
+                        busy: _syncBusy,
+                        message: _syncMessage,
+                        onConnect: _connectGoogleDrive,
+                        onBackup: _backupGoogleDriveNow,
+                        onRestore: _restoreGoogleDriveNow,
+                        canCancelConnection: _canCancelGoogleDriveConnection,
+                        onCancelConnection: _cancelGoogleDriveSignIn,
+                        onDisconnect: _disconnectGoogle,
+                        hasDailyAccount: hasAccountConnection,
+                        onDeleteDailyAccount: _deleteAccount,
+                      ),
+                      if (hasAccountConnection) ...[
+                        const SizedBox(height: 8),
+                        _AccountLogoutButton(
+                          busy: accountBusy,
+                          onPressed: _logoutAccount,
+                        ),
+                      ],
+                    ],
+                  ),
+                if (widget._destination == _SettingsDestination.about)
+                  _SettingsSection(
+                    title: context.tr('앱 정보'),
+                    children: [
+                      _AppVersionTile(
+                        versionInfo: _appVersionInfo,
+                        onDoubleTap: _openGithubRepository,
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const _SettingsLeadingIcon(
+                          Icons.bug_report_outlined,
+                        ),
+                        title: Text(context.tr('버그 제보')),
+                        subtitle: _SettingsDescription(
+                          context.tr(
+                            'Google 로그인 사용자만 GitHub 이슈를 자동 등록할 수 있습니다.',
+                          ),
+                        ),
+                        trailing: _bugReportBusy
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.chevron_right),
+                        onTap: _bugReportBusy ? null : _reportBug,
+                      ),
+                    ],
+                  ),
               ],
             ),
-          if (widget._destination == _SettingsDestination.account)
-            _SettingsSection(
-              title: context.tr('계정'),
-              children: [
-                _DailyAccountStatus(account: account),
-                const Divider(height: 1),
-                if (appleSignInService.isSupportedPlatform) ...[
-                  _AppleSignInSettings(
-                    account: appleAccount,
-                    busy: _appleBusy,
-                    message: _appleMessage,
-                    onSignIn: _connectApple,
-                    onDisconnect: _disconnectApple,
-                  ),
-                  const Divider(height: 1),
-                ],
-                _SyncStatusTile(
-                  notifier: ref
-                      .watch(googleDriveSyncServiceProvider)
-                      .statusNotifier,
-                ),
-                const Divider(height: 1),
-                _GoogleDriveSyncSettings(
-                  email: account?.googleAccount?.email,
-                  sessionConnected: _googleDriveAccount != null,
-                  busy: _syncBusy,
-                  message: _syncMessage,
-                  onConnect: _connectGoogleDrive,
-                  onBackup: _backupGoogleDriveNow,
-                  onRestore: _restoreGoogleDriveNow,
-                  canCancelConnection: _canCancelGoogleDriveConnection,
-                  onCancelConnection: _cancelGoogleDriveSignIn,
-                  onDisconnect: _disconnectGoogle,
-                  hasDailyAccount: hasAccountConnection,
-                  onDeleteDailyAccount: _deleteAccount,
-                ),
-                if (hasAccountConnection) ...[
-                  const SizedBox(height: 8),
-                  _AccountLogoutButton(
-                    busy: accountBusy,
-                    onPressed: _logoutAccount,
-                  ),
-                ],
-              ],
-            ),
-          if (widget._destination == null)
-            _SettingsSection(
-              title: context.tr('앱 정보'),
-              children: [
-                _AppVersionTile(
-                  versionInfo: _appVersionInfo,
-                  onDoubleTap: _openGithubRepository,
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const _SettingsLeadingIcon(
-                    Icons.bug_report_outlined,
-                  ),
-                  title: Text(context.tr('버그 제보')),
-                  subtitle: _SettingsDescription(
-                    context.tr('Google 로그인 사용자만 GitHub 이슈를 자동 등록할 수 있습니다.'),
-                  ),
-                  trailing: _bugReportBusy
-                      ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_right),
-                  onTap: _bugReportBusy ? null : _reportBug,
-                ),
-              ],
-            ),
-        ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openDestination(_SettingsDestination destination) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsPage._destination(destination: destination),
       ),
     );
   }
 
   Future<void> _showSiriShortcutSetup() async {
-    var opened = false;
-    try {
-      opened = await launchUrl(
-        Uri.parse(_signalShortcutShareUrl),
-        mode: LaunchMode.externalApplication,
-      );
-    } on Object {
-      opened = false;
-    }
+    final opened = await SiriShortcutInstaller.openSignalInstaller();
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('시그널 단축어 추가 화면을 열 수 없습니다.'))),
@@ -1463,35 +1601,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _testNotification() async {
-    setState(() {
-      _notificationBusy = true;
-      _notificationMessage = context.tr('알림 상태 확인 중입니다.');
-    });
-    try {
-      final notificationService = ref.read(notificationServiceProvider);
-      await notificationService.showTestNotification();
-      final summary = await notificationService.permissionSummary();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _notificationMessage = context.tr(
-          '테스트 알림을 보냈습니다. {summary}',
-          args: {'summary': summary},
-        );
-      });
-    } on Object catch (error) {
-      if (mounted) {
-        setState(() => _notificationMessage = '$error');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _notificationBusy = false);
-      }
-    }
-  }
-
   Future<void> _openNotificationSettings() async {
     final urls = switch (defaultTargetPlatform) {
       TargetPlatform.iOS => [Uri.parse('app-settings:')],
@@ -1508,11 +1617,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     };
 
     if (urls.isEmpty) {
-      setState(() {
-        _notificationMessage = context.tr(
-          'Android에서는 시스템 설정 > 앱 > Daily > 알림에서 허용을 켜세요.',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.tr('Android에서는 시스템 설정 > 앱 > Daily > 알림에서 허용을 켜세요.'),
+            ),
+          ),
         );
-      });
+      }
       return;
     }
 
@@ -1523,11 +1636,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
 
     if (mounted) {
-      setState(() {
-        _notificationMessage = context.tr(
-          '시스템 알림 설정을 열 수 없습니다. OS 설정에서 Daily 알림을 허용하세요.',
-        );
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr('시스템 알림 설정을 열 수 없습니다. OS 설정에서 Daily 알림을 허용하세요.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -2466,26 +2581,41 @@ class _SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Material(
-        color: colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: colorScheme.outlineVariant),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              ...children,
-            ],
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 7),
+            child: Text(
+              title,
+              style: TextStyle(
+                color: DailyUi.secondaryText(context),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0,
+              ),
+            ),
           ),
-        ),
+          Material(
+            color: DailyUi.groupedSurface(context),
+            shape: RoundedRectangleBorder(
+              side: BorderSide(
+                color: DailyUi.separator(context).withValues(alpha: 0.78),
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2498,7 +2628,25 @@ class _SettingsLeadingIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ExcludeSemantics(child: Icon(icon, size: 22));
+    final color = switch (icon) {
+      Icons.notifications_outlined ||
+      Icons.wb_sunny_outlined ||
+      Icons.alarm_outlined ||
+      Icons.bug_report_outlined => DailyUi.warning,
+      Icons.add_link_outlined ||
+      Icons.record_voice_over_outlined ||
+      Icons.auto_awesome_outlined ||
+      Icons.psychology_outlined => DailyUi.purple,
+      Icons.language_outlined ||
+      Icons.privacy_tip_outlined ||
+      Icons.insights_outlined ||
+      Icons.shield_outlined ||
+      Icons.fingerprint => DailyUi.success,
+      _ => DailyUi.primary,
+    };
+    return ExcludeSemantics(
+      child: DailySettingsIcon(icon: icon, color: color),
+    );
   }
 }
 
@@ -2520,10 +2668,9 @@ class _SettingsRowLeading extends StatelessWidget {
 }
 
 class _SettingsDescription extends StatelessWidget {
-  const _SettingsDescription(this.text, {this.style});
+  const _SettingsDescription(this.text);
 
   final String text;
-  final TextStyle? style;
 
   @override
   Widget build(BuildContext context) {
@@ -2534,12 +2681,9 @@ class _SettingsDescription extends StatelessWidget {
         if (platform != TargetPlatform.iOS ||
             !maxWidth.isFinite ||
             maxWidth <= 0) {
-          return Text(text, style: style, softWrap: true);
+          return Text(text, softWrap: true);
         }
-        final defaultStyle = DefaultTextStyle.of(context).style;
-        final effectiveStyle = style == null
-            ? defaultStyle
-            : defaultStyle.merge(style);
+        final effectiveStyle = DefaultTextStyle.of(context).style;
         final textScaler = MediaQuery.textScalerOf(context);
         final textDirection = Directionality.of(context);
         final locale = Localizations.maybeLocaleOf(context);
@@ -2553,7 +2697,6 @@ class _SettingsDescription extends StatelessWidget {
         );
         return Text(
           wrapped,
-          style: style,
           softWrap: true,
           maxLines: null,
           semanticsLabel: text,
@@ -2643,7 +2786,33 @@ class _BugReportDialogState extends State<_BugReportDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(context.tr('버그 제보')),
+      backgroundColor: DailyUi.pageBackground(context),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: DailyUi.isDesktop ? 40 : 14,
+        vertical: DailyUi.isDesktop ? 32 : 18,
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+      contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+      title: Row(
+        children: [
+          const DailySettingsIcon(
+            icon: Icons.bug_report_outlined,
+            color: DailyUi.warning,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            context.tr('버그 제보'),
+            style: const TextStyle(
+              fontSize: 21,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0,
+            ),
+          ),
+        ],
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: SingleChildScrollView(
@@ -2653,19 +2822,20 @@ class _BugReportDialogState extends State<_BugReportDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  context.tr(
+                DailyInfoCallout(
+                  icon: Icons.lock_outline_rounded,
+                  title: context.tr('연락처 보호'),
+                  text: context.tr(
                     'Google 계정 이메일 {email}을 제보 연락처로 수집합니다. 이메일은 공개 GitHub 이슈에 표시되지 않고 Daily 서버에 비공개로 저장됩니다.',
                     args: {'email': widget.email},
                   ),
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  context.tr('작성한 제보 내용은 공개 GitHub 이슈로 등록됩니다. 개인정보를 입력하지 마세요.'),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                    fontWeight: FontWeight.w600,
+                DailyInfoCallout(
+                  icon: Icons.public_outlined,
+                  color: DailyUi.warning,
+                  text: context.tr(
+                    '작성한 제보 내용은 공개 GitHub 이슈로 등록됩니다. 개인정보를 입력하지 마세요.',
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -2673,6 +2843,7 @@ class _BugReportDialogState extends State<_BugReportDialog> {
                   key: const ValueKey('bug-report-title'),
                   controller: _titleController,
                   label: context.tr('제목'),
+                  icon: Icons.title_rounded,
                   maxLength: 120,
                   autofocus: true,
                 ),
@@ -2681,6 +2852,7 @@ class _BugReportDialogState extends State<_BugReportDialog> {
                   key: const ValueKey('bug-report-description'),
                   controller: _descriptionController,
                   label: context.tr('문제 설명'),
+                  icon: Icons.description_outlined,
                   maxLength: 4000,
                   minLines: 3,
                   maxLines: 6,
@@ -2690,6 +2862,7 @@ class _BugReportDialogState extends State<_BugReportDialog> {
                   key: const ValueKey('bug-report-reproduction'),
                   controller: _reproductionController,
                   label: context.tr('재현 방법'),
+                  icon: Icons.format_list_numbered_rounded,
                   maxLength: 4000,
                   minLines: 3,
                   maxLines: 6,
@@ -2699,6 +2872,7 @@ class _BugReportDialogState extends State<_BugReportDialog> {
                   key: const ValueKey('bug-report-expected'),
                   controller: _expectedController,
                   label: context.tr('예상 동작'),
+                  icon: Icons.check_circle_outline_rounded,
                   maxLength: 2000,
                   minLines: 2,
                   maxLines: 4,
@@ -2708,6 +2882,7 @@ class _BugReportDialogState extends State<_BugReportDialog> {
                   key: const ValueKey('bug-report-actual'),
                   controller: _actualController,
                   label: context.tr('실제 동작'),
+                  icon: Icons.error_outline_rounded,
                   maxLength: 2000,
                   minLines: 2,
                   maxLines: 4,
@@ -2718,8 +2893,14 @@ class _BugReportDialogState extends State<_BugReportDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        OutlinedButton(
           onPressed: () => Navigator.of(context).pop(),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(88, 44),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
           child: Text(context.tr('취소')),
         ),
         FilledButton.icon(
@@ -2727,6 +2908,14 @@ class _BugReportDialogState extends State<_BugReportDialog> {
           onPressed: _submit,
           icon: const Icon(Icons.send_outlined),
           label: Text(context.tr('GitHub 이슈 등록')),
+          style: FilledButton.styleFrom(
+            backgroundColor: DailyUi.primary,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(150, 44),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
         ),
       ],
     );
@@ -2736,6 +2925,7 @@ class _BugReportDialogState extends State<_BugReportDialog> {
     required Key key,
     required TextEditingController controller,
     required String label,
+    required IconData icon,
     required int maxLength,
     int minLines = 1,
     int maxLines = 1,
@@ -2753,7 +2943,20 @@ class _BugReportDialogState extends State<_BugReportDialog> {
           : TextInputAction.newline,
       decoration: InputDecoration(
         labelText: label,
-        border: const OutlineInputBorder(),
+        prefixIcon: Icon(icon),
+        fillColor: DailyUi.groupedSurface(context),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: DailyUi.separator(context)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: DailyUi.separator(context)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: DailyUi.primary, width: 1.5),
+        ),
       ),
       validator: (value) => value == null || value.trim().isEmpty
           ? context.tr('필수 입력 항목입니다.')
@@ -3070,79 +3273,6 @@ class _DdayOffsetsTile extends StatelessWidget {
   }
 }
 
-class _NotificationTestTile extends StatelessWidget {
-  const _NotificationTestTile({
-    required this.message,
-    required this.busy,
-    required this.onPressed,
-  });
-
-  final String message;
-  final bool busy;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final subtitle = message.isEmpty
-        ? context.tr('즉시 알림을 보내고 예약 상태를 확인합니다.')
-        : message;
-    final button = FilledButton(
-      onPressed: busy ? null : onPressed,
-      child: busy
-          ? const SizedBox.square(
-              dimension: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Text(context.tr('보내기')),
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth >= 520) {
-          return ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const _SettingsLeadingIcon(
-              Icons.notifications_active_outlined,
-            ),
-            title: Text(context.tr('알림 테스트')),
-            subtitle: _SettingsDescription(subtitle),
-            trailing: button,
-          );
-        }
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _SettingsRowLeading(Icons.notifications_active_outlined),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      context.tr('알림 테스트'),
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 2),
-                    _SettingsDescription(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Align(alignment: Alignment.centerRight, child: button),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
     super.key,
@@ -3289,41 +3419,35 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
           key: const ValueKey('google-drive-backup-restore-row'),
           children: [
             Expanded(
-              child: FilledButton.icon(
+              child: _SettingsActionButton(
+                key: const ValueKey('google-drive-primary-action'),
                 onPressed: busy
                     ? null
                     : (sessionConnected ? onBackup : onConnect),
-                icon: busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        sessionConnected
-                            ? Icons.cloud_upload_outlined
-                            : Icons.cloud_outlined,
-                      ),
-                label: Text(
-                  context.tr(
-                    connecting
-                        ? 'Google 연결 중'
-                        : sessionConnected
-                        ? '백업'
-                        : linked
-                        ? 'Google 다시 연결'
-                        : 'Google로 계속',
-                  ),
+                icon: sessionConnected
+                    ? Icons.cloud_upload_outlined
+                    : Icons.cloud_outlined,
+                label: context.tr(
+                  connecting
+                      ? 'Google 연결 중'
+                      : sessionConnected
+                      ? '백업'
+                      : linked
+                      ? 'Google 다시 연결'
+                      : 'Google로 계속',
                 ),
+                busy: busy,
+                filled: true,
               ),
             ),
             if (sessionConnected) ...[
               const SizedBox(width: 8),
               Expanded(
-                child: OutlinedButton.icon(
+                child: _SettingsActionButton(
+                  key: const ValueKey('google-drive-restore-action'),
                   onPressed: busy ? null : onRestore,
-                  icon: const Icon(Icons.cloud_download_outlined),
-                  label: Text(context.tr('복원')),
+                  icon: Icons.cloud_download_outlined,
+                  label: context.tr('복원'),
                 ),
               ),
             ],
@@ -3331,30 +3455,25 @@ class _GoogleDriveSyncSettings extends StatelessWidget {
         ),
         if (canCancelConnection) ...[
           const SizedBox(height: 8),
-          OutlinedButton.icon(
+          _SettingsActionButton(
             onPressed: onCancelConnection,
-            icon: const Icon(Icons.close),
-            label: Text(context.tr('연결 취소')),
+            icon: Icons.close_rounded,
+            label: context.tr('연결 취소'),
           ),
         ],
         const SizedBox(height: 8),
         if (linked)
-          OutlinedButton.icon(
+          _SettingsActionButton(
             onPressed: busy ? null : onDisconnect,
-            icon: const Icon(Icons.link_off_outlined),
-            label: Text(context.tr('Google 연동 해지')),
+            icon: Icons.link_off_outlined,
+            label: context.tr('Google 연동 해지'),
           ),
         if (linked) const SizedBox(height: 8),
-        OutlinedButton.icon(
+        _SettingsActionButton(
           onPressed: busy ? null : onDeleteDailyAccount,
-          icon: const Icon(Icons.person_remove_outlined),
-          label: Text(
-            context.tr(hasDailyAccount ? 'Daily 계정 탈퇴' : '로컬 데이터 초기화'),
-          ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.red,
-            side: const BorderSide(color: Colors.red),
-          ),
+          icon: Icons.person_remove_outlined,
+          label: context.tr(hasDailyAccount ? 'Daily 계정 탈퇴' : '로컬 데이터 초기화'),
+          destructive: true,
         ),
         if (message.isNotEmpty) ...[
           const SizedBox(height: 10),
@@ -3409,30 +3528,25 @@ class _AppleSignInSettings extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: FilledButton.icon(
+                child: _SettingsActionButton(
+                  key: const ValueKey('apple-sign-in-action'),
                   onPressed: busy ? null : onSignIn,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: busy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.apple),
-                  label: Text(context.tr('Apple로 계속')),
+                  icon: Icons.apple,
+                  label: context.tr('Apple로 계속'),
+                  busy: busy,
+                  filled: true,
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
                 ),
               ),
             ],
           ),
         if (connected) ...[
           const SizedBox(height: 8),
-          OutlinedButton.icon(
+          _SettingsActionButton(
             onPressed: busy ? null : onDisconnect,
-            icon: const Icon(Icons.link_off_outlined),
-            label: Text(context.tr('Apple 연동 해지')),
+            icon: Icons.link_off_outlined,
+            label: context.tr('Apple 연동 해지'),
           ),
         ],
         if (message.isNotEmpty) ...[
@@ -3482,16 +3596,120 @@ class _AccountLogoutButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
+    return _SettingsActionButton(
       onPressed: busy ? null : onPressed,
-      icon: busy
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+      icon: Icons.logout_rounded,
+      label: context.tr('로그아웃'),
+      busy: busy,
+    );
+  }
+}
+
+class _SettingsActionButton extends StatelessWidget {
+  const _SettingsActionButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    super.key,
+    this.busy = false,
+    this.filled = false,
+    this.destructive = false,
+    this.backgroundColor,
+    this.foregroundColor,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool busy;
+  final bool filled;
+  final bool destructive;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveForeground =
+        foregroundColor ??
+        (destructive
+            ? DailyUi.destructive
+            : filled
+            ? Colors.white
+            : DailyUi.primary);
+    final effectiveBackground =
+        backgroundColor ?? (filled ? DailyUi.primary : Colors.transparent);
+    final buttonIcon = busy
+        ? SizedBox.square(
+            dimension: 17,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: effectiveForeground,
+            ),
+          )
+        : Icon(icon, size: 19);
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+    );
+    final padding = const EdgeInsets.symmetric(horizontal: 14);
+
+    return SizedBox(
+      height: 48,
+      child: filled
+          ? FilledButton.icon(
+              onPressed: busy ? null : onPressed,
+              icon: buttonIcon,
+              label: _SettingsActionLabel(label),
+              style: FilledButton.styleFrom(
+                backgroundColor: effectiveBackground,
+                foregroundColor: effectiveForeground,
+                disabledBackgroundColor: effectiveBackground.withValues(
+                  alpha: 0.46,
+                ),
+                disabledForegroundColor: effectiveForeground.withValues(
+                  alpha: 0.7,
+                ),
+                padding: padding,
+                shape: shape,
+              ),
             )
-          : const Icon(Icons.logout),
-      label: Text(context.tr('로그아웃')),
+          : OutlinedButton.icon(
+              onPressed: busy ? null : onPressed,
+              icon: buttonIcon,
+              label: _SettingsActionLabel(label),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: effectiveForeground,
+                disabledForegroundColor: effectiveForeground.withValues(
+                  alpha: 0.42,
+                ),
+                padding: padding,
+                side: BorderSide(
+                  color: destructive
+                      ? DailyUi.destructive.withValues(alpha: 0.72)
+                      : DailyUi.separator(context),
+                ),
+                shape: shape,
+              ),
+            ),
+    );
+  }
+}
+
+class _SettingsActionLabel extends StatelessWidget {
+  const _SettingsActionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0,
+      ),
     );
   }
 }
@@ -3581,6 +3799,29 @@ Future<bool?> _showPinVerificationDialog({
   );
 }
 
+Widget _settingsDialogTitle(
+  String title,
+  IconData icon, {
+  Color color = DailyUi.primary,
+}) {
+  return Row(
+    children: [
+      DailySettingsIcon(icon: icon, color: color),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 class _CategoryDialog extends StatefulWidget {
   const _CategoryDialog({required this.initialCategory});
 
@@ -3619,7 +3860,14 @@ class _CategoryDialogState extends State<_CategoryDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_editing ? '분류 수정' : '분류 추가'),
+      backgroundColor: DailyUi.pageBackground(context),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: _settingsDialogTitle(
+        context.tr(_editing ? '분류 수정' : '분류 추가'),
+        _editing ? Icons.edit_outlined : Icons.add_rounded,
+        color: DailyUi.purple,
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -3629,7 +3877,13 @@ class _CategoryDialogState extends State<_CategoryDialog> {
               controller: _controller,
               autofocus: widget.initialCategory?.locked != true,
               enabled: widget.initialCategory?.locked != true,
-              decoration: InputDecoration(labelText: context.tr('이름')),
+              decoration: InputDecoration(
+                labelText: context.tr('이름'),
+                prefixIcon: const Icon(Icons.label_outline_rounded),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
             const SizedBox(height: 14),
             Text(
@@ -3725,7 +3979,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        OutlinedButton(
           onPressed: () {
             FocusManager.instance.primaryFocus?.unfocus();
             Navigator.of(context).pop();
@@ -3751,7 +4005,11 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                   );
             Navigator.of(context).pop(nextCategory);
           },
-          child: Text(_editing ? '저장' : '추가'),
+          style: FilledButton.styleFrom(
+            backgroundColor: DailyUi.primary,
+            foregroundColor: Colors.white,
+          ),
+          child: Text(context.tr(_editing ? '저장' : '추가')),
         ),
       ],
     );
@@ -3803,7 +4061,14 @@ class _RgbColorDialogState extends State<_RgbColorDialog> {
     final pickerWidth = (screenSize.width - 128).clamp(200.0, 360.0);
     final maxContentHeight = screenSize.height * 0.62;
     return AlertDialog(
-      title: Text(context.tr('사용자 지정 색상')),
+      backgroundColor: DailyUi.pageBackground(context),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: _settingsDialogTitle(
+        context.tr('사용자 지정 색상'),
+        Icons.palette_outlined,
+        color: DailyUi.purple,
+      ),
       content: SizedBox(
         width: pickerWidth,
         height: maxContentHeight,
@@ -3820,12 +4085,16 @@ class _RgbColorDialogState extends State<_RgbColorDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        OutlinedButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(context.tr('취소')),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_colorValue),
+          style: FilledButton.styleFrom(
+            backgroundColor: DailyUi.primary,
+            foregroundColor: Colors.white,
+          ),
           child: Text(context.tr('적용')),
         ),
       ],
@@ -3841,7 +4110,7 @@ class _RgbColorDialogState extends State<_RgbColorDialog> {
       onPanStart: (details) => _setPaletteColor(details.localPosition, size),
       onPanUpdate: (details) => _setPaletteColor(details.localPosition, size),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(14),
         child: SizedBox(
           width: size.width,
           height: size.height,
@@ -4020,17 +4289,28 @@ class _NumberDialogState extends State<_NumberDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.title),
+      backgroundColor: DailyUi.pageBackground(context),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: _settingsDialogTitle(
+        widget.title,
+        Icons.numbers_rounded,
+        color: DailyUi.success,
+      ),
       content: SingleChildScrollView(
         child: TextField(
           controller: _controller,
           autofocus: true,
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(labelText: widget.label),
+          decoration: InputDecoration(
+            labelText: widget.label,
+            prefixIcon: const Icon(Icons.pin_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         ),
       ),
       actions: [
-        TextButton(
+        OutlinedButton(
           onPressed: () {
             FocusManager.instance.primaryFocus?.unfocus();
             Navigator.of(context).pop();
@@ -4043,6 +4323,10 @@ class _NumberDialogState extends State<_NumberDialog> {
             FocusManager.instance.primaryFocus?.unfocus();
             Navigator.of(context).pop(value);
           },
+          style: FilledButton.styleFrom(
+            backgroundColor: DailyUi.primary,
+            foregroundColor: Colors.white,
+          ),
           child: Text(context.tr('적용')),
         ),
       ],
@@ -4109,7 +4393,14 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.title),
+      backgroundColor: DailyUi.pageBackground(context),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: _settingsDialogTitle(
+        widget.title,
+        Icons.lock_outline_rounded,
+        color: DailyUi.success,
+      ),
       content: SizedBox(
         width: 300,
         child: Column(
@@ -4134,13 +4425,17 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        OutlinedButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(context.tr('취소')),
         ),
         FilledButton(
           onPressed: _continue,
-          child: Text(_confirming ? '설정' : '다음'),
+          style: FilledButton.styleFrom(
+            backgroundColor: DailyUi.primary,
+            foregroundColor: Colors.white,
+          ),
+          child: Text(context.tr(_confirming ? '설정' : '다음')),
         ),
       ],
     );
@@ -4227,7 +4522,14 @@ class _PinVerificationDialogState extends State<_PinVerificationDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(context.tr('PIN 확인')),
+      backgroundColor: DailyUi.pageBackground(context),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: _settingsDialogTitle(
+        context.tr('PIN 확인'),
+        Icons.lock_open_rounded,
+        color: DailyUi.success,
+      ),
       content: SizedBox(
         width: 300,
         child: Column(
@@ -4256,7 +4558,7 @@ class _PinVerificationDialogState extends State<_PinVerificationDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        OutlinedButton(
           onPressed: _checking ? null : () => Navigator.of(context).pop(false),
           child: Text(context.tr('취소')),
         ),

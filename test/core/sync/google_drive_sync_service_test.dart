@@ -2480,9 +2480,6 @@ class _FakeNotificationService implements NotificationService {
     required int hour,
     required int minute,
   }) async {}
-
-  @override
-  Future<void> showTestNotification() async {}
 }
 
 class _MemoryEventRepository implements EventRepository {
@@ -2612,6 +2609,13 @@ class _MemoryEventRepository implements EventRepository {
   @override
   Future<void> save(CalendarEvent event) async {
     _events[event.id] = event.normalizeAllDayBounds();
+  }
+
+  @override
+  Future<void> saveAllAtomically(Iterable<CalendarEvent> events) async {
+    for (final event in events) {
+      _events[event.id] = event.normalizeAllDayBounds();
+    }
   }
 
   @override

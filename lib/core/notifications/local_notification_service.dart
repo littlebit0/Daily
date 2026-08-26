@@ -26,7 +26,6 @@ class LocalNotificationService implements NotificationService {
 
   static const _briefingId = 800000;
   static const _briefingScheduleDays = 14;
-  static const _testNotificationIdSeed = 800001;
   static const _androidChannelId = 'daily_reminders';
   static const _androidChannelName = 'Daily reminders';
   static const _androidChannelDescription =
@@ -238,18 +237,6 @@ class LocalNotificationService implements NotificationService {
         _morningBriefingNotificationId(dayOffset),
       );
     }
-  }
-
-  @override
-  Future<void> showTestNotification() async {
-    await initialize();
-    final l10n = _localizations(_settingsRepository.load());
-    await _showNotification(
-      id: _testNotificationId(),
-      title: l10n.text('Daily 알림 테스트'),
-      body: l10n.text('이 알림이 보이면 Daily의 알림 표시 권한은 정상입니다.'),
-      payload: 'notification_test',
-    );
   }
 
   Future<String> _morningBriefingBody(DateTime briefingDate) async {
@@ -571,11 +558,6 @@ class LocalNotificationService implements NotificationService {
 
   int _eventNotificationId(String eventId, int reminderMinutes) {
     return _notificationId('$eventId:reminder:$reminderMinutes', 1000);
-  }
-
-  int _testNotificationId() {
-    return _testNotificationIdSeed +
-        DateTime.now().millisecondsSinceEpoch.remainder(1000000);
   }
 
   int _morningBriefingNotificationId(int dayOffset) {

@@ -43,6 +43,8 @@ abstract interface class EventRepository {
 
   Future<void> save(CalendarEvent event);
 
+  Future<void> saveAllAtomically(Iterable<CalendarEvent> events);
+
   Future<void> markSynced(String eventId);
 
   Future<void> delete(String eventId);

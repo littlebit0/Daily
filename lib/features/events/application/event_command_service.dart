@@ -12,6 +12,7 @@ import '../domain/calendar_event.dart';
 import '../domain/event_draft.dart';
 import '../domain/event_category.dart';
 import '../domain/event_repository.dart';
+import '../domain/recurrence_rule.dart';
 
 class EventCommandService {
   EventCommandService({
@@ -101,6 +102,23 @@ class EventCommandService {
     final stopwatch = Stopwatch()..start();
     try {
       final source = await _repository.findById(event.id) ?? event;
+      if (event.occurrenceId != null && source.recurrence.isRepeating) {
+        if (event.completed == completed) {
+          return;
+        }
+        await _setRecurringOccurrenceCompleted(
+          source: source,
+          occurrence: event,
+          completed: completed,
+        );
+        _recordMutation(
+          completed
+              ? AnalyticsOperation.complete
+              : AnalyticsOperation.uncomplete,
+          stopwatch,
+        );
+        return;
+      }
       if (source.completed == completed) {
         return;
       }
@@ -134,6 +152,60 @@ class EventCommandService {
       completed ? AnalyticsOperation.complete : AnalyticsOperation.uncomplete,
       stopwatch,
     );
+  }
+
+  Future<void> _setRecurringOccurrenceCompleted({
+    required CalendarEvent source,
+    required CalendarEvent occurrence,
+    required bool completed,
+  }) async {
+    final now = _clock.now();
+    final occurrenceDay = DateTime(
+      occurrence.startAt.year,
+      occurrence.startAt.month,
+      occurrence.startAt.day,
+    );
+    final excludedDates = {
+      ...source.recurrence.excludedDates.map(
+        (date) => DateTime(date.year, date.month, date.day),
+      ),
+      occurrenceDay,
+    }.toList()..sort();
+    final updatedSeries = source.copyWith(
+      recurrence: source.recurrence.copyWith(excludedDates: excludedDates),
+      updatedAt: now,
+      syncStatus: 'pending',
+    );
+    final detachedOccurrence = occurrence
+        .copyWith(
+          id: _uuid.v4(),
+          clearOccurrenceId: true,
+          recurrence: const RecurrenceRule(),
+          completed: completed,
+          createdAt: now,
+          updatedAt: now,
+          syncStatus: 'pending',
+          clearDeletedAt: true,
+        )
+        .normalizeAllDayBounds();
+
+    await _repository.saveAllAtomically([updatedSeries, detachedOccurrence]);
+
+    await _notificationService.cancelEventReminder(
+      updatedSeries.id,
+      reminderMinutesBeforeList: updatedSeries.reminderMinutesBeforeList,
+    );
+    await _notificationService.scheduleEventReminder(updatedSeries);
+    await _alarmService.cancelEventAlarm(updatedSeries.id);
+    await _alarmService.scheduleEventAlarm(updatedSeries);
+    if (!completed) {
+      await _notificationService.scheduleEventReminder(detachedOccurrence);
+      await _alarmService.scheduleEventAlarm(detachedOccurrence);
+    }
+    await _syncService.queueEventUpsert(updatedSeries);
+    await _syncService.queueEventUpsert(detachedOccurrence);
+    await _rescheduleMorningBriefingIfNeeded();
+    await _refreshWidgets();
   }
 
   Future<Set<String>> importBatch(Iterable<CalendarEvent> events) async {

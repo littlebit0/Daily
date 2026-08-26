@@ -14,6 +14,7 @@ import '../core/security/app_lock_privacy_service.dart';
 import '../core/settings/app_settings.dart';
 import '../core/localization/app_localizations.dart';
 import '../features/calendar/presentation/month_calendar_page.dart';
+import '../features/onboarding/presentation/analytics_consent_page.dart';
 import '../features/onboarding/presentation/welcome_page.dart';
 import 'daily_theme.dart';
 
@@ -23,6 +24,7 @@ class DailyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
+    final analytics = ref.watch(productAnalyticsProvider);
     unawaited(
       AppLockPrivacyService().setEnabled(
         settings.appLockEnabled,
@@ -30,71 +32,77 @@ class DailyApp extends ConsumerWidget {
       ),
     );
 
-    return MaterialApp(
-      key: ValueKey(
-        settings.onboardingCompleted ? 'daily-home' : 'daily-onboarding',
-      ),
-      title: defaultTargetPlatform == TargetPlatform.windows
-          ? 'DailyCalendar'
-          : 'Daily',
-      debugShowCheckedModeBanner: false,
-      locale: localeForLanguage(settings.language),
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ],
-      localeResolutionCallback: (locale, supportedLocales) {
-        if (locale == null) return const Locale('en');
-        if (locale.languageCode == 'zh') {
-          return const Locale.fromSubtags(
-            languageCode: 'zh',
-            scriptCode: 'Hant',
+    return ValueListenableBuilder<bool>(
+      valueListenable: analytics.consentPromptCompletedListenable,
+      builder: (context, consentPromptCompleted, child) => MaterialApp(
+        key: ValueKey(
+          '${settings.onboardingCompleted ? 'daily-home' : 'daily-onboarding'}-'
+          '${consentPromptCompleted ? 'consent-complete' : 'consent-pending'}',
+        ),
+        title: defaultTargetPlatform == TargetPlatform.windows
+            ? 'DailyCalendar'
+            : 'Daily',
+        debugShowCheckedModeBanner: false,
+        locale: localeForLanguage(settings.language),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        localeResolutionCallback: (locale, supportedLocales) {
+          if (locale == null) return const Locale('en');
+          if (locale.languageCode == 'zh') {
+            return const Locale.fromSubtags(
+              languageCode: 'zh',
+              scriptCode: 'Hant',
+            );
+          }
+          return supportedLocales.firstWhere(
+            (supported) => supported.languageCode == locale.languageCode,
+            orElse: () => const Locale('en'),
           );
-        }
-        return supportedLocales.firstWhere(
-          (supported) => supported.languageCode == locale.languageCode,
-          orElse: () => const Locale('en'),
-        );
-      },
-      theme: DailyTheme.light(),
-      darkTheme: DailyTheme.dark(),
-      themeMode: switch (settings.themeMode) {
-        AppThemeMode.system => ThemeMode.system,
-        AppThemeMode.light => ThemeMode.light,
-        AppThemeMode.dark => ThemeMode.dark,
-      },
-      builder: (context, child) {
-        var content = child ?? const SizedBox.shrink();
-        if (settings.onboardingCompleted) {
-          content = _AppLockGate(
-            enabled: settings.appLockEnabled,
-            child: content,
-          );
-        }
-        final brightness = Theme.of(context).brightness;
-        return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: brightness == Brightness.dark
-              ? SystemUiOverlayStyle.light
-              : SystemUiOverlayStyle.dark,
-          child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.linear(
-                appTextScaleForPlatform(
-                  settings.appTextSize,
-                  defaultTargetPlatform,
+        },
+        theme: DailyTheme.light(),
+        darkTheme: DailyTheme.dark(),
+        themeMode: switch (settings.themeMode) {
+          AppThemeMode.system => ThemeMode.system,
+          AppThemeMode.light => ThemeMode.light,
+          AppThemeMode.dark => ThemeMode.dark,
+        },
+        builder: (context, child) {
+          var content = child ?? const SizedBox.shrink();
+          if (settings.onboardingCompleted) {
+            content = _AppLockGate(
+              enabled: settings.appLockEnabled,
+              child: content,
+            );
+          }
+          final brightness = Theme.of(context).brightness;
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: brightness == Brightness.dark
+                ? SystemUiOverlayStyle.light
+                : SystemUiOverlayStyle.dark,
+            child: MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(
+                  appTextScaleForPlatform(
+                    settings.appTextSize,
+                    defaultTargetPlatform,
+                  ),
                 ),
               ),
+              child: content,
             ),
-            child: content,
-          ),
-        );
-      },
-      home: settings.onboardingCompleted
-          ? const _AppHome()
-          : const WelcomePage(),
+          );
+        },
+        home: !settings.onboardingCompleted
+            ? const WelcomePage()
+            : consentPromptCompleted
+            ? const _AppHome()
+            : AnalyticsConsentPage(onCompleted: () {}),
+      ),
     );
   }
 }

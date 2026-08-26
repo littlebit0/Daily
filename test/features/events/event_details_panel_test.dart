@@ -275,6 +275,13 @@ class _SingleEventRepository implements EventRepository {
   }
 
   @override
+  Future<void> saveAllAtomically(Iterable<CalendarEvent> events) async {
+    for (final event in events) {
+      await save(event);
+    }
+  }
+
+  @override
   Future<List<CalendarEvent>> search(String query) async => [event];
 
   @override
@@ -321,9 +328,6 @@ class _NoopNotificationService implements NotificationService {
     required int hour,
     required int minute,
   }) async {}
-
-  @override
-  Future<void> showTestNotification() async {}
 }
 
 class _NoopSyncService implements SyncService {

@@ -7,6 +7,7 @@ import 'package:daily/features/events/application/event_command_service.dart';
 import 'package:daily/features/events/domain/calendar_event.dart';
 import 'package:daily/features/events/domain/event_category.dart';
 import 'package:daily/features/events/domain/event_repository.dart';
+import 'package:daily/features/events/domain/recurrence_rule.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -89,6 +90,80 @@ void main() {
         analytics.records.map((record) => record.attributes['operation']),
         ['complete', 'uncomplete'],
       );
+    },
+  );
+
+  test(
+    'Todo completion changes only the selected event with a shared title',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final first = _event(
+        'first',
+        EventCategory.basic,
+      ).copyWith(title: '같은 제목');
+      final second = _event(
+        'second',
+        EventCategory.basic,
+      ).copyWith(title: '같은 제목', startAt: DateTime(2026, 7, 30, 9));
+      final repository = _MultiCompletionRepository([first, second]);
+      final service = EventCommandService(
+        repository: repository,
+        settingsRepository: SettingsRepository(preferences: preferences),
+        notificationService: _CountingNotificationService(),
+        alarmService: _CountingAlarmService(),
+        syncService: _CountingSyncService(),
+      );
+
+      await service.setCompleted(first, true);
+
+      expect(repository.events['first']?.completed, isTrue);
+      expect(repository.events['second']?.completed, isFalse);
+    },
+  );
+
+  test(
+    'Todo completion detaches only the selected recurring occurrence',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final source = _event('series', EventCategory.basic).copyWith(
+        title: '반복 제목',
+        recurrence: const RecurrenceRule(
+          frequency: RecurrenceFrequency.daily,
+          count: 3,
+        ),
+      );
+      final occurrenceStart = source.startAt.add(const Duration(days: 1));
+      final occurrence = source.copyWith(
+        occurrenceId: 'series@${occurrenceStart.toIso8601String()}',
+        startAt: occurrenceStart,
+        endAt: occurrenceStart.add(const Duration(hours: 1)),
+      );
+      final repository = _MultiCompletionRepository([source]);
+      final sync = _CountingSyncService();
+      final service = EventCommandService(
+        repository: repository,
+        settingsRepository: SettingsRepository(preferences: preferences),
+        notificationService: _CountingNotificationService(),
+        alarmService: _CountingAlarmService(),
+        syncService: sync,
+      );
+
+      await service.setCompleted(occurrence, true);
+
+      final updatedSeries = repository.events['series']!;
+      final detached = repository.events.values.singleWhere(
+        (event) => event.id != 'series',
+      );
+      expect(updatedSeries.completed, isFalse);
+      expect(updatedSeries.recurrence.excludes(occurrenceStart), isTrue);
+      expect(detached.title, '반복 제목');
+      expect(detached.startAt, occurrenceStart);
+      expect(detached.completed, isTrue);
+      expect(detached.occurrenceId, isNull);
+      expect(detached.recurrence.isRepeating, isFalse);
+      expect(sync.upsertedIds, containsAll(<String>['series', detached.id]));
     },
   );
 
@@ -188,6 +263,9 @@ class _CategoryUpdateRepository implements EventRepository {
   Future<void> save(CalendarEvent event) async {}
 
   @override
+  Future<void> saveAllAtomically(Iterable<CalendarEvent> events) async {}
+
+  @override
   Future<List<CalendarEvent>> search(String query) async => const [];
 
   @override
@@ -234,9 +312,6 @@ class _CountingNotificationService implements NotificationService {
     required int hour,
     required int minute,
   }) async {}
-
-  @override
-  Future<void> showTestNotification() async {}
 }
 
 class _CountingAlarmService implements AlarmService {
@@ -273,6 +348,13 @@ class _CompletionRepository implements EventRepository {
 
   @override
   Future<void> save(CalendarEvent value) async => event = value;
+
+  @override
+  Future<void> saveAllAtomically(Iterable<CalendarEvent> events) async {
+    for (final value in events) {
+      event = value;
+    }
+  }
 
   @override
   Future<List<CalendarEvent>> allEventsForSync() async => [event];
@@ -319,6 +401,77 @@ class _CompletionRepository implements EventRepository {
     DateTime rangeStart,
     DateTime rangeEnd,
   ) => Stream.value([event]);
+}
+
+class _MultiCompletionRepository implements EventRepository {
+  _MultiCompletionRepository(Iterable<CalendarEvent> events)
+    : events = {for (final event in events) event.id: event};
+
+  final Map<String, CalendarEvent> events;
+
+  @override
+  Future<CalendarEvent?> findById(String id) async => events[id];
+
+  @override
+  Future<void> save(CalendarEvent event) async {
+    events[event.id] = event;
+  }
+
+  @override
+  Future<void> saveAllAtomically(Iterable<CalendarEvent> values) async {
+    for (final event in values) {
+      events[event.id] = event;
+    }
+  }
+
+  @override
+  Future<List<CalendarEvent>> allEventsForSync() async =>
+      events.values.toList();
+
+  @override
+  Future<void> clearAll() async => events.clear();
+
+  @override
+  Future<void> delete(String eventId) async => events.remove(eventId);
+
+  @override
+  Future<List<CalendarEvent>> eventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) async => events.values.toList();
+
+  @override
+  Future<void> hardDelete(String eventId) async => events.remove(eventId);
+
+  @override
+  Future<void> markSynced(String eventId) async {}
+
+  @override
+  Future<List<EventRestoreMutation>> mergeRestoredEventsAtomically(
+    Iterable<CalendarEvent> remoteEvents, {
+    required RestoredEventResolver resolve,
+  }) async => const [];
+
+  @override
+  Future<List<CalendarEvent>> pendingSyncEvents() async =>
+      events.values.toList();
+
+  @override
+  Future<List<CalendarEvent>> search(String query) async =>
+      events.values.toList();
+
+  @override
+  Future<List<CalendarEvent>> updateCategoryReferences({
+    required EventCategory previous,
+    required EventCategory updated,
+    required DateTime updatedAt,
+  }) async => const [];
+
+  @override
+  Stream<List<CalendarEvent>> watchEventsInRange(
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) => Stream.value(events.values.toList());
 }
 
 class _CountingSyncService implements SyncService {

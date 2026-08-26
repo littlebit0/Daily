@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:daily/app/daily_app.dart';
 import 'package:daily/app/daily_theme.dart';
+import 'package:daily/core/alarms/alarm_service.dart';
 import 'package:daily/core/auth/apple_sign_in_service.dart';
 import 'package:daily/core/auth/apple_account.dart';
 import 'package:daily/core/auth/google_account.dart';
@@ -33,11 +34,23 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> _openWelcomeStartPage(WidgetTester tester) async {
-  if (find.text('건너뛰기').evaluate().isEmpty) {
-    return;
+  for (var step = 0; step < 8; step += 1) {
+    if (find.text('로컬로 시작').evaluate().isNotEmpty) return;
+    final continueButton = find.text('계속');
+    if (continueButton.evaluate().isNotEmpty) {
+      await tester.tap(continueButton.first);
+      await tester.pumpAndSettle();
+      continue;
+    }
+    final laterButton = find.text('나중에');
+    if (laterButton.evaluate().isNotEmpty) {
+      await tester.tap(laterButton.first);
+      await tester.pumpAndSettle();
+      continue;
+    }
+    break;
   }
-  await tester.tap(find.text('건너뛰기'));
-  await tester.pumpAndSettle();
+  expect(find.text('로컬로 시작'), findsOneWidget);
 }
 
 void main() {
@@ -220,7 +233,7 @@ void main() {
         find.byKey(const ValueKey('schedule-all-day-toggle')).first,
       );
       await tester.pump();
-      expect(find.byIcon(Icons.event_busy_outlined), findsWidgets);
+      expect(find.byIcon(Icons.horizontal_rule_rounded), findsWidgets);
 
       await tester.drag(
         find.byKey(const ValueKey('schedule-timeline')).first,
@@ -763,7 +776,121 @@ void main() {
       driveSyncService.syncPendingChangesNowCalls,
       greaterThanOrEqualTo(1),
     );
-    expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.stars_rounded), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'onboarding requests notification permission only after consent',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final settingsRepository = SettingsRepository(preferences: preferences);
+      final notificationService = _FakeNotification();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsRepositoryProvider.overrideWithValue(settingsRepository),
+            notificationServiceProvider.overrideWithValue(notificationService),
+            alarmServiceProvider.overrideWithValue(
+              const UnsupportedAlarmService(),
+            ),
+            syncServiceProvider.overrideWithValue(_FakeSync()),
+            eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+            googleDriveAuthServiceProvider.overrideWithValue(
+              _FakeGoogleDriveAuthService(account: null),
+            ),
+          ],
+          child: const DailyApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(notificationService.initializeCalls, 0);
+      await tester.tap(find.text('계속'));
+      await tester.pumpAndSettle();
+      expect(find.text('익명 분석 허용'), findsOneWidget);
+      expect(notificationService.initializeCalls, 0);
+
+      await tester.tap(find.text('나중에'));
+      await tester.pumpAndSettle();
+      expect(find.text('Siri 단축어 추가하기'), findsOneWidget);
+      expect(notificationService.initializeCalls, 0);
+
+      await tester.tap(find.text('나중에'));
+      await tester.pumpAndSettle();
+      expect(find.text('알림 및 알람 허용'), findsOneWidget);
+      expect(notificationService.initializeCalls, 0);
+
+      await tester.tap(find.text('알림 및 알람 허용'));
+      await tester.pumpAndSettle();
+      expect(notificationService.initializeCalls, 1);
+      expect(find.text('로컬로 시작'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, '로컬로 시작'))
+            .onPressed,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Apple로 계속'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Google로 계속'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+
+      debugDefaultTargetPlatformOverride = null;
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('existing users choose analytics consent before calendar opens', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
+    final preferences = await SharedPreferences.getInstance();
+    final settingsRepository = SettingsRepository(preferences: preferences);
+    final analytics = _FakeProductAnalytics(consentPromptCompleted: false);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(settingsRepository),
+          productAnalyticsProvider.overrideWithValue(analytics),
+          notificationServiceProvider.overrideWithValue(_FakeNotification()),
+          syncServiceProvider.overrideWithValue(_FakeSync()),
+          eventRepositoryProvider.overrideWithValue(_FakeEventRepository()),
+          googleDriveAuthServiceProvider.overrideWithValue(
+            _FakeGoogleDriveAuthService(account: null),
+          ),
+        ],
+        child: const DailyApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('익명 분석 허용'), findsOneWidget);
+    expect(find.byType(MonthCalendarPage), findsNothing);
+    await tester.tap(find.text('나중에'));
+    await tester.pumpAndSettle();
+
+    expect(analytics.consentPromptCompleted, isTrue);
+    expect(analytics.enabled, isFalse);
+    expect(find.byType(MonthCalendarPage), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -1033,6 +1160,28 @@ void main() {
           .clipBehavior,
       Clip.none,
     );
+    final calendarTrackDecoration =
+        tester
+                .widget<AnimatedContainer>(
+                  find.byKey(const ValueKey('calendar-view-track')),
+                )
+                .decoration!
+            as ShapeDecoration;
+    final bottomTrackDecoration =
+        tester
+                .widget<Container>(
+                  find.byKey(const ValueKey('bottom-mode-track')),
+                )
+                .decoration!
+            as ShapeDecoration;
+    expect(
+      (calendarTrackDecoration.shape as StadiumBorder).side,
+      BorderSide.none,
+    );
+    expect(
+      (bottomTrackDecoration.shape as StadiumBorder).side,
+      BorderSide.none,
+    );
     expect(
       tester
           .widget<Stack>(
@@ -1053,7 +1202,7 @@ void main() {
     );
     expect(find.byType(PageView), findsOneWidget);
     expect(find.text('일정 없음'), findsWidgets);
-    expect(find.byIcon(Icons.auto_awesome_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.stars_rounded), findsOneWidget);
     expect(find.byTooltip('오늘'), findsOneWidget);
     final periodButtonRect = tester.getRect(
       find.byKey(const ValueKey('calendar-period-button')),
@@ -1143,7 +1292,7 @@ void main() {
     );
     final quickAccessIcon = find.descendant(
       of: find.byKey(const ValueKey('bottom-mode-switcher')),
-      matching: find.byIcon(Icons.dashboard_outlined),
+      matching: find.byIcon(Icons.view_agenda_outlined),
     );
     expect(
       tester
@@ -1476,21 +1625,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(selectedDateProvider), startDate);
 
-    await tester.trackpadFling(
-      weekNavigation,
-      const Offset(-240, 0),
-      1200,
-    );
+    await tester.trackpadFling(weekNavigation, const Offset(-240, 0), 1200);
     await tester.pumpAndSettle();
     expect(
       container.read(selectedDateProvider),
       DateTime(startDate.year, startDate.month, startDate.day + 7),
     );
-    await tester.trackpadFling(
-      weekNavigation,
-      const Offset(240, 0),
-      1200,
-    );
+    await tester.trackpadFling(weekNavigation, const Offset(240, 0), 1200);
     await tester.pumpAndSettle();
     expect(container.read(selectedDateProvider), startDate);
 
@@ -2214,6 +2355,17 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    final aboutNavigation = find.byKey(
+      const ValueKey('about-settings-navigation'),
+    );
+    await tester.dragUntilVisible(
+      aboutNavigation,
+      find.byType(ListView),
+      const Offset(0, -520),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(aboutNavigation);
+    await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView), const Offset(0, -2200));
     await tester.pumpAndSettle();
 
@@ -2302,24 +2454,38 @@ void main() {
     );
 
     final mainList = find.byType(ListView);
-    for (var index = 0; index < 8; index++) {
-      await tester.drag(mainList, const Offset(0, -560));
-      await tester.pumpAndSettle();
-      expectVisibleRowsHaveIcons();
-    }
+    await tester.dragUntilVisible(
+      find.byKey(const ValueKey('about-settings-navigation')),
+      mainList,
+      const Offset(0, -520),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('about-settings-navigation')));
+    await tester.pumpAndSettle();
     expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+    expectVisibleRowsHaveIcons();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     await tester.dragUntilVisible(
-      find.widgetWithText(ListTile, '알림'),
+      find.byKey(const ValueKey('notification-settings-navigation')),
       mainList,
       const Offset(0, 560),
     );
-    final notificationSettingsTile = find.widgetWithText(ListTile, '알림');
+    final notificationSettingsTile = find.byKey(
+      const ValueKey('notification-settings-navigation'),
+    );
     await tester.ensureVisible(notificationSettingsTile);
     await tester.pumpAndSettle();
     await tester.tap(notificationSettingsTile);
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.notifications_active_outlined), findsOneWidget);
+    expect(find.text('알림 테스트'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('system-notification-settings')),
+      findsOneWidget,
+    );
+    expect(find.text('기본 일정 알림'), findsOneWidget);
     expectVisibleRowsHaveIcons();
     final notificationList = find.byType(ListView);
     for (var index = 0; index < 4; index++) {
@@ -2330,7 +2496,15 @@ void main() {
 
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('account-settings-navigation')));
+    final accountSettingsTile = find.byKey(
+      const ValueKey('account-settings-navigation'),
+    );
+    await Scrollable.ensureVisible(
+      tester.element(accountSettingsTile),
+      alignment: 0.45,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(accountSettingsTile);
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.person_outline), findsOneWidget);
     expect(find.byIcon(Icons.cloud_done_outlined), findsOneWidget);
@@ -2378,6 +2552,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const ValueKey('privacy-settings-navigation')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('anonymous-analytics-toggle')));
     await tester.pump();
     expect(analytics.enabled, isTrue);
@@ -2428,6 +2604,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const ValueKey('privacy-settings-navigation')));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SwitchListTile, '앱 잠금'));
     await tester.pumpAndSettle();
 
@@ -2479,6 +2657,10 @@ void main() {
         ],
         child: const MaterialApp(home: SettingsPage()),
       ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('category-settings-navigation')),
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('category-reorder-list')), findsOneWidget);
@@ -3000,7 +3182,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Daily 시작하기'), findsOneWidget);
+    expect(find.text('오늘을 더\n가볍게 정리하세요.'), findsOneWidget);
     expect(driveSyncService.deleteCloudBackupCalls, 0);
     expect(authService.signOutCalls, 0);
     expect(eventRepository.clearAllCalls, 1);
@@ -3071,7 +3253,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Daily 시작하기'), findsOneWidget);
+    expect(find.text('오늘을 더\n가볍게 정리하세요.'), findsOneWidget);
     expect(eventRepository.clearAllCalls, 1);
     expect(settingsRepository.load().onboardingCompleted, isFalse);
 
@@ -3214,7 +3396,7 @@ void main() {
     expect(eventRepository.clearAllCalls, 1);
     expect(settingsRepository.load().onboardingCompleted, isFalse);
     expect(settingsRepository.appleAccount(), isNull);
-    expect(find.text('Daily 시작하기'), findsOneWidget);
+    expect(find.text('오늘을 더\n가볍게 정리하세요.'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -3439,7 +3621,6 @@ class _FakeNotification implements NotificationService {
   final bool failCancelMorningBriefing;
   var cancelMorningBriefingCalls = 0;
   var initializeCalls = 0;
-  var showTestNotificationCalls = 0;
   final scheduledEventIds = <String>[];
   final scheduledImmediateFlags = <bool>[];
 
@@ -3482,11 +3663,6 @@ class _FakeNotification implements NotificationService {
   }) async {}
 
   @override
-  Future<void> showTestNotification() async {
-    showTestNotificationCalls += 1;
-  }
-
-  @override
   Future<int> pendingNotificationCount() async => scheduledEventIds.length;
 
   @override
@@ -3512,9 +3688,21 @@ class _FakeSync implements SyncService {
 }
 
 class _FakeProductAnalytics implements ProductAnalytics {
+  _FakeProductAnalytics({bool consentPromptCompleted = true}) {
+    _consentPromptCompleted.value = consentPromptCompleted;
+  }
+
   final ValueNotifier<bool> _enabled = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _consentPromptCompleted = ValueNotifier<bool>(true);
   final records = <AnalyticsRecord>[];
   var deleteCalls = 0;
+
+  @override
+  bool get consentPromptCompleted => _consentPromptCompleted.value;
+
+  @override
+  ValueListenable<bool> get consentPromptCompletedListenable =>
+      _consentPromptCompleted;
 
   @override
   bool get enabled => _enabled.value;
@@ -3526,6 +3714,12 @@ class _FakeProductAnalytics implements ProductAnalytics {
   int get pendingEventCount => records.length;
 
   @override
+  Future<void> completeConsentPrompt({required bool enabled}) async {
+    await setEnabled(enabled);
+    _consentPromptCompleted.value = true;
+  }
+
+  @override
   Future<void> deletePendingData() async {
     deleteCalls += 1;
     records.clear();
@@ -3534,6 +3728,7 @@ class _FakeProductAnalytics implements ProductAnalytics {
   @override
   void dispose() {
     _enabled.dispose();
+    _consentPromptCompleted.dispose();
   }
 
   @override
@@ -3566,6 +3761,9 @@ class _FakeEventRepository implements EventRepository {
 
   @override
   Future<void> save(CalendarEvent event) async {}
+
+  @override
+  Future<void> saveAllAtomically(Iterable<CalendarEvent> events) async {}
 
   @override
   Future<List<CalendarEvent>> search(String query) async => const [];

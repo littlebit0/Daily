@@ -4476,3 +4476,106 @@ Historical app-version notes below `2.0.0` were intentionally removed on
 - 사용자의 지시에 따라 GUI 실행과 수동 동작 테스트는 진행하지 않았다.
 - GitHub Release에는 unsigned IPA/DMG만 공개하고, App Store Connect용 서명
   IPA/PKG는 `dist/transporter-upload/3.2.1`에만 생성한다.
+
+### 2026-08-26 Apple 통일 UI와 분석 동의 온보딩
+
+- Daily의 기존 캘린더 동작을 유지하면서 Apple 플랫폼과 어울리는 공통 화면
+  체계를 추가했다.
+  - 공통 페이지 배경, 내비게이션 바, 그룹형 설정 섹션, 아이콘 행, 주요·보조
+    버튼, 안내 문구, 온보딩 프레임을 `lib/core/theme/daily_ui.dart`에 모았다.
+  - 카드 중첩과 과도한 장식을 피하고 iOS/macOS의 그룹형 정보 구조, 명확한
+    계층, 라이트·다크 대응을 공통 적용했다.
+- 새 사용자 온보딩 순서는 Daily 소개 → 익명 사용성 분석 선택 → Siri 단축어
+  설정(Apple 플랫폼) → 알림·알람 권한 → Apple/Google/로컬 시작이다.
+  - 분석은 기본 비활성화이며 사용자가 명시적으로 동의한 뒤에만 전송한다.
+  - 거절 선택도 저장해 다음 실행 때 다시 강요하지 않는다.
+  - 기존 사용자에게도 아직 선택 기록이 없을 때 한 번만 분석 동의 화면을
+    표시한다.
+  - 앱 시작만으로 알림·AlarmKit 권한을 자동 요청하지 않고 사용자가 온보딩의
+    권한 버튼을 누른 뒤 요청한다.
+  - Siri 설정은 검증된 `시그널` iCloud 단축어 추가 화면을 연다.
+- 다음 화면을 새 공통 UI로 정리했다.
+  - 빠른 보기: 분류별 Todo 카드, 반응형 정보 밀도, 완료 상태와 빈 상태
+  - 설정: 계정, 알림, 화면·달력, 분류, 개인정보·잠금, AI, 앱 정보 화면 분리
+  - Siri 작업 기록과 캘린더 가져오기
+  - 검색, 필터, 일정 추가·수정, Signal/AI 패널, 버그 제보
+- 월간·주간·일간 캘린더 본문, macOS 오른쪽 하루 보기와 기존 일정 동작은 이번
+  디자인 작업에서 의도적으로 교체하지 않았다.
+- 한국어, 영어, 일본어, 중국어 번체의 이번 신규·변경 UI 문구를 모두 추가했고
+  정적 누락 검사에서 네 언어 모두 누락 0개를 확인했다.
+- 검증:
+  - `git diff --check` 통과
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub` 전체 248개 통과
+  - `./tool/flutter.sh build ios --simulator --no-pub` 통과
+  - `./tool/flutter.sh build macos --no-pub` 통과
+  - macOS 빌드에는 GoogleSignIn 헤더, Flutter 코드 에셋 이름과 기존 Siri
+    deprecated API 경고가 남아 있지만 빌드는 정상 완료된다.
+- 최초 구현 검증에서는 앱 설치·실행과 GUI 수동 테스트를 수행하지 않았다.
+  이후 사용자의 명시적인 재설치 요청에 따라 다음 테스트 앱만 최신 빌드로
+  교체했고 자동 실행이나 GUI 조작은 하지 않았다.
+  - macOS: `/Users/kimhwi/Applications/Daily Test.app`,
+    `com.littlebit0.daily.test`, `3.2.1 (3.2.1)`
+  - iPhone 17 시뮬레이터: `BF524643-403E-4212-ACB7-621E11279532`,
+    표시 이름 `Daily Test`, `com.littlebit0.daily`, `3.2.1 (3.2.1)`
+  - App Store의 `/Applications/Daily.app`은 변경하지 않았다.
+- 다음 수동 확인은 온보딩 각 단계, 동의/거절 재실행, Siri 단축어 추가,
+  Apple·Google·로컬 진입, 빠른 보기 Todo, 설정 각 하위 화면, 검색·필터,
+  일정 편집, Signal 패널, 버그 제보의 라이트·다크 및 큰 글자 상태다.
+- 변경 대부분은 공유 Flutter UI이므로 Android/Windows에도 컴파일상 반영될 수
+  있다. 이번 작업에서는 Android/Windows 실기기·빌드 검증을 하지 않았으므로
+  다음 플랫폼 작업자가 레이아웃, Apple 전용 온보딩 단계 제외 여부와 권한
+  흐름을 별도로 확인해야 한다.
+- 이번 변경은 아직 커밋하거나 원격 저장소에 푸시하지 않았다.
+
+### 2026-08-26 온보딩 진입·계정 버튼·알림 테스트·달력 버튼·Todo 보정
+
+- iOS 온보딩에서 Siri/권한 단계를 완료한 뒤 로그인 단계로 이동해도 이전
+  단계의 busy 상태가 남아 Apple·Google·로컬 버튼이 모두 비활성화되던 원인을
+  수정했다. 단계 전환 시 busy 상태와 안내 메시지를 함께 초기화한다.
+- 계정 설정의 Apple 로그인/연동 해지, Google 연결·백업·복원·취소·연동 해지,
+  로그아웃, 계정 삭제/로컬 초기화 버튼을 동일한 높이·모서리·아이콘·로딩·
+  파괴적 색상 규칙으로 통일했다.
+- 사용자용 알림 기능은 유지하면서 `알림 테스트` 기능만 제거했다.
+  - 테스트 알림 UI, 전송 API, 전용 notification ID와 다국어 문구를 삭제했다.
+  - 기본 일정 알림, 아침 브리핑, D-day, 권한 처리와 시스템 알림 설정 이동은
+    그대로 유지한다.
+- 빠른 보기·주간·월간·일간에서 공유하는 상단 도구막대, iOS 하단 주/월/일 및
+  빠른 보기/달력/AI 슬라이더, 스케줄 종일 일정 버튼, 검색·필터·AI 보조 버튼에
+  공통 `DailyIconAction`과 선택 색상 규칙을 적용했다. 달력 셀, 일정 카드,
+  배치, 제스처와 화면 전환 로직은 변경하지 않았다.
+- Todo 완료는 제목이 아니라 일정 ID로만 처리함을 회귀 테스트로 고정했다.
+  반복 일정 발생분은 원본 ID를 공유하던 구조 때문에 한 발생분을 체크하면
+  나머지 반복분도 함께 완료되는 문제가 있었다. 선택한 날짜를 원본 반복에서
+  제외하고 그 발생분만 고유 ID의 독립 일정으로 원자 저장해 완료 상태를
+  분리한다. 원본 반복 일정과 분리된 발생분은 모두 v2 이벤트 동기화 큐에
+  올린다.
+- 검증:
+  - `git diff --check` 통과
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub` 전체 250개 통과
+  - iOS Simulator Debug 빌드 통과
+  - macOS Debug 빌드 통과
+  - macOS 빌드의 GoogleSignIn umbrella header 및 기존 Siri deprecated API
+    경고는 남아 있으나 빌드는 정상 완료된다.
+- 사용자의 별도 요청이 없으므로 이번 검증에서는 앱 설치·실행과 GUI 조작을
+  하지 않았다. 커밋과 푸시도 아직 진행하지 않았다.
+
+### 2026-08-26 DailyCalendar 3.3.0 릴리스 준비
+
+- 앱과 Apple 위젯의 표시 버전·빌드를 `3.3.0 (3.3.0)`으로 승격했다.
+- README, Apple 빌드·개인정보 문서, GitHub Actions 릴리스 설정과
+  `docs/RELEASE_NOTES_3.3.0.md`를 3.3.0 기준으로 갱신했다.
+- 이번 릴리스에는 단계형 온보딩과 분석 동의, Apple 스타일 공통 UI, 계정 작업
+  버튼 통일, 개발용 알림 테스트 제거, 반복 일정 Todo 완료 분리, 캘린더 조작부
+  아이콘·외곽선 정리가 포함된다.
+- 공개 GitHub Release에는 검증용 unsigned IPA와 DMG만 올린다. App Store
+  Connect 제출용 서명 IPA/PKG는 로컬 `dist/transporter-upload/3.3.0`에만
+  생성하고 Git에는 포함하지 않는다.
+- 검증:
+  - `git diff --check` 통과
+  - `./tool/flutter.sh analyze --no-pub` 통과
+  - `./tool/flutter.sh test --no-pub -r compact` 전체 250개 통과
+  - `python3 -m unittest test/tool/analytics_receiver_test.py` 전체 4개 통과
+- 사용자의 별도 실행 요청이 없으므로 3.3.0 앱을 설치하거나 GUI로 실행하지
+  않았다.

@@ -20,8 +20,6 @@ abstract interface class NotificationService {
 
   Future<void> cancelMorningBriefing();
 
-  Future<void> showTestNotification();
-
   Future<int> pendingNotificationCount();
 
   Future<String> permissionSummary();

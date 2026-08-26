@@ -1,16 +1,21 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/apple_sign_in_service.dart';
-import '../../../core/alarms/alarm_service.dart';
 import '../../../core/auth/google_account.dart';
 import '../../../core/di/app_providers.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/siri/siri_shortcut_installer.dart';
 import '../../../core/sync/google_drive_auth_service.dart';
+import '../../../core/theme/daily_ui.dart';
+import 'analytics_consent_page.dart';
 
-enum _WelcomeAction { apple, local, googleDrive, notification }
+enum _WelcomeAction { apple, local, googleDrive, permissions, siri }
+
+enum _OnboardingStep { welcome, analytics, siri, permissions, account }
 
 class WelcomePage extends ConsumerStatefulWidget {
   const WelcomePage({super.key});
@@ -20,36 +25,37 @@ class WelcomePage extends ConsumerStatefulWidget {
 }
 
 class _WelcomePageState extends ConsumerState<WelcomePage> {
-  static const _lastPage = 3;
-
-  final _pageController = PageController();
   _WelcomeAction? _busyAction;
   var _message = '';
   var _googleDriveAttempt = 0;
-  var _page = 0;
+  var _stepIndex = 0;
 
   bool get _busy => _busyAction != null;
 
-  @override
-  void initState() {
-    super.initState();
-    unawaited(
-      Future.microtask(
-        () => ref.read(alarmServiceProvider).requestAuthorization(),
-      ).catchError((_) => AlarmAuthorizationState.unsupported),
-    );
+  bool get _supportsAppleExperiences {
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
   }
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+  List<_OnboardingStep> get _steps => [
+    _OnboardingStep.welcome,
+    _OnboardingStep.analytics,
+    if (_supportsAppleExperiences) _OnboardingStep.siri,
+    _OnboardingStep.permissions,
+    _OnboardingStep.account,
+  ];
+
+  void _advance() {
+    if (_stepIndex >= _steps.length - 1) return;
+    setState(() {
+      _stepIndex += 1;
+      _busyAction = null;
+      _message = '';
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final compact = width < 560;
     final appleSignInService = ref.watch(appleSignInServiceProvider);
     final showAppleSignIn = appleSignInService.isSupportedPlatform;
     final canCancelGoogleConnection =
@@ -57,116 +63,90 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
         ref
             .watch(googleDriveAuthServiceProvider)
             .canCancelPendingSignInOnResume;
+    final step = _steps[_stepIndex];
+    final page = switch (step) {
+      _OnboardingStep.welcome => _buildWelcomePage(context),
+      _OnboardingStep.analytics => AnalyticsConsentPage(
+        key: const ValueKey('onboarding-analytics-consent'),
+        step: _stepIndex,
+        stepCount: _steps.length,
+        onCompleted: _advance,
+      ),
+      _OnboardingStep.siri => _buildSiriPage(context),
+      _OnboardingStep.permissions => _buildPermissionsPage(context),
+      _OnboardingStep.account => _buildStartPage(
+        context,
+        showAppleSignIn: showAppleSignIn,
+        canCancelGoogleConnection: canCancelGoogleConnection,
+      ),
+    };
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        final offset = Tween<Offset>(
+          begin: const Offset(0.045, 0),
+          end: Offset.zero,
+        ).animate(animation);
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(position: offset, child: child),
+        );
+      },
+      child: KeyedSubtree(key: ValueKey(step), child: page),
+    );
+  }
 
+  Widget _buildWelcomePage(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Column(
+      body: DailyOnboardingFrame(
+        step: _stepIndex,
+        stepCount: _steps.length,
+        kicker: 'DailyCalendar',
+        title: context.tr('오늘을 더\n가볍게 정리하세요.'),
+        description: context.tr('일정과 할 일을 한곳에서 보고, 필요한 순간에만 알림을 받으세요.'),
+        primaryLabel: context.tr('계속'),
+        onPrimary: _advance,
+        content: ListView(
+          padding: const EdgeInsets.only(top: 24),
           children: [
+            Center(
+              child: Container(
+                width: 92,
+                height: 92,
+                decoration: BoxDecoration(
+                  color: DailyUi.primary.withValues(alpha: 0.11),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.calendar_month_rounded,
+                  color: DailyUi.primary,
+                  size: 49,
+                ),
+              ),
+            ),
+            const SizedBox(height: 28),
             SizedBox(
-              height: 48,
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: _page < _lastPage
-                    ? TextButton(
-                        onPressed: () => _goToPage(_lastPage),
-                        child: Text(context.tr('건너뛰기')),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (value) => setState(() => _page = value),
-                children: [
-                  _WelcomeIntroPage(
-                    imagePath: 'assets/onboarding/week-calendar.png',
-                    darkImagePath: 'assets/onboarding/dark/week-calendar.png',
-                    title: context.tr('일정을 한눈에'),
-                    description: context.tr(
-                      '월간, 주간, 일간 보기로 필요한 일정에 빠르게 집중하세요.',
-                    ),
-                  ),
-                  _WelcomeIntroPage(
-                    imagePath: 'assets/onboarding/day-calendar.png',
-                    darkImagePath: 'assets/onboarding/dark/day-calendar.png',
-                    title: context.tr('기록하고 바로 알림 받기'),
-                    description: context.tr(
-                      '자연스럽게 일정을 기록하고 일정 알림과 아침 브리핑을 받아보세요.',
-                    ),
-                  ),
-                  _WelcomeIntroPage(
-                    imagePath: 'assets/onboarding/dday-calendar.png',
-                    darkImagePath: 'assets/onboarding/dark/dday-calendar.png',
-                    title: context.tr('중요한 날까지 이어서'),
-                    description: context.tr(
-                      'D-day와 분류를 활용하고 Google Drive로 여러 기기에서 이어서 사용하세요.',
-                    ),
-                  ),
-                  _buildStartPage(
-                    context,
-                    compact: compact,
-                    showAppleSignIn: showAppleSignIn,
-                    canCancelGoogleConnection: canCancelGoogleConnection,
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                compact ? 20 : 28,
-                8,
-                compact ? 20 : 28,
-                12,
-              ),
+              height: 140,
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 88,
-                    child: _page > 0
-                        ? TextButton.icon(
-                            onPressed: _busy
-                                ? null
-                                : () => _goToPage(_page - 1),
-                            icon: const Icon(Icons.chevron_left),
-                            label: Text(context.tr('이전')),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
                   Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        _lastPage + 1,
-                        (index) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          width: index == _page ? 20 : 7,
-                          height: 7,
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
-                          decoration: BoxDecoration(
-                            color: index == _page
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.outlineVariant,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
+                    child: DailyFeatureCard(
+                      icon: Icons.view_week_outlined,
+                      title: context.tr('한눈에 보는 일정'),
+                      description: context.tr('월간, 주간, 일간 보기'),
                     ),
                   ),
-                  SizedBox(
-                    width: 88,
-                    child: _page < _lastPage
-                        ? TextButton(
-                            onPressed: () => _goToPage(_page + 1),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Text(context.tr('다음')),
-                                const Icon(Icons.chevron_right),
-                              ],
-                            ),
-                          )
-                        : const SizedBox.shrink(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DailyFeatureCard(
+                      icon: Icons.check_circle_outline_rounded,
+                      title: context.tr('일정과 할 일'),
+                      description: context.tr('기록부터 완료까지'),
+                      color: DailyUi.success,
+                    ),
                   ),
                 ],
               ),
@@ -177,130 +157,246 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     );
   }
 
-  Widget _buildStartPage(
-    BuildContext context, {
-    required bool compact,
-    required bool showAppleSignIn,
-    required bool canCancelGoogleConnection,
-  }) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.all(compact ? 20 : 28),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(
-                Icons.calendar_month_outlined,
-                size: 54,
-                color: Color(0xff2563eb),
+  Widget _buildSiriPage(BuildContext context) {
+    return Scaffold(
+      body: DailyOnboardingFrame(
+        step: _stepIndex,
+        stepCount: _steps.length,
+        kicker: context.tr('Siri와 Daily'),
+        title: context.tr('말 한마디로\n일정을 관리하세요.'),
+        description: context.tr('시그널 단축어를 추가하면 Siri에게 일정을 묻거나 추가하고 수정할 수 있어요.'),
+        primaryLabel: context.tr('Siri 단축어 추가하기'),
+        primaryIcon: Icons.add_link_rounded,
+        onPrimary: _busy ? null : _openSiriInstaller,
+        secondaryLabel: context.tr('나중에'),
+        onSecondary: _busy ? null : _advance,
+        busy: _busyAction == _WelcomeAction.siri,
+        content: ListView(
+          padding: const EdgeInsets.only(top: 22),
+          children: [
+            Center(
+              child: Container(
+                width: 86,
+                height: 86,
+                decoration: BoxDecoration(
+                  color: DailyUi.purple.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: DailyUi.purple,
+                  size: 43,
+                ),
               ),
-              const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 24),
+            DailyInfoCallout(
+              icon: Icons.mic_none_rounded,
+              color: DailyUi.purple,
+              text: context.tr(
+                '예: “Siri야, Daily에서 시그널 실행.”이라고 말한 뒤 “내일 오전 9시에 헬스장 일정 추가해줘.”라고 이어서 말하세요.',
+              ),
+            ),
+            if (_message.isNotEmpty) ...[
+              const SizedBox(height: 12),
               Text(
-                context.tr('Daily 시작하기'),
+                _message,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                context.tr('Apple 또는 Google 계정을 연결하거나 계정 없이 로컬로 시작할 수 있습니다.'),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 22),
-              if (showAppleSignIn) ...[
-                FilledButton.icon(
-                  onPressed: _busy ? null : _startWithApple,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: _busyAction == _WelcomeAction.apple
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.apple),
-                  label: Text(context.tr('Apple로 계속')),
-                ),
-                const SizedBox(height: 10),
-              ],
-              FilledButton.icon(
-                onPressed: _busy ? null : _startLocal,
-                icon: _busyAction == _WelcomeAction.local
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.calendar_today_outlined),
-                label: Text(context.tr('로컬로 시작')),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _connectAndRestore,
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xff3c4043),
-                  disabledBackgroundColor: const Color(0xfff1f3f4),
-                  disabledForegroundColor: const Color(0xff9aa0a6),
-                  side: const BorderSide(color: Color(0xffdadce0)),
-                ),
-                icon: _busyAction == _WelcomeAction.googleDrive
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const _GoogleMark(),
-                label: Text(
-                  _busyAction == _WelcomeAction.googleDrive
-                      ? context.tr('Google 연결 중')
-                      : context.tr('Google로 계속'),
+                style: const TextStyle(
+                  color: DailyUi.destructive,
+                  fontSize: 12,
+                  height: 1.35,
                 ),
               ),
-              if (canCancelGoogleConnection) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _cancelGoogleDriveSignIn,
-                  icon: const Icon(Icons.close),
-                  label: Text(context.tr('연결 취소')),
-                ),
-              ],
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _requestNotificationPermission,
-                icon: _busyAction == _WelcomeAction.notification
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.notifications_active_outlined),
-                label: Text(context.tr('알림 권한 허용')),
-              ),
-              if (_message.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _message,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-              ],
             ],
-          ),
+          ],
         ),
       ),
     );
   }
 
-  void _goToPage(int page) {
-    _pageController.animateToPage(
-      page.clamp(0, _lastPage),
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
+  Widget _buildPermissionsPage(BuildContext context) {
+    return Scaffold(
+      body: DailyOnboardingFrame(
+        step: _stepIndex,
+        stepCount: _steps.length,
+        kicker: context.tr('필요한 순간 놓치지 않기'),
+        title: context.tr('알림과 알람을\n준비할까요?'),
+        description: context.tr(
+          '일정 알림과 아침 브리핑을 받으려면 알림 권한이 필요합니다. 지원되는 기기에서는 일정별 알람도 사용할 수 있어요.',
+        ),
+        primaryLabel: context.tr('알림 및 알람 허용'),
+        primaryIcon: Icons.notifications_active_outlined,
+        onPrimary: _busy ? null : _requestPermissions,
+        secondaryLabel: context.tr('나중에'),
+        onSecondary: _busy ? null : _advance,
+        busy: _busyAction == _WelcomeAction.permissions,
+        content: ListView(
+          padding: const EdgeInsets.only(top: 24),
+          children: [
+            SizedBox(
+              height: 150,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DailyFeatureCard(
+                      icon: Icons.notifications_none_rounded,
+                      title: context.tr('일정 알림'),
+                      description: context.tr('시작 전 알림과 브리핑'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DailyFeatureCard(
+                      icon: Icons.alarm_rounded,
+                      title: context.tr('일정 알람'),
+                      description: context.tr('지원 기기에서 선택 사용'),
+                      color: DailyUi.warning,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            DailyInfoCallout(
+              icon: Icons.tune_rounded,
+              text: context.tr('권한은 나중에 설정에서 다시 요청하거나 변경할 수 있습니다.'),
+            ),
+            if (_message.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                _message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: DailyUi.destructive,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
+  }
+
+  Widget _buildStartPage(
+    BuildContext context, {
+    required bool showAppleSignIn,
+    required bool canCancelGoogleConnection,
+  }) {
+    return Scaffold(
+      body: DailyOnboardingFrame(
+        step: _stepIndex,
+        stepCount: _steps.length,
+        kicker: context.tr('마지막 단계'),
+        title: context.tr('Daily를 어떻게\n시작할까요?'),
+        description: context.tr(
+          '계정을 연결하면 기기 간 동기화를 사용할 수 있고, 계정 없이 이 기기에서만 시작할 수도 있어요.',
+        ),
+        primaryLabel: context.tr('로컬로 시작'),
+        primaryIcon: Icons.calendar_today_outlined,
+        onPrimary: _busy ? null : _startLocal,
+        busy: _busyAction == _WelcomeAction.local,
+        content: ListView(
+          padding: const EdgeInsets.only(top: 22),
+          children: [
+            if (showAppleSignIn) ...[
+              _OnboardingAccountButton(
+                label: context.tr('Apple로 계속'),
+                icon: Icons.apple,
+                onPressed: _busy ? null : _startWithApple,
+                busy: _busyAction == _WelcomeAction.apple,
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                borderColor: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xff3a3a3c)
+                    : Colors.black,
+              ),
+              const SizedBox(height: 11),
+            ],
+            _OnboardingAccountButton(
+              label: _busyAction == _WelcomeAction.googleDrive
+                  ? context.tr('Google 연결 중')
+                  : context.tr('Google로 계속'),
+              customIcon: const _GoogleMark(),
+              onPressed: _busy ? null : _connectAndRestore,
+              busy: _busyAction == _WelcomeAction.googleDrive,
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xff3c4043),
+              borderColor: const Color(0xffd7d9dd),
+            ),
+            if (canCancelGoogleConnection) ...[
+              const SizedBox(height: 8),
+              DailySecondaryButton(
+                label: context.tr('연결 취소'),
+                icon: Icons.close_rounded,
+                onPressed: _cancelGoogleDriveSignIn,
+              ),
+            ],
+            const SizedBox(height: 16),
+            DailyInfoCallout(
+              icon: Icons.cloud_outlined,
+              text: context.tr(
+                'Google 연결은 앱 전용 Drive AppData 백업과 동기화에만 사용하며 일반 Drive 파일은 읽거나 수정하지 않습니다.',
+              ),
+            ),
+            if (_message.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                _message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: DailyUi.secondaryText(context),
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSiriInstaller() async {
+    setState(() {
+      _busyAction = _WelcomeAction.siri;
+      _message = '';
+    });
+    final opened = await SiriShortcutInstaller.openSignalInstaller();
+    if (!mounted) return;
+    setState(() => _busyAction = null);
+    if (opened) {
+      _advance();
+    } else {
+      setState(() {
+        _message = context.tr('시그널 단축어 추가 화면을 열 수 없습니다.');
+      });
+    }
+  }
+
+  Future<void> _requestPermissions() async {
+    setState(() {
+      _busyAction = _WelcomeAction.permissions;
+      _message = '';
+    });
+    try {
+      await ref.read(notificationServiceProvider).initialize();
+      await ref.read(alarmServiceProvider).requestAuthorization();
+      if (mounted) _advance();
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() {
+          _busyAction = null;
+          _message = context.tr(
+            '권한 설정을 완료하지 못했습니다. 나중에 설정에서 다시 시도할 수 있습니다. ({error})',
+            args: {'error': error},
+          );
+        });
+      }
+    }
   }
 
   Future<void> _startWithApple() async {
@@ -497,27 +593,6 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     }
   }
 
-  Future<void> _requestNotificationPermission() async {
-    setState(() {
-      _busyAction = _WelcomeAction.notification;
-      _message = context.tr('알림 권한 요청을 여는 중입니다.');
-    });
-    try {
-      await ref.read(notificationServiceProvider).initialize();
-      if (mounted) {
-        setState(() => _message = context.tr('알림 권한 설정을 확인했습니다.'));
-      }
-    } on Object catch (error) {
-      if (mounted) {
-        setState(() => _message = '$error');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _busyAction = null);
-      }
-    }
-  }
-
   Future<void> _completeOnboarding() async {
     final settings = ref
         .read(settingsRepositoryProvider)
@@ -531,70 +606,68 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   }
 }
 
-class _WelcomeIntroPage extends StatelessWidget {
-  const _WelcomeIntroPage({
-    required this.imagePath,
-    required this.darkImagePath,
-    required this.title,
-    required this.description,
+class _OnboardingAccountButton extends StatelessWidget {
+  const _OnboardingAccountButton({
+    required this.label,
+    required this.onPressed,
+    required this.backgroundColor,
+    required this.foregroundColor,
+    required this.borderColor,
+    this.icon,
+    this.customIcon,
+    this.busy = false,
   });
 
-  final String imagePath;
-  final String darkImagePath;
-  final String title;
-  final String description;
+  final String label;
+  final VoidCallback? onPressed;
+  final Color backgroundColor;
+  final Color foregroundColor;
+  final Color borderColor;
+  final IconData? icon;
+  final Widget? customIcon;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-        child: Column(
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: OutlinedButton(
+        onPressed: busy ? null : onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: foregroundColor,
+          disabledBackgroundColor: backgroundColor.withValues(alpha: 0.55),
+          disabledForegroundColor: foregroundColor.withValues(alpha: 0.65),
+          side: BorderSide(color: borderColor),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              'Daily 시작하기',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Expanded(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      border: Border.all(color: colorScheme.outlineVariant),
-                    ),
-                    child: Image.asset(
-                      Theme.of(context).brightness == Brightness.dark
-                          ? darkImagePath
-                          : imagePath,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.topCenter,
-                    ),
-                  ),
+            if (busy)
+              SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.1,
+                  color: foregroundColor,
+                ),
+              )
+            else
+              customIcon ?? Icon(icon, size: 21),
+            const SizedBox(width: 9),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0,
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              description,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
         ),

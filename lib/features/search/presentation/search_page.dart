@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/di/app_providers.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/theme/daily_ui.dart';
 import '../../../core/theme/event_completion_style.dart';
 import '../../events/domain/calendar_event.dart';
 
@@ -27,23 +28,50 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(context.tr('검색'))),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      backgroundColor: DailyUi.pageBackground(context),
+      appBar: DailyNavigationBar(title: context.tr('검색')),
+      body: DailyAdaptiveBody(
+        maxWidth: 760,
+        padding: EdgeInsets.fromLTRB(
+          DailyUi.isDesktop ? 24 : 16,
+          8,
+          DailyUi.isDesktop ? 24 : 16,
+          24,
+        ),
         child: Column(
           children: [
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => _search(),
-              decoration: InputDecoration(
-                hintText: context.tr('제목, 메모, 장소 검색'),
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: IconButton(
-                  tooltip: context.tr('검색'),
-                  onPressed: _search,
-                  icon: const Icon(Icons.arrow_forward),
+            Material(
+              color: DailyUi.groupedSurface(context),
+              borderRadius: BorderRadius.circular(14),
+              child: TextField(
+                controller: _controller,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _search(),
+                decoration: InputDecoration(
+                  hintText: context.tr('제목, 메모, 장소 검색'),
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: IconButton(
+                    tooltip: context.tr('검색'),
+                    onPressed: _search,
+                    icon: const Icon(Icons.arrow_forward_rounded),
+                  ),
+                  filled: false,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: DailyUi.separator(context)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: DailyUi.separator(context)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: DailyUi.primary,
+                      width: 1.5,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -61,9 +89,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   }
                   if (events.isEmpty) {
                     return Center(
-                      child: Text(
-                        context.tr('검색 결과가 없습니다.'),
-                        style: Theme.of(context).textTheme.labelMedium,
+                      child: DailyInfoCallout(
+                        icon: Icons.search_off_rounded,
+                        text: context.tr('검색 결과가 없습니다.'),
                       ),
                     );
                   }
@@ -120,25 +148,40 @@ class _SearchResultTile extends StatelessWidget {
         ? context.tr('종일')
         : DateFormat.Hm(locale).format(event.startAt);
     final color = Color(event.colorValue);
-    return ListTile(
-      onTap: onTap,
+    return Material(
+      color: DailyUi.groupedSurface(context),
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: DailyUi.separator(context)),
       ),
-      leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.12),
-        child: Icon(Icons.flag, color: color),
-      ),
-      title: Text(
-        context.l10n.eventTitle(event.title, holiday: event.holiday),
-        style: calendarEventCompletionStyle(
-          context,
-          Theme.of(context).textTheme.titleMedium,
-          completed: event.completed,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        onTap: onTap,
+        leading: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          alignment: Alignment.center,
+          child: Icon(Icons.event_outlined, color: color, size: 21),
+        ),
+        title: Text(
+          context.l10n.eventTitle(event.title, holiday: event.holiday),
+          style: calendarEventCompletionStyle(
+            context,
+            Theme.of(context).textTheme.titleMedium,
+            completed: event.completed,
+          ),
+        ),
+        subtitle: Text('$date  $time'),
+        trailing: Icon(
+          Icons.chevron_right_rounded,
+          color: DailyUi.tertiaryText(context),
         ),
       ),
-      subtitle: Text('$date  $time'),
     );
   }
 }

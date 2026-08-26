@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/theme/daily_ui.dart';
 
 class SiriActivityLogPage extends StatefulWidget {
   const SiriActivityLogPage({super.key});
@@ -62,8 +63,9 @@ class _SiriActivityLogPageState extends State<SiriActivityLogPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(context.tr('Siri 작업 기록')),
+      backgroundColor: DailyUi.pageBackground(context),
+      appBar: DailyNavigationBar(
+        title: context.tr('Siri 작업 기록'),
         actions: [
           IconButton(
             tooltip: context.tr('날짜 선택'),
@@ -87,48 +89,44 @@ class _SiriActivityLogPageState extends State<SiriActivityLogPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : visible.isEmpty
-          ? Center(child: Text(context.tr('기록된 Siri 작업이 없습니다.')))
+          ? DailyAdaptiveBody(
+              child: DailyInfoCallout(
+                icon: Icons.record_voice_over_outlined,
+                title: context.tr('기록된 Siri 작업이 없습니다.'),
+                text: context.tr(
+                  'Siri 또는 단축어로 Daily 작업을 실행하면 날짜별 기록이 여기에 표시됩니다.',
+                ),
+              ),
+            )
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                itemCount: grouped.length,
-                itemBuilder: (context, index) {
-                  final date = grouped.keys.elementAt(index);
-                  final records = grouped[date]!;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
-                        child: Text(
-                          DateFormat.yMMMMd(locale).format(date),
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                      ),
-                      Card(
-                        margin: EdgeInsets.zero,
-                        child: Column(
-                          children: [
-                            for (
-                              var recordIndex = 0;
-                              recordIndex < records.length;
-                              recordIndex++
-                            ) ...[
-                              _SiriLogTile(
-                                log: records[recordIndex],
-                                onTap: () =>
-                                    _showDetails(context, records[recordIndex]),
-                              ),
-                              if (recordIndex != records.length - 1)
-                                const Divider(height: 1),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: ListView.builder(
+                    padding: EdgeInsets.fromLTRB(
+                      DailyUi.isDesktop ? 24 : 16,
+                      6,
+                      DailyUi.isDesktop ? 24 : 16,
+                      28,
+                    ),
+                    itemCount: grouped.length,
+                    itemBuilder: (context, index) {
+                      final date = grouped.keys.elementAt(index);
+                      final records = grouped[date]!;
+                      return DailyGroupedSection(
+                        label: DateFormat.yMMMMd(locale).format(date),
+                        children: [
+                          for (final record in records)
+                            _SiriLogTile(
+                              log: record,
+                              onTap: () => _showDetails(context, record),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
     );
@@ -182,66 +180,94 @@ class _SiriActivityLogPageState extends State<SiriActivityLogPage> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
+      backgroundColor: DailyUi.pageBackground(context),
       builder: (context) => SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 context.tr('Siri 작업 상세'),
-                style: Theme.of(context).textTheme.titleLarge,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
+                ),
               ),
               const SizedBox(height: 16),
-              _DetailRow(
-                label: context.tr('작업'),
-                value: context.tr(_actionLabel(log.action)),
-              ),
-              _DetailRow(
-                label: context.tr('상태'),
-                value: context.tr(log.success ? '성공' : '실패'),
-              ),
-              _DetailRow(
-                label: context.tr('실행 시각'),
-                value: dateFormat.format(log.occurredAt),
-              ),
-              if (log.summary.isNotEmpty)
-                _DetailRow(label: context.tr('요약'), value: log.summary),
-              if (log.result.isNotEmpty)
-                _DetailRow(label: context.tr('결과'), value: log.result),
-              if ((log.details['title'] ?? '').isNotEmpty)
-                _DetailRow(
-                  label: context.tr('제목'),
-                  value: log.details['title']!,
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: DailyUi.groupedSurface(context),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: DailyUi.separator(context)),
                 ),
-              if (startAt != null)
-                _DetailRow(
-                  label: context.tr('시작'),
-                  value: dateFormat.format(startAt),
-                ),
-              if (endAt != null)
-                _DetailRow(
-                  label: context.tr('종료'),
-                  value: dateFormat.format(endAt),
-                ),
-              if (log.details.containsKey('allDay'))
-                _DetailRow(
-                  label: context.tr('종일 일정'),
-                  value: context.tr(
-                    log.details['allDay'] == 'true' ? '예' : '아니요',
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Column(
+                    children: [
+                      _DetailRow(
+                        label: context.tr('작업'),
+                        value: context.tr(_actionLabel(log.action)),
+                      ),
+                      _DetailRow(
+                        label: context.tr('상태'),
+                        value: context.tr(log.success ? '성공' : '실패'),
+                      ),
+                      _DetailRow(
+                        label: context.tr('실행 시각'),
+                        value: dateFormat.format(log.occurredAt),
+                      ),
+                      if (log.summary.isNotEmpty)
+                        _DetailRow(
+                          label: context.tr('요약'),
+                          value: log.summary,
+                        ),
+                      if (log.result.isNotEmpty)
+                        _DetailRow(
+                          label: context.tr('결과'),
+                          value: log.result,
+                        ),
+                      if ((log.details['title'] ?? '').isNotEmpty)
+                        _DetailRow(
+                          label: context.tr('제목'),
+                          value: log.details['title']!,
+                        ),
+                      if (startAt != null)
+                        _DetailRow(
+                          label: context.tr('시작'),
+                          value: dateFormat.format(startAt),
+                        ),
+                      if (endAt != null)
+                        _DetailRow(
+                          label: context.tr('종료'),
+                          value: dateFormat.format(endAt),
+                        ),
+                      if (log.details.containsKey('allDay'))
+                        _DetailRow(
+                          label: context.tr('종일 일정'),
+                          value: context.tr(
+                            log.details['allDay'] == 'true' ? '예' : '아니요',
+                          ),
+                        ),
+                      if ((log.details['location'] ?? '').isNotEmpty)
+                        _DetailRow(
+                          label: context.tr('장소'),
+                          value: log.details['location']!,
+                        ),
+                      if ((log.details['memo'] ?? '').isNotEmpty)
+                        _DetailRow(
+                          label: context.tr('메모'),
+                          value: log.details['memo']!,
+                        ),
+                    ],
                   ),
                 ),
-              if ((log.details['location'] ?? '').isNotEmpty)
-                _DetailRow(
-                  label: context.tr('장소'),
-                  value: log.details['location']!,
-                ),
-              if ((log.details['memo'] ?? '').isNotEmpty)
-                _DetailRow(
-                  label: context.tr('메모'),
-                  value: log.details['memo']!,
-                ),
+              ),
             ],
           ),
         ),
@@ -261,9 +287,10 @@ class _SiriLogTile extends StatelessWidget {
     final locale = Localizations.localeOf(context).toLanguageTag();
     return ListTile(
       onTap: onTap,
-      leading: Icon(
-        log.success ? _actionIcon(log.action) : Icons.error_outline,
-        color: log.success ? null : Theme.of(context).colorScheme.error,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+      leading: DailySettingsIcon(
+        icon: log.success ? _actionIcon(log.action) : Icons.error_outline,
+        color: log.success ? DailyUi.primary : DailyUi.destructive,
       ),
       title: Text(
         log.summary.isEmpty

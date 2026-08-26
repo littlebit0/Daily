@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/littlebit0/DailyCalendar/releases/latest"><img src="https://img.shields.io/github/v/release/littlebit0/DailyCalendar?label=release" alt="Latest release"></a>
-  <img src="https://img.shields.io/badge/version-3.2.1-2f6feb" alt="Version 3.2.1">
+  <img src="https://img.shields.io/badge/version-3.3.0-2f6feb" alt="Version 3.3.0">
   <img src="https://img.shields.io/badge/Flutter-iOS%20%7C%20macOS%20%7C%20Android%20%7C%20Windows-02569B?logo=flutter" alt="Flutter platforms">
 </p>
 
@@ -27,9 +27,9 @@ DailyCalendar는 월간, 주간, 일간 및 연간 보기로 일정을 관리하
 | 플랫폼 | 배포 상태 | 파일 |
 | --- | --- | --- |
 | iPhone / iPad | App Store 무료 배포 중 | App Store의 `DailyCalendar` |
-| iOS 테스트 | GitHub 공개 검증용 미서명 파일 | [daily-ios-3.2.1-unsigned.ipa](https://github.com/littlebit0/DailyCalendar/releases/download/v3.2.1/daily-ios-3.2.1-unsigned.ipa) |
-| macOS 테스트 | GitHub 공개 검증용 미서명 파일 | [daily-macos-3.2.1-unsigned.dmg](https://github.com/littlebit0/DailyCalendar/releases/download/v3.2.1/daily-macos-3.2.1-unsigned.dmg) |
-| Android / Windows | 소스 지원, 3.2.1 실기기 검증 진행 중 | 검증 완료 후 릴리스 제공 |
+| iOS 테스트 | GitHub 공개 검증용 미서명 파일 | [daily-ios-3.3.0-unsigned.ipa](https://github.com/littlebit0/DailyCalendar/releases/download/v3.3.0/daily-ios-3.3.0-unsigned.ipa) |
+| macOS 테스트 | GitHub 공개 검증용 미서명 파일 | [daily-macos-3.3.0-unsigned.dmg](https://github.com/littlebit0/DailyCalendar/releases/download/v3.3.0/daily-macos-3.3.0-unsigned.dmg) |
+| Android / Windows | 소스 지원, 3.3.0 실기기 검증 진행 중 | 검증 완료 후 릴리스 제공 |
 
 > GitHub의 IPA와 DMG는 App Store 제출 파일이 아닙니다. 미서명 IPA는 별도
 > 서명 없이는 iPhone에 직접 설치할 수 없으며, 재서명 과정에서 Sign in with
@@ -79,6 +79,7 @@ DailyCalendar는 월간, 주간, 일간 및 연간 보기로 일정을 관리하
 - 한국어, 영어, 일본어, 중국어 번체
 - 시스템 언어 자동 적용 및 앱별 언어 선택
 - 라이트·다크 테마와 반응형 글자 크기
+- Apple 플랫폼과 통일된 단계형 온보딩, 빠른 보기와 그룹형 설정 화면
 - 사용자 분류, 직접 선택 색상, 분류 순서와 일정 정렬 우선순위
 - 공휴일 분류 색상과 선택형 공휴일 날짜 배경
 - PIN 없음 보호, Daily PIN 및 Apple 시스템 인증 앱 잠금
@@ -95,7 +96,7 @@ DailyCalendar는 월간, 주간, 일간 및 연간 보기로 일정을 관리하
 | 앱 잠금 | O | O | O | O |
 
 공유 Flutter 코드가 네 플랫폼의 사용자 경험을 유지합니다. Android와 Windows의
-3.2.1 배포 파일은 각 실제 OS에서 계정, 동기화, 알림과 UI 회귀 검증을 마친 뒤
+3.3.0 배포 파일은 각 실제 OS에서 계정, 동기화, 알림과 UI 회귀 검증을 마친 뒤
 제공할 예정입니다.
 
 ## 데이터와 개인정보 보호
@@ -181,17 +182,17 @@ Google OAuth 및 Apple 서명 값은 저장소에 포함하지 않습니다. 로
 ./tool/flutter.sh test --no-pub
 ```
 
-3.2.1 기준 검증 결과:
+3.3.0 기준 검증 결과:
 
 - Flutter 정적 분석 통과
-- 전체 Flutter 자동화 테스트 243개 통과
+- 전체 Flutter 자동화 테스트 250개 통과
 - 분석·버그 제보 서버 자동화 테스트 4개 통과
 - macOS Debug 및 iOS Simulator Debug 빌드 통과
-- iOS/macOS 앱과 위젯 버전 `3.2.1 (3.2.1)` 확인
+- iOS/macOS 앱과 위젯 버전 `3.3.0 (3.3.0)` 확인
 
 ## 문서
 
-- [3.2.1 릴리스 노트](docs/RELEASE_NOTES_3.2.1.md)
+- [3.3.0 릴리스 노트](docs/RELEASE_NOTES_3.3.0.md)
 - [기능 로드맵](docs/FEATURE_ROADMAP.md)
 - [프로젝트 분석](PROJECT_ANALYSIS.md)
 - [Google Drive 동기화 설정](docs/GOOGLE_DRIVE_SYNC_SETUP.md)

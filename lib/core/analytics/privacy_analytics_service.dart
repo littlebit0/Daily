@@ -46,9 +46,15 @@ class PrivacyAnalyticsService implements ProductAnalytics {
        _idGenerator = idGenerator ?? const Uuid().v4,
        _enabled = ValueNotifier<bool>(
          preferences.getBool(_enabledKey) ?? false,
+       ),
+       _consentPromptCompleted = ValueNotifier<bool>(
+         preferences.getBool(_consentPromptCompletedKey) ??
+             preferences.containsKey(_enabledKey),
        );
 
   static const _enabledKey = 'anonymousAnalyticsEnabled';
+  static const _consentPromptCompletedKey =
+      'anonymousAnalyticsConsentPromptCompletedV1';
   static const _queueKey = 'anonymousAnalyticsQueueV1';
   static const _schemaVersion = 1;
   static const _maxQueueLength = 200;
@@ -72,6 +78,7 @@ class PrivacyAnalyticsService implements ProductAnalytics {
   final DateTime Function() _now;
   final String Function() _idGenerator;
   final ValueNotifier<bool> _enabled;
+  final ValueNotifier<bool> _consentPromptCompleted;
   late final String _sessionId = _idGenerator();
   AnalyticsEnvironment? _environment;
   List<_QueuedAnalyticsEvent> _queue = [];
@@ -87,7 +94,21 @@ class PrivacyAnalyticsService implements ProductAnalytics {
   ValueListenable<bool> get enabledListenable => _enabled;
 
   @override
+  bool get consentPromptCompleted => _consentPromptCompleted.value;
+
+  @override
+  ValueListenable<bool> get consentPromptCompletedListenable =>
+      _consentPromptCompleted;
+
+  @override
   int get pendingEventCount => _queue.length;
+
+  @override
+  Future<void> completeConsentPrompt({required bool enabled}) async {
+    await setEnabled(enabled);
+    await _preferences.setBool(_consentPromptCompletedKey, true);
+    _consentPromptCompleted.value = true;
+  }
 
   @override
   Future<void> initialize() async {
@@ -334,6 +355,7 @@ class PrivacyAnalyticsService implements ProductAnalytics {
       SchedulerBinding.instance.removeTimingsCallback(_onFrameTimings);
     }
     _enabled.dispose();
+    _consentPromptCompleted.dispose();
     if (_ownsHttpClient) _httpClient.close();
   }
 

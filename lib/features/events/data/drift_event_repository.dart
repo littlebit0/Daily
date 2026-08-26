@@ -131,6 +131,23 @@ class DriftEventRepository implements EventRepository {
   }
 
   @override
+  Future<void> saveAllAtomically(Iterable<CalendarEvent> events) async {
+    final normalized = events
+        .map((event) => event.normalizeAllDayBounds())
+        .toList(growable: false);
+    if (normalized.isEmpty) {
+      return;
+    }
+    await _database.transaction(() async {
+      for (final event in normalized) {
+        await _database
+            .into(_database.eventRecords)
+            .insertOnConflictUpdate(_companion(event));
+      }
+    });
+  }
+
+  @override
   Future<List<EventRestoreMutation>> mergeRestoredEventsAtomically(
     Iterable<CalendarEvent> remoteEvents, {
     required RestoredEventResolver resolve,

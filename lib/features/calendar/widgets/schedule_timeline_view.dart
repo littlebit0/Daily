@@ -7,6 +7,7 @@ import '../../../core/calendar/calendar_event_movement.dart';
 import '../../../core/calendar/calendar_event_ordering.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/theme/daily_ui.dart';
 import '../../../core/theme/event_completion_style.dart';
 import '../../events/domain/calendar_event.dart';
 import 'calendar_event_drag_layer.dart';
@@ -133,28 +134,18 @@ class _ScheduleTimelineViewState extends State<ScheduleTimelineView> {
               PositionedDirectional(
                 end: 12,
                 bottom: 12,
-                child: Material(
-                  color: widget.showAllDayEvents
-                      ? scheme.primaryContainer
-                      : scheme.surfaceContainerHighest,
-                  elevation: 2,
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    key: const ValueKey('schedule-all-day-toggle'),
-                    tooltip: context.tr(
-                      widget.showAllDayEvents ? '종일 일정 숨기기' : '종일 일정 표시',
-                    ),
-                    onPressed: () => widget.onShowAllDayEventsChanged(
-                      !widget.showAllDayEvents,
-                    ),
-                    icon: Icon(
-                      widget.showAllDayEvents
-                          ? Icons.event_available_outlined
-                          : Icons.event_busy_outlined,
-                      color: widget.showAllDayEvents
-                          ? scheme.onPrimaryContainer
-                          : scheme.onSurfaceVariant,
-                    ),
+                child: DailyIconAction(
+                  key: const ValueKey('schedule-all-day-toggle'),
+                  tooltip: context.tr(
+                    widget.showAllDayEvents ? '종일 일정 숨기기' : '종일 일정 표시',
+                  ),
+                  selected: widget.showAllDayEvents,
+                  icon: widget.showAllDayEvents
+                      ? Icons.view_agenda_rounded
+                      : Icons.horizontal_rule_rounded,
+                  borderless: true,
+                  onPressed: () => widget.onShowAllDayEventsChanged(
+                    !widget.showAllDayEvents,
                   ),
                 ),
               ),

@@ -9,6 +9,7 @@ import '../../../core/calendar_import/calendar_import_models.dart';
 import '../../../core/calendar_import/google_calendar_source.dart';
 import '../../../core/di/app_providers.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/theme/daily_ui.dart';
 
 class CalendarImportPage extends ConsumerStatefulWidget {
   const CalendarImportPage({super.key});
@@ -39,69 +40,101 @@ class _CalendarImportPageState extends ConsumerState<CalendarImportPage> {
         .where((calendar) => _selected.contains(calendar.selectionKey))
         .toList(growable: false);
     return Scaffold(
-      appBar: AppBar(title: Text(context.tr('캘린더 데이터 옮기기'))),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
-        children: [
-          if (nativeProvider != null)
-            _ImportSourceSection(
-              title: _providerLabel(context, nativeProvider),
-              icon: nativeProvider == CalendarImportProvider.apple
-                  ? Icons.apple
-                  : Icons.calendar_month_outlined,
-              busy: _nativeBusy,
-              onLoad: _loadNativeCalendars,
-              calendars: _calendars
-                  .where((calendar) => calendar.provider == nativeProvider)
-                  .toList(growable: false),
-              selected: _selected,
-              onChanged: _setSelected,
+      backgroundColor: DailyUi.pageBackground(context),
+      appBar: DailyNavigationBar(title: context.tr('캘린더 데이터 옮기기')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              DailyUi.isDesktop ? 24 : 16,
+              8,
+              DailyUi.isDesktop ? 24 : 16,
+              110,
             ),
-          const SizedBox(height: 14),
-          _ImportSourceSection(
-            title: _providerLabel(context, CalendarImportProvider.google),
-            icon: Icons.account_circle_outlined,
-            busy: _googleBusy,
-            onLoad: _loadGoogleCalendars,
-            calendars: _calendars
-                .where(
-                  (calendar) =>
-                      calendar.provider == CalendarImportProvider.google,
-                )
-                .toList(growable: false),
-            selected: _selected,
-            onChanged: _setSelected,
+            children: [
+              DailyInfoCallout(
+                icon: Icons.move_to_inbox_outlined,
+                title: context.tr('캘린더 데이터 옮기기'),
+                text: context.tr(
+                  '가져올 캘린더를 선택하면 일정과 기존 분류 색상을 Daily에 복사합니다.',
+                ),
+              ),
+              if (nativeProvider != null) ...[
+                const SizedBox(height: 8),
+                _ImportSourceSection(
+                  title: _providerLabel(context, nativeProvider),
+                  icon: nativeProvider == CalendarImportProvider.apple
+                      ? Icons.apple
+                      : Icons.calendar_month_outlined,
+                  busy: _nativeBusy,
+                  onLoad: _loadNativeCalendars,
+                  calendars: _calendars
+                      .where((calendar) => calendar.provider == nativeProvider)
+                      .toList(growable: false),
+                  selected: _selected,
+                  onChanged: _setSelected,
+                ),
+              ],
+              const SizedBox(height: 8),
+              _ImportSourceSection(
+                title: _providerLabel(context, CalendarImportProvider.google),
+                icon: Icons.account_circle_outlined,
+                busy: _googleBusy,
+                onLoad: _loadGoogleCalendars,
+                calendars: _calendars
+                    .where(
+                      (calendar) =>
+                          calendar.provider == CalendarImportProvider.google,
+                    )
+                    .toList(growable: false),
+                selected: _selected,
+                onChanged: _setSelected,
+              ),
+              if (_message != null) ...[
+                const SizedBox(height: 14),
+                DailyInfoCallout(
+                  icon: Icons.info_outline_rounded,
+                  text: _message!,
+                ),
+              ],
+            ],
           ),
-          if (_message != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              _message!,
-              style: TextStyle(color: Theme.of(context).colorScheme.secondary),
-            ),
-          ],
-        ],
+        ),
       ),
       bottomNavigationBar: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: FilledButton.icon(
-            onPressed: selectedCalendars.isEmpty || _importBusy
-                ? null
-                : () => _import(selectedCalendars),
-            icon: _importBusy
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.move_to_inbox_outlined),
-            label: Text(
-              _importBusy
-                  ? context.tr('일정을 옮기는 중')
-                  : context.tr(
-                      '{count}개 캘린더 가져오기',
-                      args: {'count': selectedCalendars.length},
-                    ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: DailyUi.pageBackground(context),
+            border: Border(
+              top: BorderSide(color: DailyUi.separator(context)),
+            ),
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  DailyUi.isDesktop ? 24 : 16,
+                  10,
+                  DailyUi.isDesktop ? 24 : 16,
+                  12,
+                ),
+                child: DailyPrimaryButton(
+                  onPressed: selectedCalendars.isEmpty || _importBusy
+                      ? null
+                      : () => _import(selectedCalendars),
+                  icon: Icons.move_to_inbox_outlined,
+                  busy: _importBusy,
+                  label: _importBusy
+                      ? context.tr('일정을 옮기는 중')
+                      : context.tr(
+                          '{count}개 캘린더 가져오기',
+                          args: {'count': selectedCalendars.length},
+                        ),
+                ),
+              ),
             ),
           ),
         ),
@@ -275,61 +308,45 @@ class _ImportSourceSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return DailyGroupedSection(
+      label: title,
       children: [
-        Row(
-          children: [
-            Icon(icon, size: 21),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            IconButton(
-              tooltip: context.tr('{title} 불러오기', args: {'title': title}),
-              onPressed: busy ? null : onLoad,
-              icon: busy
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh),
-            ),
-          ],
+        DailySettingsRow(
+          title: context.tr('{title} 불러오기', args: {'title': title}),
+          leading: DailySettingsIcon(icon: icon),
+          trailing: busy
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  Icons.refresh_rounded,
+                  color: DailyUi.primary,
+                ),
+          onTap: busy ? null : onLoad,
         ),
-        if (calendars.isEmpty)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(context.tr('{title} 불러오기', args: {'title': title})),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: busy ? null : onLoad,
-          )
-        else
-          for (final calendar in calendars)
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: selected.contains(calendar.selectionKey),
-              title: Text(calendar.title),
-              subtitle: calendar.accountName?.trim().isNotEmpty ?? false
-                  ? Text(calendar.accountName!)
-                  : null,
-              secondary: calendar.colorValue == null
-                  ? null
-                  : Container(
-                      width: 12,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: Color(calendar.colorValue!),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
+        for (final calendar in calendars)
+          CheckboxListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+            value: selected.contains(calendar.selectionKey),
+            title: Text(calendar.title),
+            subtitle: calendar.accountName?.trim().isNotEmpty ?? false
+                ? Text(calendar.accountName!)
+                : null,
+            secondary: calendar.colorValue == null
+                ? null
+                : Container(
+                    width: 10,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: Color(calendar.colorValue!),
+                      borderRadius: BorderRadius.circular(5),
                     ),
-              onChanged: busy
-                  ? null
-                  : (value) => onChanged(calendar, value ?? false),
-            ),
+                  ),
+            onChanged: busy
+                ? null
+                : (value) => onChanged(calendar, value ?? false),
+          ),
       ],
     );
   }

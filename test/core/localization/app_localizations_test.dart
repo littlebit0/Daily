@@ -91,6 +91,25 @@ void main() {
     );
   });
 
+  test('translates redesigned onboarding and settings surfaces', () {
+    const english = AppLocalizations(Locale('en'));
+    const japanese = AppLocalizations(Locale('ja'));
+    const traditionalChinese = AppLocalizations(
+      Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant'),
+    );
+
+    expect(english.text('Daily 개선 참여'), 'Help Improve Daily');
+    expect(japanese.text('개인정보 및 잠금'), 'プライバシーとロック');
+    expect(traditionalChinese.text('표시 옵션'), '顯示選項');
+    expect(
+      english.text('{month} · 일정 {count}개', args: const {
+        'month': 'August',
+        'count': 4,
+      }),
+      'August · 4 events',
+    );
+  });
+
   test('translates only unchanged built-in category names', () {
     const english = AppLocalizations(Locale('en'));
     const japanese = AppLocalizations(Locale('ja'));
